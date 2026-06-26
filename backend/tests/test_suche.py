@@ -80,6 +80,20 @@ async def test_neuindexierung_aktualisiert(such, speicher, pool):
     assert any(t["id"] == knoten["id"] for t in await such.suchen(benutzer, "birne"))
 
 
+async def test_indexieren_fremder_knoten_wird_ignoriert(such, speicher, pool):
+    a = await _user(pool, "a")
+    b = await _user(pool, "b")
+    kb = await speicher.datei_hochladen(b, None, "b.txt", b"geheim")
+    # A versucht, B's Knoten unter eigenem Namen zu indexieren - muss wirkungslos sein.
+    await such.indexieren(a, kb["id"], "b.txt", b"geheim")
+    assert await such.suchen(a, "geheim") == []
+
+
+def test_grosser_text_wird_begrenzt():
+    gross = ("a" * 2_000_000).encode()
+    assert len(text_extrahieren("x.txt", gross)) <= 1_000_000
+
+
 def test_extraktion_text():
     assert "Hallo" in text_extrahieren("a.txt", "Hallo Welt".encode())
 

@@ -23,17 +23,20 @@ class SuchDienst:
         self.pool = pool
 
     async def indexieren(self, besitzer_id, knoten_id, name, daten) -> None:
+        # besitzer_id kommt aus dem Knoten selbst, und es wird nur indexiert,
+        # wenn der Knoten dem angegebenen Nutzer gehoert. So kann der Eigentuemer-
+        # Stempel nicht vergiftet oder umgestempelt werden (Isolation).
         inhalt = text_extrahieren(name, daten)
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await conn.execute(
                     "INSERT INTO such_index (knoten_id, besitzer_id, name_tsv, inhalt_tsv) "
-                    "VALUES (%s, %s, to_tsvector('german', %s), to_tsvector('german', %s)) "
+                    "SELECT k.id, k.besitzer_id, to_tsvector('german', %s), "
+                    "       to_tsvector('german', %s) "
+                    "FROM knoten k WHERE k.id = %s AND k.besitzer_id = %s "
                     "ON CONFLICT (knoten_id) DO UPDATE SET "
-                    "besitzer_id = EXCLUDED.besitzer_id, "
-                    "name_tsv = EXCLUDED.name_tsv, "
-                    "inhalt_tsv = EXCLUDED.inhalt_tsv",
-                    (knoten_id, besitzer_id, _name_tokens(name), inhalt),
+                    "name_tsv = EXCLUDED.name_tsv, inhalt_tsv = EXCLUDED.inhalt_tsv",
+                    (_name_tokens(name), inhalt, knoten_id, besitzer_id),
                 )
 
     async def suchen(self, besitzer_id, anfrage, grenze: int = 50):
@@ -41,12 +44,15 @@ class SuchDienst:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
                     "SELECT k.* FROM such_index s JOIN knoten k ON k.id = s.knoten_id "
-                    "WHERE s.besitzer_id = %s AND NOT k.geloescht "
+                    # Doppelter Eigentuemer-Filter (s und k) als Defense-in-depth.
+                    "WHERE s.besitzer_id = %s AND k.besitzer_id = %s AND NOT k.geloescht "
                     "AND (s.name_tsv @@ websearch_to_tsquery('german', %s) "
                     "     OR s.inhalt_tsv @@ websearch_to_tsquery('german', %s)) "
-                    "ORDER BY ts_rank(s.inhalt_tsv, websearch_to_tsquery('german', %s)) DESC, "
+                    # Namens- und Inhaltsrang kombiniert, Name hoeher gewichtet.
+                    "ORDER BY (ts_rank(s.name_tsv, websearch_to_tsquery('german', %s)) * 4 "
+                    "          + ts_rank(s.inhalt_tsv, websearch_to_tsquery('german', %s))) DESC, "
                     "         k.geaendert_am DESC "
                     "LIMIT %s",
-                    (besitzer_id, anfrage, anfrage, anfrage, grenze),
+                    (besitzer_id, besitzer_id, anfrage, anfrage, anfrage, anfrage, grenze),
                 )
                 return await cur.fetchall()
