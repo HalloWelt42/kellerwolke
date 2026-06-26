@@ -4,6 +4,7 @@ Das Schema liegt als nummerierte .sql-Dateien unter app/schema/ und wird beim
 Start idempotent angewandt (CREATE TABLE IF NOT EXISTS ...).
 """
 
+import re
 from pathlib import Path
 
 from psycopg_pool import AsyncConnectionPool
@@ -34,12 +35,16 @@ async def stoppen() -> None:
         _pool = None
 
 
+def _anweisungen(text: str) -> list[str]:
+    # Zeilenkommentare entfernen (koennen Semikolons enthalten), dann splitten.
+    ohne_kommentar = re.sub(r"--[^\n]*", "", text)
+    return [s.strip() for s in ohne_kommentar.split(";") if s.strip()]
+
+
 async def _schema_anwenden() -> None:
     if not SCHEMA_DIR.exists():
         return
     async with pool().connection() as conn:
         for sql_datei in sorted(SCHEMA_DIR.glob("*.sql")):
-            text = sql_datei.read_text(encoding="utf-8")
-            for anweisung in (s.strip() for s in text.split(";")):
-                if anweisung:
-                    await conn.execute(anweisung)
+            for anweisung in _anweisungen(sql_datei.read_text(encoding="utf-8")):
+                await conn.execute(anweisung)
