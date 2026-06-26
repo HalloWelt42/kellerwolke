@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Kacheln</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Kopfleiste -->
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <div class="nav-titel">Bereiche</div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt <span class="zahl">3</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen <span class="zahl">2</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+        <div class="speicher">
+          14,2 GB von 1,5 TB
+          <div class="balken"><span style="width: 1%"></span></div>
+        </div>
+      </nav>
+
+      <!-- Inhalt -->
+      <section class="inhalt">
+        <div class="werkzeuge">
+          <button class="knopf primaer"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <button class="knopf"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</button>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button class="aktiv" title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+          </div>
+        </div>
+
+        <nav class="breadcrumb">
+          <a>Meine Dateien</a>
+          <i class="fa-solid fa-chevron-right"></i>
+          <a>Dokumente</a>
+          <i class="fa-solid fa-chevron-right"></i>
+          <span class="aktuell">Verträge</span>
+        </nav>
+
+        <div class="grid">
+          <!-- Ordner -->
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau ordner"><i class="fa-solid fa-folder"></i></div>
+            <div class="k-name">Mietvertrag</div>
+            <div class="k-meta">Ordner</div>
+          </div>
+
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau ordner"><i class="fa-solid fa-folder"></i></div>
+            <div class="k-name">Versicherungen</div>
+            <div class="k-meta">Ordner</div>
+          </div>
+
+          <!-- Dateien -->
+          <div class="kachel gewaehlt">
+            <span class="aus-box an"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau"><i class="fa-solid fa-file-pdf"></i></div>
+            <div class="k-name">Arbeitsvertrag_2026.pdf</div>
+            <div class="k-meta">248 KB</div>
+          </div>
+
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau"><i class="fa-solid fa-file-excel"></i></div>
+            <div class="k-name">Nebenkosten_2025.xlsx</div>
+            <div class="k-meta">86 KB</div>
+          </div>
+
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau"><i class="fa-solid fa-file-image"></i></div>
+            <div class="k-name">Wohnung_Grundriss.jpg</div>
+            <div class="k-meta">1,8 MB</div>
+          </div>
+
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau"><i class="fa-solid fa-file-powerpoint"></i></div>
+            <div class="k-name">Präsentation.pptx</div>
+            <div class="k-meta">4,2 MB</div>
+          </div>
+
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau"><i class="fa-solid fa-file-lines"></i></div>
+            <div class="k-name">Notizen.md</div>
+            <div class="k-meta">12 KB</div>
+          </div>
+
+          <div class="kachel">
+            <span class="aus-box"><i class="fa-solid fa-check"></i></span>
+            <div class="vorschau"><i class="fa-solid fa-file-zipper"></i></div>
+            <div class="k-name">Urlaub_2025.zip</div>
+            <div class="k-meta">312 MB</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Mockup-Leiste: Hell/Dunkel umschalten -->
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

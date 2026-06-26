@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Papierkorb</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Kopfleiste -->
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <div class="nav-titel">Bereiche</div>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt <span class="zahl">3</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen <span class="zahl">2</span></a>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+        <div class="speicher">
+          14,2 GB von 1,5 TB
+          <div class="balken"><span style="width: 1%"></span></div>
+        </div>
+      </nav>
+
+      <!-- Inhalt -->
+      <section class="inhalt">
+        <div class="werkzeuge">
+          <span class="luecke"></span>
+          <button class="knopf"><i class="fa-solid fa-trash-can"></i> Papierkorb leeren</button>
+        </div>
+
+        <nav class="breadcrumb">
+          <span class="aktuell">Papierkorb</span>
+        </nav>
+
+        <div class="liste">
+          <div class="listenkopf">
+            <span></span>
+            <span class="sortbar">Name <i class="fa-solid fa-arrow-down-short-wide"></i></span>
+            <span>Größe</span>
+            <span class="sp-geaendert">Gelöscht</span>
+            <span></span>
+          </div>
+
+          <!-- Geloeschter Ordner -->
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym ordner fa-solid fa-folder"></i><span class="titel">Urlaub Italien 2025</span></span>
+            <span class="z-meta">-</span>
+            <span class="z-meta z-geaendert">22.06.2026, 19:48</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button>
+              <button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <!-- Geloeschte Dateien -->
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-pdf"></i><span class="titel">Stromrechnung_2024.pdf</span></span>
+            <span class="z-meta">192 KB</span>
+            <span class="z-meta z-geaendert">20.06.2026, 08:11</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button>
+              <button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-image"></i><span class="titel">Strand_unscharf.jpg</span></span>
+            <span class="z-meta">2,4 MB</span>
+            <span class="z-meta z-geaendert">15.06.2026, 21:33</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button>
+              <button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Einkaufsliste_alt.txt</span></span>
+            <span class="z-meta">2 KB</span>
+            <span class="z-meta z-geaendert">09.06.2026, 17:05</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button>
+              <button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Mockup-Leiste: Hell/Dunkel umschalten -->
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Verschieben</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Kopfleiste -->
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <div class="nav-titel">Bereiche</div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt <span class="zahl">3</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen <span class="zahl">2</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+        <div class="speicher">
+          14,2 GB von 1,5 TB
+          <div class="balken"><span style="width: 1%"></span></div>
+        </div>
+      </nav>
+
+      <!-- Inhalt -->
+      <section class="inhalt">
+        <div class="werkzeuge">
+          <button class="knopf primaer"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <button class="knopf"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</button>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button class="aktiv" title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+          </div>
+        </div>
+
+        <nav class="breadcrumb">
+          <a>Meine Dateien</a>
+          <i class="fa-solid fa-chevron-right"></i>
+          <a>Dokumente</a>
+          <i class="fa-solid fa-chevron-right"></i>
+          <span class="aktuell">Verträge</span>
+        </nav>
+
+        <div class="liste">
+          <div class="listenkopf">
+            <span></span>
+            <span class="sortbar">Name <i class="fa-solid fa-arrow-down-short-wide"></i></span>
+            <span>Größe</span>
+            <span class="sp-geaendert">Geändert</span>
+            <span></span>
+          </div>
+
+          <!-- Ordner -->
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym ordner fa-solid fa-folder"></i><span class="titel">Mietvertrag</span></span>
+            <span class="z-meta">-</span>
+            <span class="z-meta z-geaendert">12.05.2026, 09:14</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile zielordner">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym ordner fa-solid fa-folder"></i><span class="titel">Versicherungen</span></span>
+            <span class="z-meta">-</span>
+            <span class="z-meta z-geaendert">03.05.2026, 18:40</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <!-- Dateien -->
+          <div class="zeile" style="opacity:.45">
+            <span class="z-aus"><span class="aus-box an"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-pdf"></i><span class="titel">Hausratversicherung_Police.pdf</span></span>
+            <span class="z-meta">312 KB</span>
+            <span class="z-meta z-geaendert">11.05.2026, 22:05</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Herunterladen"><i class="fa-solid fa-download"></i></button>
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile" style="opacity:.45">
+            <span class="z-aus"><span class="aus-box an"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-pdf"></i><span class="titel">Haftpflicht_Beitragsrechnung.pdf</span></span>
+            <span class="z-meta">142 KB</span>
+            <span class="z-meta z-geaendert">09.05.2026, 14:22</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Herunterladen"><i class="fa-solid fa-download"></i></button>
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile" style="opacity:.45">
+            <span class="z-aus"><span class="aus-box an"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-image"></i><span class="titel">Schadensfoto_Keller.jpg</span></span>
+            <span class="z-meta">2,4 MB</span>
+            <span class="z-meta z-geaendert">28.04.2026, 11:30</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Herunterladen"><i class="fa-solid fa-download"></i></button>
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Kündigung_Entwurf.txt</span></span>
+            <span class="z-meta">3 KB</span>
+            <span class="z-meta z-geaendert">21.04.2026, 16:02</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Herunterladen"><i class="fa-solid fa-download"></i></button>
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-excel"></i><span class="titel">Nebenkosten_2025.xlsx</span></span>
+            <span class="z-meta">86 KB</span>
+            <span class="z-meta z-geaendert">18.04.2026, 08:51</span>
+            <span class="z-akt">
+              <button class="icon-knopf" title="Herunterladen"><i class="fa-solid fa-download"></i></button>
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="In den Papierkorb"><i class="fa-solid fa-trash"></i></button>
+            </span>
+          </div>
+        </div>
+
+        <!-- Drag-Ghost: 3 Objekte werden auf den Ordner "Versicherungen" gezogen -->
+        <div class="drag-ghost" style="top:240px; left:380px;"><span class="zahl-badge">3</span><i class="fa-solid fa-file"></i> 3 Objekte verschieben</div>
+      </section>
+    </div>
+
+    <!-- Mockup-Leiste: Hell/Dunkel umschalten -->
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

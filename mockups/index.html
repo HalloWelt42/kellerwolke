@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - UI-Entwurf</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      .entwurf {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: var(--a6) var(--a4);
+      }
+      .entwurf-kopf {
+        display: flex;
+        align-items: center;
+        gap: var(--a3);
+        margin-bottom: var(--a2);
+      }
+      .entwurf-kopf .marke {
+        font-size: 1.6rem;
+      }
+      .entwurf p.unter {
+        color: var(--text-2);
+        margin: 0 0 var(--a5);
+      }
+      .galerie {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: var(--a3);
+      }
+      .karte-link {
+        display: block;
+        text-decoration: none;
+        color: var(--text);
+        background: var(--flaeche);
+        border: 1px solid var(--rand);
+        border-radius: var(--r2);
+        padding: var(--a4);
+        transition: border-color var(--schnell), background var(--schnell);
+      }
+      .karte-link:hover {
+        border-color: var(--akzent);
+        background: var(--flaeche-2);
+      }
+      .karte-link .nr {
+        font-size: 0.75rem;
+        color: var(--text-3);
+      }
+      .karte-link h3 {
+        margin: var(--a1) 0 var(--a1);
+        font-size: 1.02rem;
+        display: flex;
+        align-items: center;
+        gap: var(--a2);
+      }
+      .karte-link h3 i {
+        color: var(--akzent);
+        width: 20px;
+        text-align: center;
+      }
+      .karte-link p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--text-2);
+      }
+      .hinweis {
+        margin-top: var(--a5);
+        color: var(--text-3);
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="entwurf">
+      <div class="entwurf-kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+      </div>
+      <p class="unter">UI-Entwurf - echte HTML/CSS-Mockups, hell und dunkel umschaltbar. Jede Seite zeigt einen Zustand.</p>
+
+      <div class="galerie">
+        <a class="karte-link" href="/mockups/anmeldung.html"><span class="nr">01</span><h3><i class="fa-solid fa-right-to-bracket"></i> Anmeldung</h3><p>Login-Karte</p></a>
+        <a class="karte-link" href="/mockups/liste.html"><span class="nr">02</span><h3><i class="fa-solid fa-list"></i> Liste</h3><p>Hauptansicht, drei Zonen</p></a>
+        <a class="karte-link" href="/mockups/detail.html"><span class="nr">03</span><h3><i class="fa-solid fa-circle-info"></i> Detail-Pane</h3><p>Datei gewählt, Infos + Versionen</p></a>
+        <a class="karte-link" href="/mockups/grid.html"><span class="nr">04</span><h3><i class="fa-solid fa-table-cells-large"></i> Kacheln</h3><p>Grid-Ansicht</p></a>
+        <a class="karte-link" href="/mockups/auswahl.html"><span class="nr">05</span><h3><i class="fa-solid fa-square-check"></i> Mehrfachauswahl</h3><p>Auswahl-Leiste, Stapel-Aktionen</p></a>
+        <a class="karte-link" href="/mockups/marquee.html"><span class="nr">06</span><h3><i class="fa-solid fa-vector-square"></i> Marquee</h3><p>Maus-Rechteck-Auswahl</p></a>
+        <a class="karte-link" href="/mockups/dragdrop.html"><span class="nr">07</span><h3><i class="fa-solid fa-hand-pointer"></i> Drag-and-drop</h3><p>Mehrere Objekte verschieben</p></a>
+        <a class="karte-link" href="/mockups/upload.html"><span class="nr">08</span><h3><i class="fa-solid fa-cloud-arrow-up"></i> Upload</h3><p>Drop-Zone + Fortschritt</p></a>
+        <a class="karte-link" href="/mockups/kontextmenue.html"><span class="nr">09</span><h3><i class="fa-solid fa-bars"></i> Kontextmenü</h3><p>Rechtsklick-Aktionen</p></a>
+        <a class="karte-link" href="/mockups/umbenennen.html"><span class="nr">10</span><h3><i class="fa-solid fa-pen"></i> Umbenennen</h3><p>Inline, direkt in der Zeile</p></a>
+        <a class="karte-link" href="/mockups/leer.html"><span class="nr">11</span><h3><i class="fa-regular fa-folder-open"></i> Leer</h3><p>Leerer Ordner</p></a>
+        <a class="karte-link" href="/mockups/laden.html"><span class="nr">12</span><h3><i class="fa-solid fa-spinner"></i> Laden</h3><p>Skelett-Zustand</p></a>
+        <a class="karte-link" href="/mockups/suche.html"><span class="nr">13</span><h3><i class="fa-solid fa-magnifying-glass"></i> Suche</h3><p>Ergebnisliste</p></a>
+        <a class="karte-link" href="/mockups/papierkorb.html"><span class="nr">14</span><h3><i class="fa-solid fa-trash"></i> Papierkorb</h3><p>Wiederherstellen, leeren</p></a>
+        <a class="karte-link" href="/mockups/extern.html"><span class="nr">15</span><h3><i class="fa-solid fa-folder-tree"></i> Externe Quelle</h3><p>Read-only Durchreiche</p></a>
+        <a class="karte-link" href="/mockups/admin.html"><span class="nr">16</span><h3><i class="fa-solid fa-gear"></i> Verwaltung</h3><p>Konten + externe Quellen</p></a>
+      </div>
+
+      <p class="hinweis">Mobil/1-Spalte: Liste in schmalem Fenster (unter 720 px) - die Navigation klappt weg, die Liste bleibt.</p>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
