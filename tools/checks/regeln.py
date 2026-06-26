@@ -47,8 +47,23 @@ TYPO_VERBOTEN = {
     chr(0x2212): "Minuszeichen",
 }
 
-KONFLIKT = re.compile(r"^(<{7}|={7}|>{7})(\s|$)")
+# Nur die eindeutigen Git-Konflikt-Marker (<<<<<<< / >>>>>>>); die '======='-
+# Variante entfaellt, weil sie mit Setext-Ueberschriften kollidiert - ein echter
+# Konflikt enthaelt ohnehin immer auch die spitzen Marker.
+KONFLIKT = re.compile(r"^(<{7,}|>{7,})(\s|$)")
 AGPL = re.compile(r"GNU\s+AFFERO|AGPL-3|Affero General Public", re.IGNORECASE)
+
+# Eindeutige Geheimnis-Muster (sehr geringe Fehlalarmquote).
+GEHEIMNIS = re.compile(
+    r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|gh[pousr]_[A-Za-z0-9]{36,}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|AIza[0-9A-Za-z_-]{35}"
+)
+
+# Strukturzeilen (Trennlinie, Tabellen-Trenner, Setext) - kein Fliesstext.
+STRUKTURZEILE = re.compile(r"^[|:\-\s]+$|^=+$")
 
 _WORT_RAND = r"[\wäöüßÄÖÜ]"
 
@@ -61,8 +76,15 @@ def _regex_ganzwoerter(woerter):
                       re.IGNORECASE)
 
 
+def _regex_teilwoerter(woerter):
+    if not woerter:
+        return None
+    return re.compile("|".join(re.escape(w) for w in woerter), re.IGNORECASE)
+
+
 MARKEN_RE = _regex_ganzwoerter(MARKEN)
-UMLAUT_RE = _regex_ganzwoerter(UMLAUT_WOERTER)
+# Umlaut-Formen treffen als Teilstring, damit auch Komposita erkannt werden.
+UMLAUT_RE = _regex_teilwoerter(UMLAUT_WOERTER)
 KI_RE = re.compile("|".join(KI_BEGRIFFE), re.IGNORECASE) if KI_BEGRIFFE else None
 
 PROSA_ENDUNGEN = {".md", ".markdown", ".txt"}
@@ -87,16 +109,21 @@ def ist_prosa(pfad):
 
 
 def _prosa_zeilen(text):
-    """Markdown-Codebloecke und Inline-Code ausblenden, damit der
-    Umlaut-Check nur echte Prosa trifft (Code-Identifier sind erlaubt)."""
+    """Markdown-Codebloecke (``` und ~~~) und Inline-Code ausblenden, damit die
+    Prosa-Pruefungen nur echten Fliesstext treffen (Code-Identifier sind erlaubt)."""
     ergebnis = []
-    in_fence = False
+    fence = None  # offenes Fence-Zeichen ('`' oder '~') oder None
     for zeile in text.split("\n"):
-        if re.match(r"\s*```", zeile):
-            in_fence = not in_fence
+        marke = re.match(r"\s*(```+|~~~+)", zeile)
+        if marke:
+            zeichen = marke.group(1)[0]
+            if fence is None:
+                fence = zeichen
+            elif fence == zeichen:
+                fence = None
             ergebnis.append("")
             continue
-        if in_fence:
+        if fence is not None:
             ergebnis.append("")
             continue
         ergebnis.append(re.sub(r"`[^`]*`", " ", zeile))
@@ -128,12 +155,19 @@ def pruefe_datei(pfad, text):
             m = AGPL.search(zeile)
             if m:
                 verstoesse.append((i, "Fremdlizenz", m.group(0)))
+            g = GEHEIMNIS.search(zeile)
+            if g:
+                verstoesse.append((i, "Geheimnis", g.group(0)[:24]))
 
-    if not ausgenommen and UMLAUT_RE and ist_prosa(pfad):
+    if not ausgenommen and ist_prosa(pfad):
         for i, zeile in enumerate(_prosa_zeilen(text), start=1):
-            m = UMLAUT_RE.search(zeile)
-            if m:
-                verstoesse.append((i, "ASCII-Umlaut", m.group(0)))
+            if UMLAUT_RE:
+                m = UMLAUT_RE.search(zeile)
+                if m:
+                    verstoesse.append((i, "ASCII-Umlaut", m.group(0)))
+            # Doppelter Bindestrich in Fliesstext (Strukturzeilen ausgenommen).
+            if "--" in zeile and not STRUKTURZEILE.match(zeile.strip()):
+                verstoesse.append((i, "Doppelter Bindestrich", "--"))
 
     return verstoesse
 

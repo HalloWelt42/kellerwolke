@@ -25,8 +25,17 @@ case "$modus" in
     pruefe "$(git log -1 --format='%an')" "$(git log -1 --format='%ae')" "Autor HEAD"
     pruefe "$(git log -1 --format='%cn')" "$(git log -1 --format='%ce')" "Committer HEAD"
     ;;
+  --bereich)
+    bereich="${2:-}"
+    [ -n "$bereich" ] || { echo "Bereich fehlt"; exit 2; }
+    while IFS='|' read -r an ae cn ce; do
+      [ -n "$an" ] || continue
+      pruefe "$an" "$ae" "Autor ($bereich)"
+      pruefe "$cn" "$ce" "Committer ($bereich)"
+    done < <(git log --format='%an|%ae|%cn|%ce' "$bereich")
+    ;;
   *)
-    echo "Aufruf: pruefe_identitaet.sh [--config|--head]"
+    echo "Aufruf: pruefe_identitaet.sh [--config|--head|--bereich <range>]"
     exit 2
     ;;
 esac
