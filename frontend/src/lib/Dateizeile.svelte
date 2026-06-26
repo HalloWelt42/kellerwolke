@@ -78,6 +78,7 @@
   class:gewaehlt
   class:gezogen
   class:zielordner
+  data-id={k.id}
   role="row"
   tabindex="-1"
   draggable={schreibbar && !umbenennenAktiv}

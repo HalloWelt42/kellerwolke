@@ -33,7 +33,7 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && onClose()} />
+<svelte:window onkeydown={(e) => e.key === "Escape" && onClose()} onresize={onClose} />
 
 <div
   class="kontext-hg"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import {
     zustand,
     istSchreibbar,
@@ -94,6 +95,12 @@
   // --- Drag-and-drop (verschieben) -------------------------------------------
 
   function dragStart(e: DragEvent, k: Knoten) {
+    // Nicht ziehen, wenn der Griff die Checkbox, ein Knopf oder das Feld ist.
+    const ziel = e.target as HTMLElement;
+    if (ziel?.closest?.(".aus-box, button, input, .umbenennen-feld")) {
+      e.preventDefault();
+      return;
+    }
     if (!auswahl.istGewaehlt(k.id)) auswahl.waehleEinzeln(k.id);
     gezogenIds = [...auswahl.ids];
     if (e.dataTransfer) {
@@ -168,11 +175,23 @@
   let mqBasis: string[] = [];
   let mqAktiv = false;
 
+  // Marquee rechnet durchgaengig im Inhaltsraum des Containers (Client-Koordinate
+  // minus Container-Rand plus Scroll). So stimmen Anzeige und Treffer auch bei
+  // gescrolltem Container ueberein. Treffer werden ueber data-id zugeordnet,
+  // nicht ueber den Schleifenindex.
+  function inhaltspunkt(e: MouseEvent): { x: number; y: number } {
+    const rect = containerEl!.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left + containerEl!.scrollLeft,
+      y: e.clientY - rect.top + containerEl!.scrollTop,
+    };
+  }
+
   function flaecheMouseDown(e: MouseEvent) {
     if (e.button !== 0 || !containerEl) return;
     const ziel = e.target as HTMLElement;
     if (ziel.closest(".zeile, .kachel, .listenkopf, button, input, .auswahlleiste")) return;
-    mqStart = { x: e.clientX, y: e.clientY };
+    mqStart = inhaltspunkt(e);
     mqBasis = e.metaKey || e.ctrlKey || e.shiftKey ? [...auswahl.ids] : [];
     mqAktiv = false;
     window.addEventListener("mousemove", flaecheMouseMove);
@@ -181,29 +200,24 @@
 
   function flaecheMouseMove(e: MouseEvent) {
     if (!mqStart || !containerEl) return;
-    const dx = e.clientX - mqStart.x;
-    const dy = e.clientY - mqStart.y;
-    if (!mqAktiv && Math.abs(dx) + Math.abs(dy) < 5) return;
+    const p = inhaltspunkt(e);
+    if (!mqAktiv && Math.abs(p.x - mqStart.x) + Math.abs(p.y - mqStart.y) < 5) return;
     mqAktiv = true;
-    const l = Math.min(mqStart.x, e.clientX);
-    const t = Math.min(mqStart.y, e.clientY);
-    const r = Math.max(mqStart.x, e.clientX);
-    const b = Math.max(mqStart.y, e.clientY);
-
-    const rect = containerEl.getBoundingClientRect();
-    marquee = {
-      l: l - rect.left + containerEl.scrollLeft,
-      t: t - rect.top + containerEl.scrollTop,
-      w: r - l,
-      h: b - t,
-    };
+    const l = Math.min(mqStart.x, p.x);
+    const t = Math.min(mqStart.y, p.y);
+    const r = Math.max(mqStart.x, p.x);
+    const b = Math.max(mqStart.y, p.y);
+    marquee = { l, t, w: r - l, h: b - t };
 
     const treffer: string[] = [];
-    const rows = containerEl.querySelectorAll(".zeile, .kachel");
-    rows.forEach((el, i) => {
-      const rr = el.getBoundingClientRect();
-      const ueberlappt = !(rr.right < l || rr.left > r || rr.bottom < t || rr.top > b);
-      if (ueberlappt && geordnet[i]) treffer.push(geordnet[i]);
+    containerEl.querySelectorAll<HTMLElement>(".zeile, .kachel").forEach((el) => {
+      const id = el.dataset.id;
+      if (!id) return;
+      const rl = el.offsetLeft;
+      const rt = el.offsetTop;
+      const rr = rl + el.offsetWidth;
+      const rb = rt + el.offsetHeight;
+      if (!(rr < l || rl > r || rb < t || rt > b)) treffer.push(id);
     });
     auswahl.ersetze(mqBasis);
     auswahl.vereinige(treffer);
@@ -220,6 +234,13 @@
     mqAktiv = false;
     marquee = null;
   }
+
+  // Falls die Komponente waehrend eines laufenden Marquee verschwindet, die
+  // fensterweiten Listener sicher abraeumen (kein Leck).
+  onDestroy(() => {
+    window.removeEventListener("mousemove", flaecheMouseMove);
+    window.removeEventListener("mouseup", flaecheMouseUp);
+  });
 
   // --- Kontextmenue -----------------------------------------------------------
 

@@ -81,6 +81,7 @@
   class:gewaehlt
   class:gezogen
   class:zielordner
+  data-id={k.id}
   role="gridcell"
   tabindex="-1"
   draggable={schreibbar && !umbenennenAktiv}

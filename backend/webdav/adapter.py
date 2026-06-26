@@ -83,7 +83,13 @@ def _prop(name: str, pfad: str, ist_ordner: bool, groesse: int, geaendert, etag)
 
 async def _knoten_prop(speicher, knoten, pfad: str) -> str:
     ist_ordner = knoten["typ"] in ("ordner", "extern")
-    groesse = 0 if ist_ordner else await speicher.groesse(knoten)
+    if ist_ordner:
+        groesse = 0
+    else:
+        # Die Listen-Abfrage (kinder) liefert die Groesse bereits per LEFT JOIN
+        # mit; nur bei Einzel-Knoten ohne diese Spalte eine Abfrage nachziehen.
+        vorhanden = knoten.get("groesse") if hasattr(knoten, "get") else None
+        groesse = vorhanden if vorhanden is not None else await speicher.groesse(knoten)
     return _prop(knoten["name"], pfad, ist_ordner, groesse, knoten["geaendert_am"], knoten["etag"])
 
 

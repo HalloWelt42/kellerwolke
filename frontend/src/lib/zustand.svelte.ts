@@ -149,14 +149,14 @@ export async function zeigeDetail(k: Knoten): Promise<void> {
   zustand.detail = k;
   zustand.detailVersionen = [];
   if (k.typ === "datei") {
-    const meins = ++lauf;
+    // Bewusst NICHT den Lade-Zaehler 'lauf' anfassen - das wuerde ein laufendes
+    // Listen-Laden faelschlich als veraltet verwerfen. Stattdessen ueber die
+    // Detail-Id absichern: nur schreiben, wenn noch dieselbe Datei offen ist.
     try {
       const v = await api.versionen(k.id);
       if (zustand.detail?.id === k.id) zustand.detailVersionen = v;
     } catch {
       // Detail bleibt auch ohne Versionsliste nutzbar.
-    } finally {
-      void meins;
     }
   }
 }
