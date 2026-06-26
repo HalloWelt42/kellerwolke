@@ -1,0 +1,24 @@
+# Nur die Datenbank laeuft in Docker. Das benannte Volume wird ueber den
+# eindeutigen COMPOSE_PROJECT_NAME je Klon isoliert (vermeidet das macOS-
+# Bind-Mount-Risiko bei DB-Dateien). Backend und Frontend startet ./start.sh.
+name: ${COMPOSE_PROJECT_NAME:-kellerwolke}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${KELLERWOLKE_DB_NAME:-kellerwolke}
+      POSTGRES_USER: ${KELLERWOLKE_DB_USER:-kellerwolke}
+      POSTGRES_PASSWORD: ${KELLERWOLKE_DB_PASS:-kellerwolke}
+    ports:
+      - "${KELLERWOLKE_DB_PORT:-5460}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KELLERWOLKE_DB_USER:-kellerwolke} -d ${KELLERWOLKE_DB_NAME:-kellerwolke}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  pgdata:
