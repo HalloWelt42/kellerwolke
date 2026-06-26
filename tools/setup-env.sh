@@ -22,8 +22,15 @@ NAME="kellerwolke-$(printf '%06d' "$((ID % 1000000))")"
 P_BACKEND="$BASE"; P_FRONT="$((BASE + 1))"; P_DB="$((BASE + 2))"
 
 rand() {
-  if command -v openssl >/dev/null 2>&1; then openssl rand -hex "${1:-16}"
-  else printf '%s' "$$-$(date +%s)-$ID-${RANDOM:-0}${RANDOM:-0}" | cksum | awk '{print $1}'; fi
+  n="${1:-16}"
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex "$n"
+  elif [ -r /dev/urandom ]; then
+    head -c "$n" /dev/urandom | od -An -tx1 | tr -d ' \n'
+  else
+    echo "setup-env: weder openssl noch /dev/urandom verfuegbar - kann keine sicheren Geheimnisse erzeugen" >&2
+    exit 1
+  fi
 }
 SECRET="$(rand 24)"; DBPASS="$(rand 12)"
 

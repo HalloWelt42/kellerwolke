@@ -15,6 +15,10 @@ from module.auth import passwort
 
 _GUELTIG_TAGE = 30
 
+# Fester Dummy-Hash: wird gegen einen unbekannten Benutzer geprueft, damit der
+# Anmelde-Pfad gleich lange dauert (kein Timing-Orakel zur Benutzer-Enumeration).
+_DUMMY_HASH = passwort.hash_passwort("kellerwolke-dummy")
+
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -38,6 +42,9 @@ class AuthDienst:
 
     async def anmelden(self, kennung, klartext) -> str | None:
         async with self.pool.connection() as conn:
+            # Abgelaufene Sitzungen beilaeufig aufraeumen.
+            async with conn.transaction():
+                await conn.execute("DELETE FROM sitzung WHERE ablauf <= now()")
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
                     "SELECT * FROM benutzer WHERE aktiv AND "
@@ -45,7 +52,10 @@ class AuthDienst:
                     (kennung, kennung),
                 )
                 benutzer = await cur.fetchone()
-            if not benutzer or not passwort.pruefe(klartext, benutzer["passwort_hash"]):
+            # Immer einen Hash pruefen (echt oder Dummy) - konstante Zeit.
+            gespeichert = (benutzer["passwort_hash"] if benutzer else None) or _DUMMY_HASH
+            passwort_ok = passwort.pruefe(klartext, gespeichert)
+            if not benutzer or not benutzer["passwort_hash"] or not passwort_ok:
                 return None
             token = secrets.token_urlsafe(32)
             ablauf = datetime.now(timezone.utc) + timedelta(days=_GUELTIG_TAGE)

@@ -46,3 +46,30 @@ async def test_ungueltiges_token(pool):
     auth = AuthDienst(pool)
     assert await auth.sitzung_pruefen("") is None
     assert await auth.sitzung_pruefen("voellig-erfunden") is None
+
+
+async def test_abgelaufene_sitzung_wird_beim_login_entfernt(pool):
+    auth = AuthDienst(pool)
+    benutzer = await auth.benutzer_anlegen("erna", "pw")
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "INSERT INTO sitzung (token_hash, benutzer_id, ablauf) "
+                "VALUES (%s,%s, now() - interval '1 day')",
+                ("alt-und-abgelaufen", benutzer["id"]),
+            )
+    await auth.anmelden("erna", "pw")  # raeumt abgelaufene Sitzungen auf
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT count(*) FROM sitzung WHERE token_hash=%s", ("alt-und-abgelaufen",)
+            )
+            (anzahl,) = await cur.fetchone()
+    assert anzahl == 0
+
+
+async def test_konto_ohne_passwort_kann_sich_nicht_anmelden(pool):
+    auth = AuthDienst(pool)
+    await auth.benutzer_anlegen("ohnepw")  # kein Passwort gesetzt
+    assert await auth.anmelden("ohnepw", "") is None
+    assert await auth.anmelden("ohnepw", "irgendwas") is None
