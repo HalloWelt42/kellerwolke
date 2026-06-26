@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Einstellungen</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <nav class="breadcrumb" style="padding: 0;">
+          <i class="fa-solid fa-gear"></i> <span class="aktuell">Einstellungen</span>
+        </nav>
+        <div class="kopf-rechts">
+          <button class="icon-knopf" title="Dunkles Thema"><i class="fa-solid fa-moon"></i></button>
+          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+          <button class="knopf still" title="Zu den Dateien">
+            <i class="fa-solid fa-arrow-left"></i> Zu den Dateien
+          </button>
+        </div>
+      </header>
+
+      <!-- Einstellungen-Menue (statt Bereiche-Navigation) -->
+      <nav class="einst-nav">
+        <div class="nav-titel">Einstellungen</div>
+        <a class="einst-eintrag"><i class="fa-solid fa-users"></i> Konten</a>
+        <a class="einst-eintrag aktiv"><i class="fa-solid fa-hard-drive"></i> Speicherorte</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-magnifying-glass-chart"></i> Index</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-sliders"></i> System</a>
+      </nav>
+
+      <section class="einst-inhalt">
+        <h1>Speicherorte</h1>
+        <p class="unter">
+          Lege fest, auf welchen Laufwerken Kellerwolke Dateien ablegt. Die Datenbank und das
+          Projekt selbst bleiben am Ort; die Datei-Ablage (zentrale Ordner) ist frei verschiebbar.
+          Verschieben laeuft im Hintergrund als Vorgang.
+        </p>
+
+        <div class="karte">
+          <h2><i class="fa-solid fa-hard-drive"></i> Laufwerke</h2>
+          <p class="karte-unter">Eingebundene Speicherorte. Belegung wird laufend gemessen.</p>
+
+          <div class="speicherort">
+            <div class="so-icon"><i class="fa-solid fa-hard-drive"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Projekt-Standard</span>
+                <span class="marke-std">Standard</span>
+                <span class="marke-typ">intern</span>
+              </div>
+              <div class="so-pfad">/mnt/data/objects</div>
+              <div class="so-bar">
+                <div class="balken"><span style="width: 9%"></span></div>
+                <span class="text">142 GB von 1,5 TB belegt</span>
+              </div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+            </div>
+          </div>
+
+          <div class="speicherort">
+            <div class="so-icon"><i class="fa-solid fa-database"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Grosse Platte</span>
+                <span class="marke-typ">exFAT - 26 TB</span>
+              </div>
+              <div class="so-pfad">/mnt/tb26/kellerwolke</div>
+              <div class="so-bar">
+                <div class="balken"><span style="width: 31%"></span></div>
+                <span class="text">8,1 von 26 TB belegt</span>
+              </div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Dateien hierher verschieben">
+                <i class="fa-solid fa-arrow-right-arrow-left"></i>
+              </button>
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <div class="speicherort">
+            <div class="so-icon"><i class="fa-solid fa-network-wired"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">USB-Archiv</span>
+                <span class="marke-ro">nur lesen</span>
+                <span class="marke-typ">USB</span>
+              </div>
+              <div class="so-pfad">/mnt/usb1</div>
+              <div class="so-bar">
+                <div class="balken warnung"><span style="width: 88%"></span></div>
+                <span class="text">3,5 von 4,0 TB belegt</span>
+              </div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <div class="formzeile">
+            <input class="feld" type="text" placeholder="Anzeigename (z.B. Grosse Platte)" />
+            <input class="feld" type="text" placeholder="Pfad auf dem Server (z.B. /mnt/tb26/kellerwolke)" />
+            <label class="zu-konto" style="white-space: nowrap;">
+              <input type="checkbox" checked /> schreibbar
+            </label>
+            <button class="knopf primaer"><i class="fa-solid fa-plus"></i> Laufwerk hinzufügen</button>
+          </div>
+        </div>
+
+        <div class="karte">
+          <h2><i class="fa-solid fa-user-gear"></i> Standardspeicher je Konto</h2>
+          <p class="karte-unter">
+            Wo neue Dateien eines Kontos landen. Vorhandene Dateien wandern erst mit, wenn du sie
+            verschiebst (als Vorgang).
+          </p>
+          <div class="zuordnung">
+            <div class="zu-konto"><span class="avatar">M</span> Marcel</div>
+            <select class="feld">
+              <option>Grosse Platte</option>
+              <option>Projekt-Standard</option>
+            </select>
+            <div class="zu-konto"><span class="avatar">B</span> Britta</div>
+            <select class="feld">
+              <option>Projekt-Standard</option>
+              <option>Grosse Platte</option>
+            </select>
+            <div class="zu-konto"><span class="avatar">J</span> Jonas</div>
+            <select class="feld">
+              <option>Projekt-Standard</option>
+              <option>Grosse Platte</option>
+            </select>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Mockup-Viewer</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+      .vleiste {
+        display: flex; align-items: center; gap: var(--a3);
+        padding: var(--a2) var(--a4); background: var(--flaeche);
+        border-bottom: 1px solid var(--rand); flex: none;
+      }
+      .vleiste .marke { font-size: 1.05rem; }
+      .vleiste select.feld { width: auto; min-width: 220px; height: 34px; }
+      .vleiste label { display: flex; align-items: center; gap: var(--a2); color: var(--text-2); font-size: 0.85rem; }
+      .vleiste .luecke { flex: 1; }
+      .hinweis { color: var(--text-3); font-size: 0.82rem; }
+      .buehne { flex: 1; position: relative; overflow: hidden; background: var(--bg); }
+      iframe { width: 100%; height: 100%; border: none; display: block; background: var(--bg); }
+      .overlay { position: absolute; inset: 0; pointer-events: none; }
+      .feldchen {
+        position: absolute; pointer-events: auto;
+        outline: 1px dashed color-mix(in srgb, var(--akzent) 45%, transparent);
+        outline-offset: -1px;
+      }
+      .feldchen:hover {
+        background: color-mix(in srgb, var(--akzent) 12%, transparent);
+        outline: 1.5px solid var(--akzent);
+        z-index: 5;
+      }
+      .nr {
+        position: absolute; top: 0; left: 0;
+        min-width: 16px; height: 16px; padding: 0 3px;
+        background: var(--akzent); color: var(--akzent-text);
+        font-size: 0.62rem; font-weight: 600; line-height: 16px; text-align: center;
+        border-radius: 0 0 4px 0;
+      }
+      .feldchen:hover .nr { background: var(--akzent-stark); }
+      .etikett {
+        position: fixed; z-index: 20; pointer-events: none;
+        background: var(--text); color: var(--bg);
+        padding: 3px 8px; border-radius: var(--r1); font-size: 0.78rem;
+        box-shadow: var(--schatten-2); white-space: nowrap; display: none;
+      }
+      .aus { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="vleiste">
+      <div class="marke"><i class="fa-solid fa-vector-square"></i> Mockup-Viewer</div>
+      <select class="feld" id="wahl"></select>
+      <label><input type="checkbox" id="zeigen" checked /> Nummern + Namen</label>
+      <span class="hinweis" id="zaehler"></span>
+      <span class="luecke"></span>
+      <span class="hinweis">Hover = Name, Klick = Name kopieren</span>
+      <button class="icon-knopf" id="thema" title="Thema umschalten"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <div class="buehne">
+      <iframe id="rahmen" src="/mockups/liste.html"></iframe>
+      <div class="overlay" id="overlay"></div>
+    </div>
+    <div class="etikett" id="etikett"></div>
+
+    <script>
+      // Mockup-Seiten (in Reihenfolge der Galerie).
+      const SEITEN = [
+        ["anmeldung.html", "01 Anmeldung"],
+        ["liste.html", "02 Liste"],
+        ["detail.html", "03 Detail-Pane"],
+        ["grid.html", "04 Kacheln"],
+        ["auswahl.html", "05 Mehrfachauswahl"],
+        ["marquee.html", "06 Marquee"],
+        ["dragdrop.html", "07 Drag-and-drop"],
+        ["upload.html", "08 Upload"],
+        ["kontextmenue.html", "09 Kontextmenue"],
+        ["umbenennen.html", "10 Umbenennen"],
+        ["leer.html", "11 Leer"],
+        ["laden.html", "12 Laden"],
+        ["suche.html", "13 Suche"],
+        ["papierkorb.html", "14 Papierkorb"],
+        ["extern.html", "15 Externe Quelle"],
+        ["admin.html", "16 Verwaltung (alt, Overlay)"],
+        ["vorgaenge.html", "17 Vorgaenge"],
+        ["einstellungen.html", "18 Einstellungen (neu, Vollansicht)"],
+      ];
+
+      // Selektor -> Name. Spezifisch zuerst, damit jedes Element den treffendsten
+      // Namen bekommt (jedes Element wird nur einmal benannt).
+      const NAMEN = [
+        [".kopf-suche", "Suchfeld"],
+        [".kopf-knopf", "Vorgaenge-Knopf"],
+        [".nutzer-chip", "Nutzer-Chip"],
+        [".avatar", "Avatar"],
+        [".marke", "Marke / Logo"],
+        [".kopf", "Kopfleiste"],
+        [".nav-titel", "Navigations-Titel"],
+        [".nav-eintrag", "Navigations-Eintrag"],
+        [".speicher", "Speicheranzeige"],
+        [".nav", "Navigation"],
+        [".ansicht-umschalter", "Ansicht-Umschalter"],
+        [".knopf", "Knopf"],
+        [".werkzeuge", "Werkzeugleiste"],
+        [".breadcrumb", "Brotkrumen-Pfad"],
+        [".nur-lesen", "Nur-lesen-Marke"],
+        [".listenkopf", "Listenkopf"],
+        [".aus-box", "Auswahl-Checkbox"],
+        [".z-akt", "Zeilen-Aktionen"],
+        [".z-name", "Datei-Name"],
+        [".z-meta", "Datei-Meta"],
+        [".zeile", "Dateizeile"],
+        [".liste", "Dateiliste"],
+        [".kachel", "Kachel"],
+        [".grid", "Kachel-Raster"],
+        [".detail-vorschau", "Detail-Vorschau"],
+        [".versionsliste", "Versionsliste"],
+        [".detail-block", "Detail-Block"],
+        [".detail-kopf", "Detail-Kopf"],
+        [".detail", "Detail-Pane"],
+        [".auswahlleiste", "Auswahl-Leiste"],
+        [".kontextmenue", "Kontextmenue"],
+        [".drop-overlay", "Upload-Ablagezone"],
+        [".schwebe-karte", "Upload-Karte"],
+        [".status-pill", "Status-Marke"],
+        [".fortschritt", "Fortschrittsbalken"],
+        [".vorgang-aktionen", "Vorgang-Aktionen"],
+        [".vorgang", "Vorgang-Karte"],
+        [".vorgaenge-kopf", "Vorgaenge-Kopf"],
+        [".vorgaenge", "Vorgaenge-Schublade"],
+        [".einst-nav", "Einstellungen-Menue"],
+        [".einst-eintrag", "Einstellungs-Eintrag"],
+        [".einst-inhalt", "Einstellungen-Inhalt"],
+        [".karte", "Karte"],
+        [".speicherort", "Speicherort-Zeile"],
+        [".feld", "Eingabefeld"],
+        [".modal", "Modal"],
+        [".login-karte", "Login-Karte"],
+        [".inhalt", "Inhaltsbereich"],
+        [".app", "App-Raster"],
+      ];
+
+      const rahmen = document.getElementById("rahmen");
+      const overlay = document.getElementById("overlay");
+      const etikett = document.getElementById("etikett");
+      const wahl = document.getElementById("wahl");
+      const zeigen = document.getElementById("zeigen");
+      const zaehler = document.getElementById("zaehler");
+
+      for (const [datei, titel] of SEITEN) {
+        const o = document.createElement("option");
+        o.value = "/mockups/" + datei;
+        o.textContent = titel;
+        if (datei === "liste.html") o.selected = true;
+        wahl.appendChild(o);
+      }
+      wahl.onchange = () => (rahmen.src = wahl.value);
+
+      function thema() {
+        return document.documentElement.dataset.theme;
+      }
+
+      function baue() {
+        overlay.innerHTML = "";
+        if (!zeigen.checked) {
+          zaehler.textContent = "";
+          return;
+        }
+        let doc;
+        try {
+          doc = rahmen.contentDocument;
+        } catch (e) {
+          return;
+        }
+        if (!doc || !doc.body) return;
+        // Thema des Rahmens an den Viewer angleichen.
+        doc.documentElement.dataset.theme = thema();
+
+        const benannt = new Map();
+        for (const el of doc.querySelectorAll("*")) {
+          if (benannt.has(el)) continue;
+          for (const [sel, name] of NAMEN) {
+            if (el.matches(sel)) {
+              benannt.set(el, name);
+              break;
+            }
+          }
+        }
+        let n = 0;
+        for (const [el, name] of benannt) {
+          const r = el.getBoundingClientRect();
+          if (r.width < 6 || r.height < 6) continue;
+          n++;
+          const box = document.createElement("div");
+          box.className = "feldchen";
+          box.style.left = r.left + "px";
+          box.style.top = r.top + "px";
+          box.style.width = r.width + "px";
+          box.style.height = r.height + "px";
+          const nr = document.createElement("div");
+          nr.className = "nr";
+          nr.textContent = n;
+          box.appendChild(nr);
+          const text = n + " - " + name;
+          box.addEventListener("mousemove", (ev) => {
+            etikett.textContent = text;
+            etikett.style.display = "block";
+            etikett.style.left = Math.min(ev.clientX + 12, window.innerWidth - etikett.offsetWidth - 8) + "px";
+            etikett.style.top = ev.clientY + 16 + "px";
+          });
+          box.addEventListener("mouseleave", () => (etikett.style.display = "none"));
+          box.addEventListener("click", () => {
+            navigator.clipboard && navigator.clipboard.writeText(name);
+            etikett.textContent = "kopiert: " + name;
+          });
+          overlay.appendChild(box);
+        }
+        zaehler.textContent = n + " benannte Elemente";
+      }
+
+      rahmen.addEventListener("load", () => {
+        baue();
+        try {
+          rahmen.contentWindow.addEventListener("scroll", baue, { passive: true });
+          rahmen.contentWindow.addEventListener("resize", baue);
+        } catch (e) {}
+      });
+      window.addEventListener("resize", baue);
+      zeigen.onchange = baue;
+
+      document.getElementById("thema").onclick = () => {
+        const neu = thema() === "hell" ? "dunkel" : "hell";
+        document.documentElement.dataset.theme = neu;
+        baue();
+      };
+    </script>
+  </body>
+</html>

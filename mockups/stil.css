@@ -1108,6 +1108,181 @@ body {
   height: 32px;
 }
 
+/* ===== Einstellungen (Vollansicht, kein Overlay) ===== */
+.einst-nav {
+  grid-area: nav;
+  background: var(--flaeche);
+  border-right: 1px solid var(--rand);
+  padding: var(--a3) var(--a2);
+  overflow-y: auto;
+}
+.einst-eintrag {
+  display: flex;
+  align-items: center;
+  gap: var(--a3);
+  padding: var(--a2) var(--a3);
+  border-radius: var(--r2);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+}
+.einst-eintrag i {
+  width: 18px;
+  text-align: center;
+  color: var(--text-2);
+}
+.einst-eintrag:hover {
+  background: var(--flaeche-2);
+}
+.einst-eintrag.aktiv {
+  background: var(--akzent-weich);
+  color: var(--akzent-stark);
+  font-weight: 600;
+}
+.einst-eintrag.aktiv i {
+  color: var(--akzent);
+}
+.einst-inhalt {
+  grid-area: inhalt;
+  overflow-y: auto;
+  padding: var(--a5) var(--a6);
+}
+.einst-inhalt h1 {
+  font-size: 1.3rem;
+  margin: 0 0 var(--a1);
+}
+.einst-inhalt .unter {
+  color: var(--text-2);
+  margin: 0 0 var(--a5);
+  max-width: 760px;
+}
+.karte {
+  background: var(--flaeche);
+  border: 1px solid var(--rand);
+  border-radius: var(--r3);
+  padding: var(--a4);
+  margin-bottom: var(--a4);
+  max-width: 880px;
+}
+.karte > h2 {
+  font-size: 0.95rem;
+  margin: 0 0 var(--a2);
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+}
+.karte > h2 i {
+  color: var(--akzent);
+}
+.karte .karte-unter {
+  color: var(--text-2);
+  font-size: 0.85rem;
+  margin: 0 0 var(--a3);
+}
+
+/* Speicherort-Zeile */
+.speicherort {
+  display: flex;
+  align-items: center;
+  gap: var(--a3);
+  padding: var(--a3) 0;
+  border-bottom: 1px solid var(--rand);
+}
+.speicherort:last-of-type {
+  border-bottom: none;
+}
+.so-icon {
+  width: 30px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 1.15rem;
+}
+.so-haupt {
+  flex: 1;
+  min-width: 0;
+}
+.so-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+}
+.so-name {
+  font-weight: 500;
+}
+.so-pfad {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.so-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--a3);
+  margin-top: var(--a2);
+}
+.so-bar .balken {
+  flex: 1;
+  max-width: 340px;
+  margin-top: 0;
+}
+.so-bar .balken.warnung > span {
+  background: var(--warn);
+}
+.so-bar .text {
+  font-size: 0.78rem;
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.so-akt {
+  display: flex;
+  gap: var(--a1);
+}
+.marke-std {
+  font-size: 0.66rem;
+  color: var(--gut);
+  border: 1px solid var(--gut);
+  border-radius: var(--r1);
+  padding: 0 var(--a2);
+}
+.marke-ro {
+  font-size: 0.66rem;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--r1);
+  padding: 0 var(--a2);
+}
+.marke-typ {
+  font-size: 0.66rem;
+  color: var(--text-3);
+  border: 1px solid var(--rand-stark);
+  border-radius: var(--r1);
+  padding: 0 var(--a2);
+}
+
+/* Konto -> Speicherort Zuordnung */
+.zuordnung {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: var(--a3);
+  align-items: center;
+}
+.zu-konto {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+}
+.formzeile {
+  display: flex;
+  gap: var(--a2);
+  flex-wrap: wrap;
+  margin-top: var(--a3);
+}
+.formzeile .feld {
+  flex: 1;
+  min-width: 9rem;
+}
+
 /* ===== Mobil ===== */
 @media (max-width: 720px) {
   .app,
