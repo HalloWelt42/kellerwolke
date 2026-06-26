@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Splitscreen</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <!-- Sidebar ausgeblendet (nav-aus): im Splitscreen mehr Platz -->
+    <div class="app nav-aus">
+      <header class="kopf">
+        <button class="icon-knopf" title="Navigation einblenden"><i class="fa-solid fa-bars"></i></button>
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="ansicht-umschalter">
+            <button title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+            <button class="aktiv" title="Splitscreen"><i class="fa-solid fa-table-columns"></i></button>
+          </div>
+          <button class="icon-knopf" title="Dunkles Thema"><i class="fa-solid fa-moon"></i></button>
+          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+        </div>
+      </header>
+
+      <section class="inhalt">
+        <div class="split">
+          <!-- Linker Bereich (aktiv, Quelle des Ziehens) -->
+          <div class="pane aktiv">
+            <div class="pane-kopf">
+              <nav class="breadcrumb">
+                <a>Meine Dateien</a><i class="fa-solid fa-chevron-right"></i>
+                <span class="aktuell">Dokumente</span>
+              </nav>
+              <button class="icon-knopf" title="Neuer Ordner"><i class="fa-solid fa-folder-plus"></i></button>
+              <button class="icon-knopf" title="Hochladen"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+            </div>
+            <div class="liste">
+              <div class="listenkopf">
+                <span></span><span class="sortbar">Name</span><span>Größe</span>
+                <span class="sp-geaendert">Geändert</span><span></span>
+              </div>
+              <div class="zeile gewaehlt">
+                <span class="z-aus"><span class="aus-box an"><i class="fa-solid fa-check"></i></span></span>
+                <span class="z-name"><i class="sym fa-solid fa-file-pdf"></i><span class="titel">Arbeitsvertrag_2026.pdf</span></span>
+                <span class="z-meta">248 KB</span>
+                <span class="z-meta z-geaendert">11.05.2026, 22:05</span><span class="z-akt"></span>
+              </div>
+              <div class="zeile gewaehlt">
+                <span class="z-aus"><span class="aus-box an"><i class="fa-solid fa-check"></i></span></span>
+                <span class="z-name"><i class="sym fa-solid fa-file-excel"></i><span class="titel">Nebenkosten_2025.xlsx</span></span>
+                <span class="z-meta">86 KB</span>
+                <span class="z-meta z-geaendert">28.04.2026, 11:30</span><span class="z-akt"></span>
+              </div>
+              <div class="zeile">
+                <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+                <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Notizen.txt</span></span>
+                <span class="z-meta">3 KB</span>
+                <span class="z-meta z-geaendert">09.05.2026, 14:22</span><span class="z-akt"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rechter Bereich (Ziel des Ziehens, hervorgehoben) -->
+          <div class="pane ziel">
+            <div class="pane-kopf">
+              <nav class="breadcrumb">
+                <a>Meine Dateien</a><i class="fa-solid fa-chevron-right"></i>
+                <span class="aktuell">Archiv 2025</span>
+              </nav>
+              <button class="icon-knopf" title="Neuer Ordner"><i class="fa-solid fa-folder-plus"></i></button>
+              <button class="icon-knopf" title="Hochladen"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+            </div>
+            <div class="liste">
+              <div class="listenkopf">
+                <span></span><span class="sortbar">Name</span><span>Größe</span>
+                <span class="sp-geaendert">Geändert</span><span></span>
+              </div>
+              <div class="zeile">
+                <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+                <span class="z-name"><i class="sym ordner fa-solid fa-folder"></i><span class="titel">Belege</span></span>
+                <span class="z-meta">64 Dateien</span>
+                <span class="z-meta z-geaendert">02.01.2026, 10:00</span><span class="z-akt"></span>
+              </div>
+              <div class="zeile">
+                <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+                <span class="z-name"><i class="sym fa-solid fa-file-zipper"></i><span class="titel">Steuer_2024.zip</span></span>
+                <span class="z-meta">12,4 MB</span>
+                <span class="z-meta z-geaendert">19.03.2025, 21:58</span><span class="z-akt"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Drag-Geist: 2 Objekte vom linken in den rechten Bereich -->
+    <div class="drag-ghost" style="left: 47%; top: 300px;">
+      <span class="zahl-badge">2</span><span>2 Objekte verschieben</span>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

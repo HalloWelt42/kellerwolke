@@ -1283,6 +1283,70 @@ body {
   min-width: 9rem;
 }
 
+/* ===== Sidebar ausblendbar ===== */
+.app.nav-aus {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "kopf"
+    "inhalt";
+}
+.app.nav-aus.mit-detail {
+  grid-template-columns: 1fr 320px;
+  grid-template-areas:
+    "kopf kopf"
+    "inhalt detail";
+}
+.app.nav-aus .nav {
+  display: none;
+}
+
+/* ===== Splitscreen (zwei Datei-Bereiche) ===== */
+.split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--rand);
+  position: relative;
+}
+.pane:last-child {
+  border-right: none;
+}
+.pane-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  padding: var(--a2) var(--a4);
+  border-bottom: 1px solid var(--rand);
+  background: var(--flaeche);
+}
+.pane-kopf .breadcrumb {
+  padding: 0;
+  flex: 1;
+}
+.pane-kopf .icon-knopf {
+  width: 30px;
+  height: 30px;
+}
+.pane.aktiv .pane-kopf {
+  box-shadow: inset 0 -2px 0 var(--akzent);
+}
+.pane .liste {
+  flex: 1;
+}
+.pane.ziel {
+  outline: 2px dashed var(--akzent);
+  outline-offset: -3px;
+}
+.pane.ziel .liste {
+  background: var(--akzent-weich);
+}
+
 /* ===== Mobil ===== */
 @media (max-width: 720px) {
   .app,
