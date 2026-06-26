@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { auth, ladeStatus, abmelden } from "./lib/auth.svelte";
   import { thema, themaUmschalten } from "./lib/thema.svelte";
-  import { zustand, starteSuche, zeigeDateien, ordnerAnlegen } from "./lib/zustand.svelte";
+  import { zustand, starteSuche, zeigeDateien, ordnerAnlegen, leerePapierkorb } from "./lib/zustand.svelte";
   import { auswahl } from "./lib/auswahl.svelte";
   import Login from "./lib/Login.svelte";
   import Navigation from "./lib/Navigation.svelte";
@@ -15,6 +15,7 @@
 
   let adminOffen = $state(false);
   let neuerOrdnerOffen = $state(false);
+  let papierkorbLeerenOffen = $state(false);
   let ordnerName = $state("");
   let initialGeladen = $state(false);
 
@@ -103,7 +104,10 @@
     <Navigation />
 
     <section class="inhalt">
-      <Werkzeugleiste onNeuerOrdner={() => (neuerOrdnerOffen = true)} />
+      <Werkzeugleiste
+        onNeuerOrdner={() => (neuerOrdnerOffen = true)}
+        onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
+      />
       <Breadcrumb />
       {#if zustand.fehler}
         <div class="fehlerstreifen">{zustand.fehler}</div>
@@ -129,6 +133,27 @@
       <div class="modal-knoepfe">
         <button class="knopf still" onclick={() => (neuerOrdnerOffen = false)}>Abbrechen</button>
         <button class="knopf primaer" onclick={ordnerAnlegenBestaetigen}>Anlegen</button>
+      </div>
+    </Modal>
+  {/if}
+
+  {#if papierkorbLeerenOffen}
+    <Modal titel="Papierkorb leeren" schliessen={() => (papierkorbLeerenOffen = false)}>
+      <p style="margin: 0; color: var(--text-2);">
+        Alle Objekte im Papierkorb werden endgültig gelöscht. Das lässt sich nicht rückgängig
+        machen.
+      </p>
+      <div class="modal-knoepfe">
+        <button class="knopf still" onclick={() => (papierkorbLeerenOffen = false)}>Abbrechen</button>
+        <button
+          class="knopf primaer"
+          onclick={() => {
+            leerePapierkorb();
+            papierkorbLeerenOffen = false;
+          }}
+        >
+          <i class="fa-solid fa-trash-can"></i> Endgültig leeren
+        </button>
       </div>
     </Modal>
   {/if}

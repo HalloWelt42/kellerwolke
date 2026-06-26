@@ -43,19 +43,30 @@
 
   function rowClick(e: MouseEvent, k: Knoten) {
     if (verschiebeModus) {
-      if (k.typ === "ordner") {
-        verschiebe([...auswahl.ids], k.id);
-      }
+      if (k.typ === "ordner") verschiebe([...auswahl.ids], k.id);
       verschiebeModus = false;
       return;
     }
+    // Bearbeitung: Strg/Cmd schaltet um, Shift waehlt den Bereich.
     if (e.metaKey || e.ctrlKey) {
       auswahl.umschalten(k.id);
-    } else if (e.shiftKey) {
+      return;
+    }
+    if (e.shiftKey) {
       auswahl.bereich(k.id, geordnet);
-    } else {
+      return;
+    }
+    // Ansicht (Einfachklick): Ordner/Extern oeffnen, Datei zeigt das Detail.
+    // Kein Download, keine Auswahl - die bleibt der Checkbox vorbehalten.
+    if (imPapierkorb) {
       auswahl.waehleEinzeln(k.id);
-      if (!imPapierkorb) zeigeDetail(k);
+      return;
+    }
+    if (k.typ === "ordner" || k.typ === "extern") {
+      oeffnen(k);
+    } else {
+      auswahl.leeren();
+      zeigeDetail(k);
     }
   }
 
@@ -63,9 +74,11 @@
     auswahl.umschalten(k.id);
   }
 
+  // Doppelklick auf eine Datei laedt sie herunter (das bewusste "ganz oeffnen").
+  // Bei Ordnern passiert nichts - der Einfachklick navigiert bereits hinein.
   function rowDblClick(k: Knoten) {
     if (verschiebeModus) return;
-    oeffnen(k);
+    if (k.typ === "datei") herunterladen(k);
   }
 
   // --- Inline-Umbenennen ------------------------------------------------------

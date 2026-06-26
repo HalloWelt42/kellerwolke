@@ -83,21 +83,42 @@ class PostgresMetadataRepository:
     async def kinder(self, besitzer_id, parent_id):
         # Groesse der aktuellen Version gleich mitliefern (LEFT JOIN, hoechstens
         # ein Treffer je Knoten), damit die Liste sie ohne Zusatzabfrage zeigt.
+        # Zusaetzlich die Kinderzahl je Ordner (fuer den Ordner-Zaehler in der UI).
+        zaehler = (
+            "(SELECT count(*) FROM knoten c "
+            "WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl"
+        )
         if parent_id is None:
             return await self._alle(
-                "SELECT k.*, v.groesse FROM knoten k "
+                f"SELECT k.*, v.groesse, {zaehler} FROM knoten k "
                 "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
                 "WHERE k.besitzer_id=%s AND k.parent_id IS NULL "
-                "AND NOT k.geloescht ORDER BY k.typ, lower(k.name)",
+                "AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
+            "lower(k.name)",
                 (besitzer_id,),
             )
         return await self._alle(
-            "SELECT k.*, v.groesse FROM knoten k "
+            f"SELECT k.*, v.groesse, {zaehler} FROM knoten k "
             "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
             "WHERE k.besitzer_id=%s AND k.parent_id=%s "
-            "AND NOT k.geloescht ORDER BY k.typ, lower(k.name)",
+            "AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
+            "lower(k.name)",
             (besitzer_id, parent_id),
         )
+
+    async def speicher_status(self, besitzer_id):
+        benutzt = await self._eine(
+            "SELECT coalesce(sum(groesse), 0) AS s FROM blob "
+            "WHERE besitzer_id=%s AND refcount > 0",
+            (besitzer_id,),
+        )
+        konto = await self._eine("SELECT quota_bytes FROM benutzer WHERE id=%s", (besitzer_id,))
+        return {
+            "benutzt": int(benutzt["s"]) if benutzt else 0,
+            "quota": konto["quota_bytes"] if konto else None,
+        }
 
     async def knoten_setzen_version(self, knoten_id, version_id, etag):
         await self.conn.execute(
@@ -138,6 +159,51 @@ class PostgresMetadataRepository:
             "ORDER BY k.geaendert_am DESC",
             (besitzer_id,),
         )
+
+    async def papierkorb_wurzeln(self, besitzer_id):
+        zeilen = await self._alle(
+            "SELECT id FROM knoten WHERE besitzer_id=%s AND geloescht", (besitzer_id,)
+        )
+        return [z["id"] for z in zeilen]
+
+    async def blobrefs_im_teilbaum(self, wurzeln):
+        """Liefert je Blockhash, wie oft er im Teilbaum der Wurzeln referenziert
+        wird (ueber Versionen/Chunks). Grundlage fuer das Senken der Refcounts."""
+        if not wurzeln:
+            return []
+        return await self._alle(
+            "WITH RECURSIVE baum AS ("
+            "  SELECT id FROM knoten WHERE id = ANY(%s) "
+            "  UNION ALL "
+            "  SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id"
+            ") "
+            "SELECT c.blob_hash AS hash, count(*) AS n "
+            "FROM chunk c JOIN version v ON v.id = c.version_id "
+            "WHERE v.knoten_id IN (SELECT id FROM baum) "
+            "GROUP BY c.blob_hash",
+            (wurzeln,),
+        )
+
+    async def blob_refcount_senken(self, besitzer_id, blob_hash, n):
+        """Senkt den Refcount und liefert den neuen Wert (oder None, wenn weg)."""
+        zeile = await self._eine(
+            "UPDATE blob SET refcount = refcount - %s "
+            "WHERE besitzer_id=%s AND hash=%s RETURNING refcount",
+            (n, besitzer_id, blob_hash),
+        )
+        return zeile["refcount"] if zeile else None
+
+    async def blob_zeile_loeschen(self, besitzer_id, blob_hash):
+        await self.conn.execute(
+            "DELETE FROM blob WHERE besitzer_id=%s AND hash=%s AND refcount <= 0",
+            (besitzer_id, blob_hash),
+        )
+
+    async def knoten_hart_loeschen(self, wurzeln):
+        if not wurzeln:
+            return
+        # ON DELETE CASCADE raeumt Kinder, Versionen und Chunks mit ab.
+        await self.conn.execute("DELETE FROM knoten WHERE id = ANY(%s)", (wurzeln,))
 
     async def ist_im_teilbaum(self, wurzel_id, kandidat_id) -> bool:
         """True, wenn kandidat_id der Knoten wurzel_id selbst oder ein Nachkomme

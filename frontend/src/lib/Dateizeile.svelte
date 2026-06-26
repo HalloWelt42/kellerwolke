@@ -49,6 +49,17 @@
 
   const sym = $derived(symbol(k));
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
+  const metaText = $derived(
+    k.typ === "ordner"
+      ? k.kinder_anzahl == null
+        ? "-"
+        : k.kinder_anzahl === 0
+          ? "Leer"
+          : `${k.kinder_anzahl} ${k.kinder_anzahl === 1 ? "Datei" : "Dateien"}`
+      : k.typ === "datei" && k.groesse != null
+        ? groesseText(k.groesse)
+        : "-",
+  );
 
   let entwurf = $state(k.name);
   $effect(() => {
@@ -124,7 +135,7 @@
     {/if}
   </span>
 
-  <span class="z-meta">{k.typ === "datei" && k.groesse != null ? groesseText(k.groesse) : "-"}</span>
+  <span class="z-meta">{metaText}</span>
   <span class="z-meta z-geaendert">{datum(k.geaendert_am)}</span>
 
   <span class="z-akt">

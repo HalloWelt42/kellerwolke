@@ -14,12 +14,19 @@ from module.speicher.modelle import (
     ExternEintragAus,
     KnotenAus,
     OrdnerEingabe,
+    SpeicherStatusAus,
     UmbenennenEingabe,
     VerschiebenEingabe,
     VersionAus,
 )
 
 router = APIRouter(prefix="/api/v1/dateien", tags=["dateien"])
+
+
+@router.get("/speicher-status", response_model=SpeicherStatusAus)
+async def speicher_status(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    s = await speicher.speicher_status(benutzer["id"])
+    return SpeicherStatusAus(benutzt=s["benutzt"], quota=s["quota"])
 
 
 @router.get("", response_model=list[KnotenAus])
@@ -33,6 +40,11 @@ async def auflisten(parent_id: UUID | None = None, benutzer=Depends(aktueller_be
 @router.get("/papierkorb", response_model=list[KnotenAus])
 async def papierkorb(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     return [KnotenAus.model_validate(k) for k in await speicher.papierkorb(benutzer["id"])]
+
+
+@router.delete("/papierkorb", status_code=204)
+async def papierkorb_leeren(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    await speicher.papierkorb_leeren(benutzer["id"])
 
 
 @router.get("/extern/{knoten_id}", response_model=list[ExternEintragAus])

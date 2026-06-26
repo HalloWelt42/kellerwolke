@@ -1,6 +1,6 @@
 import * as api from "./api";
 import { auswahl } from "./auswahl.svelte";
-import type { ExternEintrag, Knoten, Version } from "./types";
+import type { ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
 
 // Zentraler Zustand des Dateibrowsers: Single Source of Truth fuer Navigation,
 // Liste, Detail-Pane und Auswahl. Die Zonen (Navigation, Inhalt, Detail) lesen
@@ -33,6 +33,7 @@ export const zustand = $state<{
   externBrowse: { knotenId: string; name: string; unterpfad: string[] } | null;
   externEintraege: ExternEintrag[];
   uploads: UploadFortschritt[];
+  speicher: SpeicherStatus | null;
 }>({
   bereich: "dateien",
   pfad: [{ id: null, name: "Meine Dateien" }],
@@ -46,7 +47,27 @@ export const zustand = $state<{
   externBrowse: null,
   externEintraege: [],
   uploads: [],
+  speicher: null,
 });
+
+export async function ladeSpeicher(): Promise<void> {
+  try {
+    zustand.speicher = await api.speicherStatus();
+  } catch {
+    // Speicheranzeige ist optional.
+  }
+}
+
+export async function leerePapierkorb(): Promise<void> {
+  try {
+    await api.papierkorbLeeren();
+    auswahl.leeren();
+    await ladeMit(() => api.papierkorb());
+    ladeSpeicher();
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
 
 // Nur das jeweils neueste Laden darf das Ergebnis schreiben (verhindert, dass
 // eine aeltere, langsamere Antwort eine neuere ueberschreibt).
@@ -74,6 +95,7 @@ async function ladeMit(quelle: () => Promise<Knoten[]>): Promise<void> {
     zustand.eintraege = ergebnis;
     auswahl.beschraenkeAuf(ergebnis.map((k) => k.id));
     if (zustand.detail && !ergebnis.some((k) => k.id === zustand.detail!.id)) detailSchliessen();
+    if (zustand.speicher === null) ladeSpeicher();
   } catch (f) {
     if (meins === lauf) zustand.fehler = (f as Error).message;
   } finally {
@@ -255,7 +277,7 @@ export async function umbenennen(k: Knoten, name: string): Promise<void> {
   }
 }
 
-export async function verschiebe(ids: string[], zielId: string): Promise<void> {
+export async function verschiebe(ids: string[], zielId: string | null): Promise<void> {
   try {
     for (const id of ids) {
       if (id === zielId) continue;
@@ -314,5 +336,6 @@ export async function hochladen(dateien: FileList | File[] | null): Promise<void
   } finally {
     zustand.uploads = [];
     await ladeOrdner();
+    ladeSpeicher();
   }
 }

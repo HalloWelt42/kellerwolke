@@ -45,7 +45,11 @@
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
   const metaText = $derived(
     k.typ === "ordner"
-      ? "Ordner"
+      ? k.kinder_anzahl == null
+        ? "Ordner"
+        : k.kinder_anzahl === 0
+          ? "Leer"
+          : `${k.kinder_anzahl} ${k.kinder_anzahl === 1 ? "Datei" : "Dateien"}`
       : k.typ === "extern"
         ? "Externe Quelle"
         : k.groesse != null

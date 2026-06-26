@@ -40,6 +40,7 @@
       </div>
     {/if}
     <div class="infozeile"><span>Geändert</span><span>{datum(k.geaendert_am)}</span></div>
+    <div class="infozeile"><span>Erstellt</span><span>{datum(k.erstellt_am)}</span></div>
     <div class="infozeile"><span>Pfad</span><span>{pfadText}</span></div>
   </div>
 

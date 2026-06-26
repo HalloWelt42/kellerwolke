@@ -1,4 +1,4 @@
-import type { AuthStatus, Benutzer, ExternEintrag, Knoten, Version } from "./types";
+import type { AuthStatus, Benutzer, ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
 
 // Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl fuer
 // eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
@@ -87,6 +87,14 @@ export function kinder(parentId: string | null): Promise<Knoten[]> {
 
 export function papierkorb(): Promise<Knoten[]> {
   return hole<Knoten[]>("/v1/dateien/papierkorb");
+}
+
+export function papierkorbLeeren(): Promise<void> {
+  return hole<void>("/v1/dateien/papierkorb", { method: "DELETE" });
+}
+
+export function speicherStatus(): Promise<SpeicherStatus> {
+  return hole<SpeicherStatus>("/v1/dateien/speicher-status");
 }
 
 export function ordnerAnlegen(name: string, parentId: string | null): Promise<Knoten> {

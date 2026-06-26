@@ -1,5 +1,26 @@
 <script lang="ts">
-  import { zustand, breadcrumbGehe, externBreadcrumb } from "./zustand.svelte";
+  import { zustand, breadcrumbGehe, externBreadcrumb, verschiebe } from "./zustand.svelte";
+
+  // Breadcrumb-Ebenen sind Ablageziele: zieht man eine Auswahl auf eine
+  // uebergeordnete Ebene, wandert sie dorthin (Verschieben nach oben).
+  let zielIndex = $state<number | null>(null);
+
+  function ueber(e: DragEvent, i: number) {
+    if (!Array.from(e.dataTransfer?.types ?? []).includes("text/kellerwolke")) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    zielIndex = i;
+  }
+  function raus(i: number) {
+    if (zielIndex === i) zielIndex = null;
+  }
+  function fallen(e: DragEvent, zielId: string | null) {
+    e.preventDefault();
+    zielIndex = null;
+    const roh = e.dataTransfer?.getData("text/kellerwolke");
+    const ids = (roh ?? "").split(",").filter(Boolean);
+    if (ids.length) verschiebe(ids, zielId);
+  }
 </script>
 
 {#if zustand.bereich === "dateien"}
@@ -9,7 +30,13 @@
       {#if i === zustand.pfad.length - 1}
         <span class="aktuell">{teil.name}</span>
       {:else}
-        <a onclick={() => breadcrumbGehe(i)}>{teil.name}</a>
+        <a
+          class:ziel={zielIndex === i}
+          ondragover={(e) => ueber(e, i)}
+          ondragleave={() => raus(i)}
+          ondrop={(e) => fallen(e, teil.id)}
+          onclick={() => breadcrumbGehe(i)}>{teil.name}</a
+        >
       {/if}
     {/each}
   </nav>
@@ -46,3 +73,12 @@
     <span class="aktuell">Suchergebnisse für "{zustand.suchbegriff}"</span>
   </nav>
 {/if}
+
+<style>
+  .breadcrumb a.ziel {
+    background: var(--akzent-weich);
+    color: var(--akzent-stark);
+    outline: 1px dashed var(--akzent);
+    outline-offset: -1px;
+  }
+</style>

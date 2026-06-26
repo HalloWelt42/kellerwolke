@@ -14,6 +14,35 @@ class SpeicherDienst:
         self.pool = pool
         self.blobstore = blobstore
 
+    async def speicher_status(self, besitzer_id):
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            return await repo.speicher_status(besitzer_id)
+
+    async def papierkorb_leeren(self, besitzer_id):
+        """Loescht alle Knoten im Papierkorb endgueltig: Refcounts senken,
+        Knoten samt Teilbaum (CASCADE) entfernen, verwaiste Bloecke physisch
+        loeschen. Liefert die Zahl entfernter Wurzeln."""
+        verwaiste = []
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                wurzeln = await repo.papierkorb_wurzeln(besitzer_id)
+                if not wurzeln:
+                    return 0
+                for ref in await repo.blobrefs_im_teilbaum(wurzeln):
+                    neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
+                    if neu is not None and neu <= 0:
+                        verwaiste.append(ref["hash"])
+                await repo.knoten_hart_loeschen(wurzeln)
+                for h in verwaiste:
+                    await repo.blob_zeile_loeschen(besitzer_id, h)
+                anzahl = len(wurzeln)
+        # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
+        for h in verwaiste:
+            self.blobstore.delete(str(besitzer_id), h)
+        return anzahl
+
     async def ordner_anlegen(self, besitzer_id, parent_id, name):
         async with self.pool.connection() as conn:
             async with conn.transaction():

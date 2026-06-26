@@ -30,6 +30,13 @@ class KnotenAus(BaseModel):
     geaendert_am: datetime
     # Groesse der aktuellen Version (Dateien); bei Ordnern/Externen None.
     groesse: int | None = None
+    # Anzahl nicht geloeschter Kinder (fuer den Ordner-Zaehler); None ausserhalb der Liste.
+    kinder_anzahl: int | None = None
+
+
+class SpeicherStatusAus(BaseModel):
+    benutzt: int
+    quota: int | None = None
 
 
 class VersionAus(BaseModel):

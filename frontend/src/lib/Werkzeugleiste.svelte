@@ -3,8 +3,9 @@
 
   interface Props {
     onNeuerOrdner: () => void;
+    onPapierkorbLeeren: () => void;
   }
-  let { onNeuerOrdner }: Props = $props();
+  let { onNeuerOrdner, onPapierkorbLeeren }: Props = $props();
 
   function aufDateiwahl(e: Event) {
     const ziel = e.target as HTMLInputElement;
@@ -25,6 +26,10 @@
   {:else if zustand.bereich === "extern" && zustand.externBrowse}
     <button class="knopf" onclick={ladeExtern}>
       <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+    </button>
+  {:else if zustand.bereich === "papierkorb" && zustand.eintraege.length > 0}
+    <button class="knopf" onclick={onPapierkorbLeeren}>
+      <i class="fa-solid fa-trash-can"></i> Papierkorb leeren
     </button>
   {/if}
 

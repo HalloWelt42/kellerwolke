@@ -20,6 +20,13 @@ export interface Knoten {
   geaendert_am: string;
   // Groesse der aktuellen Version in Bytes; bei Ordnern/Externen null.
   groesse?: number | null;
+  // Anzahl nicht geloeschter Kinder (fuer den Ordner-Zaehler).
+  kinder_anzahl?: number | null;
+}
+
+export interface SpeicherStatus {
+  benutzt: number;
+  quota: number | null;
 }
 
 export interface Version {
