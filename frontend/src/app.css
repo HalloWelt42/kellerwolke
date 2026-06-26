@@ -1,0 +1,102 @@
+:root {
+  --bg: #0f1419;
+  --panel: #171d26;
+  --panel-2: #1f2733;
+  --rand: #2b3543;
+  --text: #e7edf3;
+  --gedaempft: #8a97a6;
+  --akzent: #4aa8ff;
+  --akzent-weich: #15324d;
+  --gefahr: #ff6b6b;
+  --gut: #4ade80;
+  --schatten: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: "Chakra Petch", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+#app {
+  height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+button:hover {
+  background: var(--rand);
+}
+
+button.primaer {
+  background: var(--akzent);
+  border-color: var(--akzent);
+  color: #04121f;
+  font-weight: 600;
+}
+
+button.primaer:hover {
+  background: #6cb8ff;
+}
+
+button.still {
+  background: transparent;
+  border-color: transparent;
+}
+
+button.still:hover {
+  background: var(--panel-2);
+}
+
+button.gefahr:hover {
+  border-color: var(--gefahr);
+  color: var(--gefahr);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="search"] {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--akzent);
+}
+
+a {
+  color: var(--akzent);
+}
