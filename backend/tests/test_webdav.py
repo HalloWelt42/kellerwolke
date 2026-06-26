@@ -72,3 +72,30 @@ async def test_delete(client):
 async def test_falsche_anmeldung_401(client):
     r = await client.request("PROPFIND", "/webdav/", auth=("chef", "falsch"))
     assert r.status_code == 401
+
+
+async def test_put_ueberschreiben_liefert_204(client):
+    r1 = await client.request("PUT", "/webdav/u.txt", content=b"eins", auth=AUTH)
+    assert r1.status_code == 201
+    r2 = await client.request("PUT", "/webdav/u.txt", content=b"zwei", auth=AUTH)
+    assert r2.status_code == 204
+    assert (await client.get("/webdav/u.txt", auth=AUTH)).content == b"zwei"
+
+
+async def test_getlastmodified_ist_gmt(client):
+    await client.request("PUT", "/webdav/d.txt", content=b"x", auth=AUTH)
+    r = await client.request("PROPFIND", "/webdav/", headers={"Depth": "1"}, auth=AUTH)
+    assert "GMT" in r.text
+    assert "+0000" not in r.text
+
+
+async def test_move_in_ordner_mit_neuem_namen(client):
+    await client.request("MKCOL", "/webdav/Ziel", auth=AUTH)
+    await client.request("PUT", "/webdav/quelle.txt", content=b"inhalt", auth=AUTH)
+    r = await client.request(
+        "MOVE", "/webdav/quelle.txt",
+        headers={"Destination": "/webdav/Ziel/umbenannt.txt"}, auth=AUTH,
+    )
+    assert r.status_code == 201
+    assert (await client.get("/webdav/Ziel/umbenannt.txt", auth=AUTH)).content == b"inhalt"
+    assert (await client.get("/webdav/quelle.txt", auth=AUTH)).status_code == 404

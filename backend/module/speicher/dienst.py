@@ -141,6 +141,29 @@ class SpeicherDienst:
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
                 return await repo.knoten_holen(knoten_id)
 
+    async def umziehen(self, besitzer_id, knoten_id, neuer_parent, neuer_name):
+        """Verschieben und/oder Umbenennen atomar in EINER Transaktion (fuer
+        WebDAV-MOVE), damit nie ein halb angewandter Zustand entsteht."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id:
+                    return None
+                if neuer_parent is not None:
+                    ziel = await repo.knoten_holen(neuer_parent)
+                    if (not ziel or ziel["besitzer_id"] != besitzer_id
+                            or ziel["geloescht"] or ziel["typ"] not in ("ordner", "extern")):
+                        raise ValueError("Ungueltiges Ziel")
+                    if await repo.ist_im_teilbaum(knoten_id, neuer_parent):
+                        raise ValueError("Zyklus")
+                if neuer_name and neuer_name != knoten["name"]:
+                    await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
+                if neuer_parent != knoten["parent_id"]:
+                    await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
+                return await repo.knoten_holen(knoten_id)
+
     async def loeschen(self, besitzer_id, knoten_id):
         async with self.pool.connection() as conn:
             async with conn.transaction():

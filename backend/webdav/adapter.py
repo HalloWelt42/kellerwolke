@@ -65,7 +65,7 @@ def _href(pfad: str, ist_ordner: bool) -> str:
 def _prop(name: str, pfad: str, ist_ordner: bool, groesse: int, geaendert, etag) -> str:
     felder = [
         f"<D:displayname>{escape(name)}</D:displayname>",
-        f"<D:getlastmodified>{format_datetime(geaendert)}</D:getlastmodified>",
+        f"<D:getlastmodified>{format_datetime(geaendert, usegmt=True)}</D:getlastmodified>",
     ]
     if ist_ordner:
         felder.append("<D:resourcetype><D:collection/></D:resourcetype>")
@@ -158,12 +158,20 @@ async def _put(request, benutzer, pfad) -> Response:
     laenge = request.headers.get("content-length")
     if laenge and int(laenge) > EINSTELLUNGEN.max_upload:
         return Response(status_code=413)
-    daten = await request.body()
-    if len(daten) > EINSTELLUNGEN.max_upload:
-        return Response(status_code=413)
+    vorher = await speicher.knoten_per_pfad(benutzer["id"], pfad)
+    existierte = bool(vorher and not vorher["geloescht"] and vorher["typ"] == "datei")
+    # Body streamend lesen und die Grenze laufend pruefen (Speicher-Schutz, auch
+    # bei chunked Transfer ohne Content-Length).
+    stuecke, gesamt = [], 0
+    async for stueck in request.stream():
+        gesamt += len(stueck)
+        if gesamt > EINSTELLUNGEN.max_upload:
+            return Response(status_code=413)
+        stuecke.append(stueck)
+    daten = b"".join(stuecke)
     knoten = await speicher.datei_hochladen(benutzer["id"], parent, name, daten)
     await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
-    return Response(status_code=201)
+    return Response(status_code=204 if existierte else 201)
 
 
 async def _delete(request, benutzer, pfad) -> Response:
@@ -209,12 +217,11 @@ async def _move(request, benutzer, pfad) -> Response:
             return Response(status_code=409)
         neuer_parent = elt["id"]
     try:
-        if ziel_name != knoten["name"]:
-            await speicher.umbenennen(benutzer["id"], knoten["id"], ziel_name)
-        if neuer_parent != knoten["parent_id"]:
-            await speicher.verschieben(benutzer["id"], knoten["id"], neuer_parent)
+        ergebnis = await speicher.umziehen(benutzer["id"], knoten["id"], neuer_parent, ziel_name)
     except (ValueError, UniqueViolation):
         return Response(status_code=409)
+    if not ergebnis:
+        return Response(status_code=404)
     return Response(status_code=201)
 
 
