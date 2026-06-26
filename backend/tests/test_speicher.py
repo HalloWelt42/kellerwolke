@@ -5,6 +5,8 @@ Versionen, stabile UUID bei Umbenennen/Verschieben, Soft-Delete und das
 Aenderungs-Journal als Sync-Vorbereitung.
 """
 
+import hashlib
+
 import pytest
 
 from app.adapters.filesystem_blobstore import FilesystemBlobStore
@@ -36,15 +38,26 @@ async def test_upload_und_download(dienst, benutzer_id):
 
 async def test_dedup_ueber_refcount(dienst, benutzer_id, pool):
     daten = b"identischer inhalt"
+    inhalt_hash = hashlib.sha256(daten).hexdigest()
     await dienst.datei_hochladen(benutzer_id, None, "a.txt", daten)
-    k2 = await dienst.datei_hochladen(benutzer_id, None, "b.txt", daten)
+    await dienst.datei_hochladen(benutzer_id, None, "b.txt", daten)
     async with pool.connection() as conn:
         repo = PostgresMetadataRepository(conn)
-        blob = await repo.blob_holen(benutzer_id, k2["etag"])
+        blob = await repo.blob_holen(benutzer_id, inhalt_hash)
     # Zwei Knoten, aber nur ein physischer Block mit Refcount 2.
     assert blob["refcount"] == 2
     kinder = await dienst.kinder(benutzer_id, None)
     assert len(kinder) == 2
+
+
+async def test_identischer_reupload_ist_noop(dienst, benutzer_id):
+    k1 = await dienst.datei_hochladen(benutzer_id, None, "id.txt", b"gleich")
+    k2 = await dienst.datei_hochladen(benutzer_id, None, "id.txt", b"gleich")
+    # Gleicher Knoten, gleicher ETag - keine neue Version, kein Journal-Eintrag.
+    assert k1["id"] == k2["id"]
+    assert k1["etag"] == k2["etag"]
+    assert len(await dienst.versionen(k1["id"])) == 1
+    assert len(await dienst.journal_seit(benutzer_id, 0)) == 1
 
 
 async def test_neue_version(dienst, benutzer_id):

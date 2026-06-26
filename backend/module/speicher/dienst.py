@@ -22,26 +22,42 @@ class SpeicherDienst:
                 return knoten
 
     async def datei_hochladen(self, besitzer_id, parent_id, name, daten):
-        # 1. Block zuerst auf die Platte (inhaltsadressiert, idempotent).
-        blob_hash = self.blobstore.put(str(besitzer_id), daten)
+        # 1. Block zuerst auf die Platte (inhaltsadressiert). neu sagt, ob dieser
+        #    Aufruf den Block erzeugt hat - wichtig fuer die Kompensation unten.
+        blob_hash, neu = self.blobstore.put(str(besitzer_id), daten)
         groesse = len(daten)
-        # 2. Metadaten atomar.
-        async with self.pool.connection() as conn:
-            async with conn.transaction():
-                repo = PostgresMetadataRepository(conn)
-                await repo.blob_erhoehen(besitzer_id, blob_hash, groesse)
-                vorhanden = await repo.knoten_finden(besitzer_id, parent_id, name)
-                if vorhanden and vorhanden["typ"] == "datei":
-                    knoten = vorhanden
-                    typ = "geaendert"
-                else:
-                    knoten = await repo.datei_anlegen(besitzer_id, parent_id, name)
-                    typ = "erstellt"
-                version = await repo.version_anlegen(knoten["id"], groesse, blob_hash, besitzer_id)
-                await repo.chunk_anlegen(version["id"], 0, blob_hash, groesse)
-                await repo.knoten_setzen_version(knoten["id"], version["id"], blob_hash)
-                await repo.journal_anhaengen(besitzer_id, knoten["id"], typ, version["id"])
-                return await repo.knoten_holen(knoten["id"])
+        try:
+            async with self.pool.connection() as conn:
+                async with conn.transaction():
+                    repo = PostgresMetadataRepository(conn)
+                    # Atomar anlegen/finden (kein Check-then-act-Race).
+                    knoten = await repo.datei_upsert(besitzer_id, parent_id, name)
+                    war_neu = knoten["eingefuegt"]
+                    # Idempotenz: identischer Inhalt wie aktuelle Version -> No-Op.
+                    if not war_neu and knoten["aktuelle_version_id"]:
+                        aktuell = await repo.version_holen(knoten["aktuelle_version_id"])
+                        if aktuell and aktuell["inhalt_hash"] == blob_hash:
+                            return await repo.knoten_holen(knoten["id"])
+                    await repo.blob_erhoehen(besitzer_id, blob_hash, groesse)
+                    version = await repo.version_anlegen(knoten["id"], groesse, blob_hash, besitzer_id)
+                    await repo.chunk_anlegen(version["id"], 0, blob_hash, groesse)
+                    # ETag pro Version (eindeutig), nicht der reine Inhalts-Hash:
+                    # bei Dedup haetten sonst verschiedene Knoten denselben ETag.
+                    await repo.knoten_setzen_version(knoten["id"], version["id"], str(version["id"]))
+                    await repo.journal_anhaengen(
+                        besitzer_id, knoten["id"], "erstellt" if war_neu else "geaendert", version["id"]
+                    )
+                    return await repo.knoten_holen(knoten["id"])
+        except Exception:
+            # Kompensation: nur einen in DIESEM Aufruf neu geschriebenen, jetzt
+            # unreferenzierten Block entfernen (die Transaktion wurde zurueckgerollt).
+            if neu:
+                async with self.pool.connection() as conn:
+                    repo = PostgresMetadataRepository(conn)
+                    rest = await repo.blob_holen(besitzer_id, blob_hash)
+                if not rest:
+                    self.blobstore.delete(str(besitzer_id), blob_hash)
+            raise
 
     async def datei_lesen(self, besitzer_id, knoten_id):
         async with self.pool.connection() as conn:

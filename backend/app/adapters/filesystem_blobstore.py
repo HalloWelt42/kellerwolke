@@ -18,11 +18,13 @@ class FilesystemBlobStore:
     def _pfad(self, benutzer_id: str, blob_hash: str) -> Path:
         return self.wurzel / benutzer_id / blob_hash[:2] / blob_hash
 
-    def put(self, benutzer_id: str, daten: bytes) -> str:
+    def put(self, benutzer_id: str, daten: bytes) -> tuple[str, bool]:
+        """Legt die Bytes ab und liefert (hash, neu_geschrieben). neu_geschrieben
+        ist False, wenn der Block schon vorhanden war (Dedup)."""
         blob_hash = hashlib.sha256(daten).hexdigest()
         ziel = self._pfad(benutzer_id, blob_hash)
         if ziel.exists():
-            return blob_hash
+            return blob_hash, False
         ziel.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=str(ziel.parent))
         try:
@@ -37,7 +39,7 @@ class FilesystemBlobStore:
             except FileNotFoundError:
                 pass
             raise
-        return blob_hash
+        return blob_hash, True
 
     def get(self, benutzer_id: str, blob_hash: str) -> bytes:
         return self._pfad(benutzer_id, blob_hash).read_bytes()

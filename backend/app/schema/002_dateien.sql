@@ -20,11 +20,13 @@ CREATE INDEX IF NOT EXISTS knoten_parent_idx
     ON knoten (besitzer_id, parent_id) WHERE NOT geloescht;
 
 -- Namens-Eindeutigkeit je Ordner, case-insensitiv (Sync-Sicherheit ueber Plattformen).
+-- NULLS NOT DISTINCT, damit auch die Wurzel (parent_id IS NULL) eindeutig ist.
 CREATE UNIQUE INDEX IF NOT EXISTS knoten_name_idx
-    ON knoten (besitzer_id, parent_id, lower(name)) WHERE NOT geloescht;
+    ON knoten (besitzer_id, parent_id, lower(name)) NULLS NOT DISTINCT WHERE NOT geloescht;
 
 CREATE TABLE IF NOT EXISTS version (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    seq         bigserial NOT NULL,            -- monotone Ordnung (eindeutiger Tie-Break)
     knoten_id   uuid NOT NULL REFERENCES knoten(id) ON DELETE CASCADE,
     groesse     bigint NOT NULL,
     inhalt_hash text NOT NULL,
@@ -32,7 +34,7 @@ CREATE TABLE IF NOT EXISTS version (
     erstellt_von uuid REFERENCES benutzer(id)
 );
 
-CREATE INDEX IF NOT EXISTS version_knoten_idx ON version (knoten_id);
+CREATE INDEX IF NOT EXISTS version_knoten_idx ON version (knoten_id, seq DESC);
 
 -- Inhaltsadressierte Bloecke, Dedup pro Nutzer isoliert.
 CREATE TABLE IF NOT EXISTS blob (

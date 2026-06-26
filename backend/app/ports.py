@@ -13,9 +13,9 @@ from typing import Protocol, runtime_checkable
 class BlobStore(Protocol):
     """Inhaltsadressierte Ablage roher Bloecke, Pool pro Nutzer isoliert."""
 
-    def put(self, benutzer_id: str, daten: bytes) -> str:
-        """Legt die Bytes ab und liefert ihren Hash. Existiert der Block schon,
-        wird nichts geschrieben (Dedup)."""
+    def put(self, benutzer_id: str, daten: bytes) -> tuple[str, bool]:
+        """Legt die Bytes ab und liefert (hash, neu_geschrieben). Existiert der
+        Block schon, wird nichts geschrieben (Dedup) und neu_geschrieben=False."""
         ...
 
     def get(self, benutzer_id: str, blob_hash: str) -> bytes:

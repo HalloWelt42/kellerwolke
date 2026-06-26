@@ -44,6 +44,19 @@ class PostgresMetadataRepository:
             (besitzer_id, parent_id, name),
         )
 
+    async def datei_upsert(self, besitzer_id, parent_id, name):
+        """Legt den Datei-Knoten an oder findet den vorhandenen - atomar, ohne
+        Check-then-act-Race. Liefert die Zeile inkl. Feld 'eingefuegt' (True,
+        wenn neu angelegt)."""
+        return await self._eine(
+            "INSERT INTO knoten (besitzer_id, parent_id, name, typ) "
+            "VALUES (%s,%s,%s,'datei') "
+            "ON CONFLICT (besitzer_id, parent_id, lower(name)) WHERE NOT geloescht "
+            "DO UPDATE SET geaendert_am = now() "
+            "RETURNING *, (xmax = 0) AS eingefuegt",
+            (besitzer_id, parent_id, name),
+        )
+
     async def knoten_holen(self, knoten_id):
         return await self._eine("SELECT * FROM knoten WHERE id=%s", (knoten_id,))
 
@@ -106,9 +119,13 @@ class PostgresMetadataRepository:
             (knoten_id, groesse, inhalt_hash, erstellt_von),
         )
 
+    async def version_holen(self, version_id):
+        return await self._eine("SELECT * FROM version WHERE id=%s", (version_id,))
+
     async def versionen(self, knoten_id):
+        # seq ist monoton und eindeutig -> stabile Ordnung auch bei gleichem Zeitstempel.
         return await self._alle(
-            "SELECT * FROM version WHERE knoten_id=%s ORDER BY erstellt_am DESC, id DESC",
+            "SELECT * FROM version WHERE knoten_id=%s ORDER BY seq DESC",
             (knoten_id,),
         )
 

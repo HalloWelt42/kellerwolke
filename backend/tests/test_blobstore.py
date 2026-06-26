@@ -10,17 +10,18 @@ def _dateien(pfad):
 
 def test_dedup_innerhalb_eines_nutzers(tmp_path):
     store = FilesystemBlobStore(tmp_path)
-    h1 = store.put("nutzer1", b"hallo welt")
-    h2 = store.put("nutzer1", b"hallo welt")
+    h1, neu1 = store.put("nutzer1", b"hallo welt")
+    h2, neu2 = store.put("nutzer1", b"hallo welt")
     assert h1 == h2
+    assert neu1 is True and neu2 is False  # zweites Mal Dedup, kein Schreiben
     # Gleicher Inhalt, egal wie oft: nur ein physischer Block im Pool.
     assert len(_dateien(tmp_path / "nutzer1")) == 1
 
 
 def test_isolation_zwischen_nutzern(tmp_path):
     store = FilesystemBlobStore(tmp_path)
-    h1 = store.put("nutzer1", b"geheim")
-    h2 = store.put("nutzer2", b"geheim")
+    h1, _ = store.put("nutzer1", b"geheim")
+    h2, _ = store.put("nutzer2", b"geheim")
     assert h1 == h2  # gleicher Hash bei gleichem Inhalt
     assert store.exists("nutzer1", h1)
     assert store.exists("nutzer2", h2)
@@ -36,7 +37,8 @@ def test_isolation_zwischen_nutzern(tmp_path):
 def test_roundtrip_beliebige_bytes(tmp_path):
     store = FilesystemBlobStore(tmp_path)
     daten = b"beliebige bytes \x00\x01\x02 mit Umlaut \xc3\xa4"
-    blob_hash = store.put("u", daten)
+    blob_hash, neu = store.put("u", daten)
+    assert neu is True
     assert store.get("u", blob_hash) == daten
 
 
