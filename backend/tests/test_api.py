@@ -195,3 +195,17 @@ async def test_letzter_admin_geschuetzt(umgebung):
         f"/api/v1/admin/benutzer/{chef['id']}", json={"aktiv": False}, headers=h
     )
     assert r.status_code == 409
+
+
+async def test_sync_journal(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    await _upload(client, h, "eins.txt", b"a")
+    await _upload(client, h, "zwei.txt", b"b")
+    alle = (await client.get("/api/v1/sync/journal", headers=h)).json()
+    assert len(alle) == 2
+    assert [e["typ"] for e in alle] == ["erstellt", "erstellt"]
+    seqs = [e["seq"] for e in alle]
+    spaeter = (await client.get(f"/api/v1/sync/journal?seit={seqs[0]}", headers=h)).json()
+    assert len(spaeter) == 1
+    assert spaeter[0]["seq"] == seqs[1]
