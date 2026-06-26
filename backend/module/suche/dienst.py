@@ -43,7 +43,9 @@ class SuchDienst:
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
-                    "SELECT k.* FROM such_index s JOIN knoten k ON k.id = s.knoten_id "
+                    "SELECT k.*, v.groesse FROM such_index s "
+                    "JOIN knoten k ON k.id = s.knoten_id "
+                    "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
                     # Doppelter Eigentuemer-Filter (s und k) als Defense-in-depth.
                     "WHERE s.besitzer_id = %s AND k.besitzer_id = %s AND NOT k.geloescht "
                     "AND (s.name_tsv @@ websearch_to_tsquery('german', %s) "

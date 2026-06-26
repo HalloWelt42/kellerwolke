@@ -1,83 +1,154 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { auth, ladeStatus, abmelden } from "./lib/auth.svelte";
+  import { thema, themaUmschalten } from "./lib/thema.svelte";
+  import { zustand, starteSuche, zeigeDateien, ordnerAnlegen } from "./lib/zustand.svelte";
+  import { auswahl } from "./lib/auswahl.svelte";
   import Login from "./lib/Login.svelte";
-  import Dateibrowser from "./lib/Dateibrowser.svelte";
+  import Navigation from "./lib/Navigation.svelte";
+  import Werkzeugleiste from "./lib/Werkzeugleiste.svelte";
+  import Breadcrumb from "./lib/Breadcrumb.svelte";
+  import Dateiliste from "./lib/Dateiliste.svelte";
+  import DetailPane from "./lib/DetailPane.svelte";
   import Admin from "./lib/Admin.svelte";
+  import Modal from "./lib/Modal.svelte";
 
   let adminOffen = $state(false);
+  let neuerOrdnerOffen = $state(false);
+  let ordnerName = $state("");
+  let initialGeladen = $state(false);
 
   onMount(ladeStatus);
+
+  $effect(() => {
+    if (auth.angemeldet && !initialGeladen) {
+      initialGeladen = true;
+      zeigeDateien();
+    }
+    if (!auth.angemeldet) initialGeladen = false;
+  });
+
+  const mitDetail = $derived(zustand.detail !== null && auswahl.anzahl <= 1);
+  const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
+
+  function suchen(e: Event) {
+    e.preventDefault();
+    starteSuche();
+  }
+
+  function ordnerAnlegenBestaetigen() {
+    const name = ordnerName.trim();
+    if (!name) return;
+    ordnerAnlegen(name);
+    ordnerName = "";
+    neuerOrdnerOffen = false;
+  }
+
+  function fokus(el: HTMLInputElement) {
+    el.focus();
+  }
 </script>
 
 {#if !auth.geladen}
-  <div class="laden"><i class="fa-solid fa-spinner fa-spin"></i></div>
+  <div class="start-laden"><i class="fa-solid fa-cloud fa-beat-fade"></i></div>
 {:else if !auth.angemeldet}
   <Login />
 {:else}
-  <div class="rahmen">
-    <header>
+  <div class="app" class:mit-detail={mitDetail}>
+    <header class="kopf">
       <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
-      <div class="rechts">
-        <span class="nutzer"><i class="fa-solid fa-user"></i> {auth.benutzer?.name}</span>
+      <form class="kopf-suche" onsubmit={suchen}>
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input
+          type="text"
+          placeholder="In allen Dateien suchen ..."
+          bind:value={zustand.suchbegriff}
+        />
+        {#if zustand.bereich === "suche"}
+          <button
+            type="button"
+            class="icon-knopf"
+            title="Suche schließen"
+            aria-label="Suche schließen"
+            onclick={() => {
+              zustand.suchbegriff = "";
+              zeigeDateien();
+            }}
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        {/if}
+      </form>
+      <div class="kopf-rechts">
+        <button
+          class="icon-knopf"
+          title={thema.aktuell === "hell" ? "Dunkles Thema" : "Helles Thema"}
+          aria-label="Thema umschalten"
+          onclick={themaUmschalten}
+        >
+          <i class="fa-solid {thema.aktuell === 'hell' ? 'fa-moon' : 'fa-sun'}"></i>
+        </button>
         {#if auth.benutzer?.rolle === "admin"}
-          <button class="still" onclick={() => (adminOffen = true)} title="Verwaltung">
+          <button class="icon-knopf" title="Verwaltung" aria-label="Verwaltung" onclick={() => (adminOffen = true)}>
             <i class="fa-solid fa-gear"></i>
           </button>
         {/if}
-        <button class="still" onclick={abmelden} title="Abmelden">
+        <div class="nutzer-chip"><span class="avatar">{avatarText}</span> {auth.benutzer?.name}</div>
+        <button class="icon-knopf" title="Abmelden" aria-label="Abmelden" onclick={abmelden}>
           <i class="fa-solid fa-right-from-bracket"></i>
         </button>
       </div>
     </header>
-    <main><Dateibrowser /></main>
+
+    <Navigation />
+
+    <section class="inhalt">
+      <Werkzeugleiste onNeuerOrdner={() => (neuerOrdnerOffen = true)} />
+      <Breadcrumb />
+      {#if zustand.fehler}
+        <div class="fehlerstreifen">{zustand.fehler}</div>
+      {/if}
+      <Dateiliste />
+    </section>
+
+    {#if mitDetail && zustand.detail}
+      <DetailPane k={zustand.detail} />
+    {/if}
   </div>
-  {#if adminOffen}<Admin schliessen={() => (adminOffen = false)} />{/if}
+
+  {#if neuerOrdnerOffen}
+    <Modal titel="Neuer Ordner" schliessen={() => (neuerOrdnerOffen = false)}>
+      <input
+        class="feld"
+        type="text"
+        placeholder="Ordnername"
+        bind:value={ordnerName}
+        use:fokus
+        onkeydown={(e) => e.key === "Enter" && ordnerAnlegenBestaetigen()}
+      />
+      <div class="modal-knoepfe">
+        <button class="knopf still" onclick={() => (neuerOrdnerOffen = false)}>Abbrechen</button>
+        <button class="knopf primaer" onclick={ordnerAnlegenBestaetigen}>Anlegen</button>
+      </div>
+    </Modal>
+  {/if}
+
+  {#if adminOffen}
+    <Admin schliessen={() => (adminOffen = false)} />
+  {/if}
 {/if}
 
 <style>
-  .laden {
+  .start-laden {
     height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.6rem;
-    color: var(--gedaempft);
-  }
-  .rahmen {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.7rem 1.1rem;
-    border-bottom: 1px solid var(--rand);
-    background: var(--panel);
-  }
-  .marke {
-    font-weight: 600;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .marke i {
+    display: grid;
+    place-items: center;
+    font-size: 2.4rem;
     color: var(--akzent);
   }
-  .rechts {
+  .modal-knoepfe {
     display: flex;
-    align-items: center;
-    gap: 0.7rem;
-  }
-  .nutzer {
-    color: var(--gedaempft);
-    font-size: 0.9rem;
-  }
-  main {
-    flex: 1;
-    overflow: auto;
+    justify-content: flex-end;
+    gap: var(--a2);
   }
 </style>

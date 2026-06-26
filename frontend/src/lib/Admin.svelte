@@ -84,51 +84,62 @@
   {#if fehler}<div class="fehler">{fehler}</div>{/if}
 
   <section>
-    <h3><i class="fa-solid fa-users"></i> Konten</h3>
+    <h3>Konten</h3>
     {#if laden}
-      <p class="gedaempft">Lädt ...</p>
+      <p class="leiser">Lädt ...</p>
     {:else}
       <ul class="konten">
         {#each benutzer as b (b.id)}
           <li>
+            <span class="avatar">{b.name.slice(0, 1).toUpperCase()}</span>
             <span class="kname">{b.name}</span>
-            <select value={b.rolle} onchange={(e) => rolleSetzen(b, (e.target as HTMLSelectElement).value)}>
+            <select
+              class="feld schmal"
+              value={b.rolle}
+              onchange={(e) => rolleSetzen(b, (e.target as HTMLSelectElement).value)}
+            >
               <option value="mitglied">Mitglied</option>
               <option value="admin">Admin</option>
             </select>
-            <button class="still status" class:gesperrt={!b.aktiv} onclick={() => aktivUmschalten(b)}>
+            <button
+              class="status"
+              class:gesperrt={!b.aktiv}
+              onclick={() => aktivUmschalten(b)}
+            >
               {b.aktiv ? "aktiv" : "gesperrt"}
             </button>
           </li>
         {/each}
       </ul>
     {/if}
-    <form class="zeile" onsubmit={kontoAnlegen}>
-      <input type="text" placeholder="Name" bind:value={neuName} />
-      <input type="password" placeholder="Passwort" bind:value={neuPasswort} />
-      <select bind:value={neuRolle}>
+    <form class="reihe" onsubmit={kontoAnlegen}>
+      <input class="feld" type="text" placeholder="Name" bind:value={neuName} />
+      <input class="feld" type="password" placeholder="Passwort" bind:value={neuPasswort} />
+      <select class="feld schmal" bind:value={neuRolle}>
         <option value="mitglied">Mitglied</option>
         <option value="admin">Admin</option>
       </select>
-      <button class="primaer" type="submit" disabled={!neuName.trim() || !neuPasswort}>Anlegen</button>
+      <button class="knopf primaer" type="submit" disabled={!neuName.trim() || !neuPasswort}>
+        <i class="fa-solid fa-user-plus"></i> Anlegen
+      </button>
     </form>
   </section>
 
   <section>
-    <h3><i class="fa-solid fa-folder-tree"></i> Externe Quelle einhängen</h3>
-    <p class="gedaempft">
-      Hängt einen bestehenden Verzeichnisbaum read-only in das Konto eines Nutzers ein. Der Pfad
-      muss für den Server erreichbar sein (im Betrieb z.B. /extern).
+    <h3>Externe Quelle einhängen</h3>
+    <p class="leiser">
+      Bindet einen bestehenden Ordner vom Server schreibgeschützt ein, etwa ein angeschlossenes
+      Laufwerk. Die Dateien bleiben am Ursprungsort (im Betrieb z.B. /extern).
     </p>
     <form class="spalte" onsubmit={quelleEinhaengen}>
-      <select bind:value={qBesitzer}>
+      <select class="feld" bind:value={qBesitzer}>
         <option value="" disabled>Konto wählen ...</option>
         {#each benutzer as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
       </select>
-      <input type="text" placeholder="Anzeigename (z.B. Archiv)" bind:value={qName} />
-      <input type="text" placeholder="Pfad auf dem Server (z.B. /extern/Fotos)" bind:value={qPfad} />
-      <button class="primaer" type="submit" disabled={!qBesitzer || !qName.trim() || !qPfad.trim()}>
-        Einhängen
+      <input class="feld" type="text" placeholder="Anzeigename (z.B. Archiv)" bind:value={qName} />
+      <input class="feld" type="text" placeholder="Pfad auf dem Server (z.B. /extern/Fotos)" bind:value={qPfad} />
+      <button class="knopf primaer" type="submit" disabled={!qBesitzer || !qName.trim() || !qPfad.trim()}>
+        <i class="fa-solid fa-folder-tree"></i> Einhängen
       </button>
     </form>
     {#if qMeldung}<div class="meldung">{qMeldung}</div>{/if}
@@ -138,81 +149,75 @@
 <style>
   section {
     border-top: 1px solid var(--rand);
-    padding-top: 1rem;
+    padding-top: var(--a4);
   }
   section:first-of-type {
     border-top: none;
     padding-top: 0;
   }
   h3 {
-    margin: 0 0 0.6rem;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    margin: 0 0 var(--a3);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-3);
   }
-  h3 i {
-    color: var(--akzent);
-  }
-  .gedaempft {
-    color: var(--gedaempft);
+  .leiser {
+    color: var(--text-2);
     font-size: 0.85rem;
-    margin: 0 0 0.7rem;
+    margin: 0 0 var(--a3);
   }
   .konten {
     list-style: none;
-    margin: 0 0 0.8rem;
+    margin: 0 0 var(--a3);
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: var(--a2);
   }
   .konten li {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: var(--a3);
   }
   .kname {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .status {
+    border: 1px solid var(--gut);
+    background: var(--gut-weich);
     color: var(--gut);
-    min-width: 5rem;
+    border-radius: var(--r2);
+    padding: 0 var(--a3);
+    height: 38px;
+    min-width: 6rem;
+    cursor: pointer;
+    font: inherit;
   }
   .status.gesperrt {
+    border-color: var(--gefahr);
+    background: var(--gefahr-weich);
     color: var(--gefahr);
   }
-  select {
-    font-family: inherit;
-    font-size: 14px;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--rand);
-    border-radius: 8px;
-    padding: 0.45rem 0.55rem;
-  }
-  .zeile {
+  .reihe {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--a2);
     flex-wrap: wrap;
   }
-  .zeile input {
+  .reihe input {
     flex: 1;
+    min-width: 8rem;
+  }
+  .schmal {
+    width: auto;
     min-width: 8rem;
   }
   .spalte {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
-  }
-  .fehler {
-    color: var(--gefahr);
-    font-size: 0.85rem;
-  }
-  .meldung {
-    color: var(--gut);
-    font-size: 0.85rem;
+    gap: var(--a3);
   }
 </style>

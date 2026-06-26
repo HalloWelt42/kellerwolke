@@ -28,6 +28,8 @@ class KnotenAus(BaseModel):
     geloescht: bool
     erstellt_am: datetime
     geaendert_am: datetime
+    # Groesse der aktuellen Version (Dateien); bei Ordnern/Externen None.
+    groesse: int | None = None
 
 
 class VersionAus(BaseModel):

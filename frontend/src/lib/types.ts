@@ -18,6 +18,8 @@ export interface Knoten {
   geloescht: boolean;
   erstellt_am: string;
   geaendert_am: string;
+  // Groesse der aktuellen Version in Bytes; bei Ordnern/Externen null.
+  groesse?: number | null;
 }
 
 export interface Version {

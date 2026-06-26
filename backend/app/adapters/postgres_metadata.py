@@ -81,15 +81,21 @@ class PostgresMetadataRepository:
         )
 
     async def kinder(self, besitzer_id, parent_id):
+        # Groesse der aktuellen Version gleich mitliefern (LEFT JOIN, hoechstens
+        # ein Treffer je Knoten), damit die Liste sie ohne Zusatzabfrage zeigt.
         if parent_id is None:
             return await self._alle(
-                "SELECT * FROM knoten WHERE besitzer_id=%s AND parent_id IS NULL "
-                "AND NOT geloescht ORDER BY typ, lower(name)",
+                "SELECT k.*, v.groesse FROM knoten k "
+                "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+                "WHERE k.besitzer_id=%s AND k.parent_id IS NULL "
+                "AND NOT k.geloescht ORDER BY k.typ, lower(k.name)",
                 (besitzer_id,),
             )
         return await self._alle(
-            "SELECT * FROM knoten WHERE besitzer_id=%s AND parent_id=%s "
-            "AND NOT geloescht ORDER BY typ, lower(name)",
+            "SELECT k.*, v.groesse FROM knoten k "
+            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "WHERE k.besitzer_id=%s AND k.parent_id=%s "
+            "AND NOT k.geloescht ORDER BY k.typ, lower(k.name)",
             (besitzer_id, parent_id),
         )
 
@@ -126,8 +132,10 @@ class PostgresMetadataRepository:
 
     async def papierkorb(self, besitzer_id):
         return await self._alle(
-            "SELECT * FROM knoten WHERE besitzer_id=%s AND geloescht "
-            "ORDER BY geaendert_am DESC",
+            "SELECT k.*, v.groesse FROM knoten k "
+            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "WHERE k.besitzer_id=%s AND k.geloescht "
+            "ORDER BY k.geaendert_am DESC",
             (besitzer_id,),
         )
 

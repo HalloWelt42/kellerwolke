@@ -19,57 +19,16 @@
 
 <svelte:window onkeydown={aufTaste} />
 
-<div class="hintergrund" onclick={aufHintergrund} role="presentation">
+<div class="modal-hg" onclick={aufHintergrund} role="presentation">
   <div class="modal" class:breit role="dialog" aria-modal="true">
-    <div class="kopf">
+    <div class="modal-kopf">
       <h2>{titel}</h2>
-      <button class="still" onclick={schliessen} aria-label="Schliessen">
+      <button class="icon-knopf" onclick={schliessen} aria-label="Schliessen">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
-    <div class="inhalt">
+    <div class="modal-inhalt">
       {@render children()}
     </div>
   </div>
 </div>
-
-<style>
-  .hintergrund {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-  }
-  .modal {
-    background: var(--panel);
-    border: 1px solid var(--rand);
-    border-radius: var(--radius);
-    box-shadow: var(--schatten);
-    width: min(440px, 92vw);
-    overflow: hidden;
-  }
-  .modal.breit {
-    width: min(740px, 94vw);
-  }
-  .kopf {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.9rem 1.1rem;
-    border-bottom: 1px solid var(--rand);
-  }
-  .kopf h2 {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 600;
-  }
-  .inhalt {
-    padding: 1.1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.9rem;
-  }
-</style>
