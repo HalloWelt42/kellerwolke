@@ -54,7 +54,9 @@
   <body>
     <div class="vleiste">
       <div class="marke"><i class="fa-solid fa-vector-square"></i> Mockup-Viewer</div>
+      <button class="icon-knopf" id="zurueck" title="Zurück (Pfeil links)"><i class="fa-solid fa-chevron-left"></i></button>
       <select class="feld" id="wahl"></select>
+      <button class="icon-knopf" id="weiter" title="Weiter (Pfeil rechts)"><i class="fa-solid fa-chevron-right"></i></button>
       <label><input type="checkbox" id="zeigen" checked /> Nummern + Namen</label>
       <span class="hinweis" id="zaehler"></span>
       <span class="luecke"></span>
@@ -163,6 +165,20 @@
         wahl.appendChild(o);
       }
       wahl.onchange = () => (rahmen.src = wahl.value);
+
+      function gehe(delta) {
+        const n = wahl.options.length;
+        wahl.selectedIndex = (wahl.selectedIndex + delta + n) % n;
+        rahmen.src = wahl.value;
+      }
+      document.getElementById("zurueck").onclick = () => gehe(-1);
+      document.getElementById("weiter").onclick = () => gehe(1);
+      window.addEventListener("keydown", (e) => {
+        const t = e.target.tagName;
+        if (t === "INPUT" || t === "SELECT" || t === "TEXTAREA") return;
+        if (e.key === "ArrowLeft") gehe(-1);
+        else if (e.key === "ArrowRight") gehe(1);
+      });
 
       function thema() {
         return document.documentElement.dataset.theme;
