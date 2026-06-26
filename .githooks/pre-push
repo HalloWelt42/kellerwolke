@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Harte Barriere vor jedem Push: Identitaet, Versionssprung, Gesamtinhalt.
+set -euo pipefail
+WURZEL="$(git rev-parse --show-toplevel)"
+bash "$WURZEL/tools/checks/pruefe_identitaet.sh" --config
+bash "$WURZEL/tools/checks/pruefe_version.sh"
+python3 "$WURZEL/tools/checks/pruefe_inhalt.py" --alle

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Harte Barriere vor jedem Commit: Identitaet + Inhalt der vorgemerkten Dateien.
+set -euo pipefail
+WURZEL="$(git rev-parse --show-toplevel)"
+bash "$WURZEL/tools/checks/pruefe_identitaet.sh" --config
+python3 "$WURZEL/tools/checks/pruefe_inhalt.py" --staged

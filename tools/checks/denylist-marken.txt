@@ -1,0 +1,13 @@
+# Fremde Marken und Konkurrenzprodukte - duerfen im Repo nirgends auftauchen.
+# Ganzwort-Treffer, Gross-/Kleinschreibung egal. Eine Marke pro Zeile.
+nextcloud
+owncloud
+dropbox
+google drive
+googledrive
+onedrive
+seafile
+pydio
+icloud
+mega.nz
+box.com

@@ -1,0 +1,13 @@
+# Verbotene KI-/Werkzeug-Erwaehnungen. Eintraege sind Regex-Fragmente,
+# Gross-/Kleinschreibung egal, mit | verbunden.
+claude
+anthropic
+openai
+chatgpt
+gpt-[0-9]
+copilot
+co-authored-by
+generated with
+ai-generated
+language model
+🤖

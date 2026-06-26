@@ -1,0 +1,22 @@
+name: Barrieren
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inhaltspruefung ueber alle Dateien
+        run: python3 tools/checks/pruefe_inhalt.py --alle
+      - name: Git-Identitaet des letzten Commits
+        run: bash tools/checks/pruefe_identitaet.sh --head
+      - name: VERSION ist gueltiges Semver
+        run: grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' VERSION || (echo "VERSION kein Semver" && exit 1)

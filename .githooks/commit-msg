@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Prueft die Commit-Nachricht auf verbotene Erwaehnungen, Marken, Typografie, Umlaute.
+set -euo pipefail
+WURZEL="$(git rev-parse --show-toplevel)"
+python3 "$WURZEL/tools/checks/pruefe_commit_msg.py" "$1"
