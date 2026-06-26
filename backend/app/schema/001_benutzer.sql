@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS benutzer (
     name          text NOT NULL,
     kuerzel       text,
     passwort_hash text,
-    rolle         text NOT NULL DEFAULT 'mitglied',   -- 'admin' | 'mitglied'
+    rolle         text NOT NULL DEFAULT 'mitglied' CHECK (rolle IN ('admin', 'mitglied')),
     aktiv         boolean NOT NULL DEFAULT true,
     quota_bytes   bigint,                              -- NULL = unbegrenzt (vorgesehen, nicht erzwungen)
     erstellt_am   timestamptz NOT NULL DEFAULT now()

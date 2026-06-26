@@ -6,8 +6,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from psycopg.errors import UniqueViolation
 
 from app.abhaengig import aktueller_benutzer, hole_speicher, hole_suche
+from app.config import EINSTELLUNGEN
 from module.speicher.modelle import (
     KnotenAus,
     OrdnerEingabe,
@@ -37,7 +39,10 @@ async def ordner_anlegen(eingabe: OrdnerEingabe, benutzer=Depends(aktueller_benu
                          speicher=Depends(hole_speicher)):
     if eingabe.parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], eingabe.parent_id):
         raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
-    knoten = await speicher.ordner_anlegen(benutzer["id"], eingabe.parent_id, eingabe.name)
+    try:
+        knoten = await speicher.ordner_anlegen(benutzer["id"], eingabe.parent_id, eingabe.name)
+    except UniqueViolation:
+        raise HTTPException(status_code=409, detail="Name bereits vergeben")
     return KnotenAus.model_validate(knoten)
 
 
@@ -47,7 +52,17 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
                     suche=Depends(hole_suche)):
     if parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], parent_id):
         raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
-    daten = await datei.read()
+    # In Stuecken lesen und harte Obergrenze durchsetzen (Speicher-Schutz).
+    stuecke, gesamt = [], 0
+    while True:
+        stueck = await datei.read(1024 * 1024)
+        if not stueck:
+            break
+        gesamt += len(stueck)
+        if gesamt > EINSTELLUNGEN.max_upload:
+            raise HTTPException(status_code=413, detail="Datei zu gross")
+        stuecke.append(stueck)
+    daten = b"".join(stuecke)
     name = datei.filename or "datei"
     knoten = await speicher.datei_hochladen(benutzer["id"], parent_id, name, daten)
     await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
@@ -85,7 +100,11 @@ async def umbenennen(knoten_id: UUID, eingabe: UmbenennenEingabe,
                      benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
-    return KnotenAus.model_validate(await speicher.umbenennen(benutzer["id"], knoten_id, eingabe.name))
+    try:
+        knoten = await speicher.umbenennen(benutzer["id"], knoten_id, eingabe.name)
+    except UniqueViolation:
+        raise HTTPException(status_code=409, detail="Name bereits vergeben")
+    return KnotenAus.model_validate(knoten)
 
 
 @router.patch("/{knoten_id}/ort", response_model=KnotenAus)
@@ -93,11 +112,13 @@ async def verschieben(knoten_id: UUID, eingabe: VerschiebenEingabe,
                       benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
-    if eingabe.parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], eingabe.parent_id):
-        raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
-    return KnotenAus.model_validate(
-        await speicher.verschieben(benutzer["id"], knoten_id, eingabe.parent_id)
-    )
+    try:
+        knoten = await speicher.verschieben(benutzer["id"], knoten_id, eingabe.parent_id)
+    except ValueError as f:
+        raise HTTPException(status_code=409, detail=str(f))
+    except UniqueViolation:
+        raise HTTPException(status_code=409, detail="Name im Zielordner bereits vergeben")
+    return KnotenAus.model_validate(knoten)
 
 
 @router.delete("/{knoten_id}", status_code=204)

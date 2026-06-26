@@ -47,24 +47,38 @@ class AuthDienst:
                 return await cur.fetchall()
 
     async def benutzer_aktualisieren(self, benutzer_id, aktiv=None, quota_bytes=None, rolle=None):
-        felder, werte = [], []
-        if aktiv is not None:
-            felder.append("aktiv=%s")
-            werte.append(aktiv)
-        if quota_bytes is not None:
-            felder.append("quota_bytes=%s")
-            werte.append(quota_bytes)
-        if rolle is not None:
-            felder.append("rolle=%s")
-            werte.append(rolle)
-        if not felder:
-            return
-        werte.append(benutzer_id)
         async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT * FROM benutzer WHERE id=%s", (benutzer_id,))
+                ziel = await cur.fetchone()
+            if not ziel:
+                return
+            # Den letzten aktiven Admin nicht deaktivieren oder degradieren.
+            entzieht_admin = ziel["rolle"] == "admin" and (
+                aktiv is False or (rolle is not None and rolle != "admin")
+            )
+            if entzieht_admin:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT count(*) FROM benutzer WHERE rolle='admin' AND aktiv")
+                    (anzahl,) = await cur.fetchone()
+                if anzahl <= 1:
+                    raise ValueError("Der letzte aktive Admin kann nicht entzogen werden")
+
+            felder, werte = [], []
+            if aktiv is not None:
+                felder.append("aktiv=%s")
+                werte.append(aktiv)
+            if quota_bytes is not None:
+                felder.append("quota_bytes=%s")
+                werte.append(quota_bytes)
+            if rolle is not None:
+                felder.append("rolle=%s")
+                werte.append(rolle)
+            if not felder:
+                return
+            werte.append(benutzer_id)
             async with conn.transaction():
-                await conn.execute(
-                    f"UPDATE benutzer SET {', '.join(felder)} WHERE id=%s", werte
-                )
+                await conn.execute(f"UPDATE benutzer SET {', '.join(felder)} WHERE id=%s", werte)
 
     async def anmelden(self, kennung, klartext) -> str | None:
         async with self.pool.connection() as conn:

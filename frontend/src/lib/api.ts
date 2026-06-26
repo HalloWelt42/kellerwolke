@@ -1,5 +1,8 @@
 import type { AuthStatus, Benutzer, Knoten, Version } from "./types";
 
+// Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl fuer
+// eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
+// Das Frontend nutzt nirgends @html, die XSS-Flaeche ist entsprechend klein.
 const SCHLUESSEL = "kw_sitzung";
 
 export class ApiFehler extends Error {

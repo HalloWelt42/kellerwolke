@@ -3,7 +3,18 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+def _sauberer_name(wert: str) -> str:
+    wert = wert.strip()
+    if not wert:
+        raise ValueError("Name darf nicht leer sein")
+    if len(wert) > 255:
+        raise ValueError("Name ist zu lang")
+    if any(c in wert for c in "/\\\x00") or any(ord(c) < 32 for c in wert):
+        raise ValueError("Name enthaelt ungueltige Zeichen")
+    return wert
 
 
 class KnotenAus(BaseModel):
@@ -31,9 +42,19 @@ class OrdnerEingabe(BaseModel):
     name: str
     parent_id: UUID | None = None
 
+    @field_validator("name")
+    @classmethod
+    def _name(cls, wert: str) -> str:
+        return _sauberer_name(wert)
+
 
 class UmbenennenEingabe(BaseModel):
     name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, wert: str) -> str:
+        return _sauberer_name(wert)
 
 
 class VerschiebenEingabe(BaseModel):

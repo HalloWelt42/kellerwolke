@@ -19,33 +19,33 @@
   });
 
   const aktuellerOrdner = $derived(pfad[pfad.length - 1].id);
+  // Laufende Anforderungs-Nummer: nur das jeweils neueste Laden schreibt das
+  // Ergebnis (verhindert Ueberschreiben durch eine aeltere, langsamere Antwort).
+  let lauf = 0;
 
   onMount(ladeOrdner);
 
-  async function ladeOrdner() {
+  async function laden_in(quelle: () => Promise<Knoten[]>, neue: Ansicht) {
+    const meins = ++lauf;
     laden = true;
     fehler = "";
-    ansicht = "ordner";
+    ansicht = neue;
     try {
-      eintraege = await api.kinder(aktuellerOrdner);
+      const ergebnis = await quelle();
+      if (meins === lauf) eintraege = ergebnis;
     } catch (f) {
-      fehler = (f as Error).message;
+      if (meins === lauf) fehler = (f as Error).message;
     } finally {
-      laden = false;
+      if (meins === lauf) laden = false;
     }
   }
 
-  async function ladePapierkorb() {
-    laden = true;
-    fehler = "";
-    ansicht = "papierkorb";
-    try {
-      eintraege = await api.papierkorb();
-    } catch (f) {
-      fehler = (f as Error).message;
-    } finally {
-      laden = false;
-    }
+  function ladeOrdner() {
+    return laden_in(() => api.kinder(aktuellerOrdner), "ordner");
+  }
+
+  function ladePapierkorb() {
+    return laden_in(() => api.papierkorb(), "papierkorb");
   }
 
   async function starteSuche(e: Event) {
@@ -54,16 +54,12 @@
       await ladeOrdner();
       return;
     }
-    laden = true;
-    fehler = "";
-    ansicht = "suche";
-    try {
-      eintraege = await api.suchen(suchbegriff.trim());
-    } catch (f) {
-      fehler = (f as Error).message;
-    } finally {
-      laden = false;
-    }
+    await laden_in(() => api.suchen(suchbegriff.trim()), "suche");
+  }
+
+  function autofokus(el: HTMLInputElement) {
+    el.focus();
+    el.select();
   }
 
   function oeffnen(k: Knoten) {
@@ -71,7 +67,15 @@
       pfad = [...pfad, { id: k.id, name: k.name }];
       ladeOrdner();
     } else {
-      api.herunterladen(k);
+      runterladen(k);
+    }
+  }
+
+  async function runterladen(k: Knoten) {
+    try {
+      await api.herunterladen(k);
+    } catch (f) {
+      fehler = (f as Error).message;
     }
   }
 
@@ -105,26 +109,35 @@
   }
 
   async function entfernen(k: Knoten) {
-    await api.loeschen(k.id);
-    await ladeOrdner();
+    try {
+      await api.loeschen(k.id);
+      await ladeOrdner();
+    } catch (f) {
+      fehler = (f as Error).message;
+    }
   }
 
   async function wiederherstellen(k: Knoten) {
-    await api.wiederherstellen(k.id);
-    await ladePapierkorb();
+    try {
+      await api.wiederherstellen(k.id);
+      await ladePapierkorb();
+    } catch (f) {
+      fehler = (f as Error).message;
+    }
   }
 
   async function dateienHochladen(dateien: FileList | null) {
     if (!dateien || dateien.length === 0) return;
     laden = true;
+    fehler = "";
     try {
       for (const datei of Array.from(dateien)) {
         await api.hochladen(datei, aktuellerOrdner);
       }
-      await ladeOrdner();
     } catch (f) {
       fehler = (f as Error).message;
-      laden = false;
+    } finally {
+      await ladeOrdner();
     }
   }
 
@@ -230,7 +243,7 @@
               </button>
             {:else}
               {#if k.typ === "datei"}
-                <button class="still" title="Herunterladen" onclick={() => api.herunterladen(k)}>
+                <button class="still" title="Herunterladen" onclick={() => runterladen(k)}>
                   <i class="fa-solid fa-download"></i>
                 </button>
               {/if}
@@ -257,6 +270,7 @@
       type="text"
       bind:value={dialog.wert}
       placeholder="Name"
+      use:autofokus
       onkeydown={(e) => e.key === "Enter" && dialogBestaetigen()}
     />
     <div class="dialog-knoepfe">

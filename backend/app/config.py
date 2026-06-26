@@ -48,6 +48,7 @@ class Einstellungen:
     app_secret: str = _text("KELLERWOLKE_APP_SECRET", "entwicklung-unsicher")
     admin_name: str = _text("KELLERWOLKE_ADMIN_NAME", "")
     admin_passwort: str = _text("KELLERWOLKE_ADMIN_PASSWORT", "")
+    max_upload: int = _zahl("KELLERWOLKE_MAX_UPLOAD", 2_000_000_000)
 
     @property
     def dsn(self) -> str:

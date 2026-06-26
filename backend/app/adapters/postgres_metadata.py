@@ -124,6 +124,19 @@ class PostgresMetadataRepository:
             (besitzer_id,),
         )
 
+    async def ist_im_teilbaum(self, wurzel_id, kandidat_id) -> bool:
+        """True, wenn kandidat_id der Knoten wurzel_id selbst oder ein Nachkomme
+        davon ist (zum Erkennen von Verschiebe-Zyklen)."""
+        row = await self._eine(
+            "WITH RECURSIVE kette AS ("
+            "  SELECT id FROM knoten WHERE id=%s "
+            "  UNION ALL "
+            "  SELECT k.id FROM knoten k JOIN kette ON k.parent_id = kette.id"
+            ") SELECT 1 FROM kette WHERE id=%s LIMIT 1",
+            (wurzel_id, kandidat_id),
+        )
+        return row is not None
+
     # --- Versionen und Chunks -------------------------------------------------
 
     async def version_anlegen(self, knoten_id, groesse, inhalt_hash, erstellt_von):

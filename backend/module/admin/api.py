@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.abhaengig import aktueller_admin, hole_auth
 from module.admin.modelle import BenutzerAnlegen, BenutzerUpdate
@@ -27,6 +27,9 @@ async def anlegen(eingabe: BenutzerAnlegen, admin=Depends(aktueller_admin), auth
 @router.patch("/benutzer/{benutzer_id}", status_code=204)
 async def aktualisieren(benutzer_id: UUID, eingabe: BenutzerUpdate,
                         admin=Depends(aktueller_admin), auth=Depends(hole_auth)):
-    await auth.benutzer_aktualisieren(
-        benutzer_id, aktiv=eingabe.aktiv, quota_bytes=eingabe.quota_bytes, rolle=eingabe.rolle
-    )
+    try:
+        await auth.benutzer_aktualisieren(
+            benutzer_id, aktiv=eingabe.aktiv, quota_bytes=eingabe.quota_bytes, rolle=eingabe.rolle
+        )
+    except ValueError as f:
+        raise HTTPException(status_code=409, detail=str(f))

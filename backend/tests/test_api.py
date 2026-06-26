@@ -134,3 +134,64 @@ async def test_admin_guard(umgebung):
         headers=h_chef,
     )
     assert r.status_code == 201
+
+
+async def _ordner(client, headers, name, parent=None):
+    nutzlast: dict = {"name": name}
+    if parent:
+        nutzlast["parent_id"] = parent
+    return (await client.post("/api/v1/dateien/ordner", json=nutzlast, headers=headers)).json()
+
+
+async def test_verschieben_in_sich_selbst_409(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    o = await _ordner(client, h, "O")
+    r = await client.patch(f"/api/v1/dateien/{o['id']}/ort", json={"parent_id": o["id"]}, headers=h)
+    assert r.status_code == 409
+
+
+async def test_verschieben_in_nachkomme_409(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    a = await _ordner(client, h, "A")
+    b = await _ordner(client, h, "B", a["id"])
+    r = await client.patch(f"/api/v1/dateien/{a['id']}/ort", json={"parent_id": b["id"]}, headers=h)
+    assert r.status_code == 409
+
+
+async def test_upload_zu_gross_413(umgebung, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("module.speicher.api.EINSTELLUNGEN", SimpleNamespace(max_upload=10))
+    client, _ = umgebung
+    h = await _anmelden(client)
+    r = await _upload(client, h, "gross.bin", b"x" * 100)
+    assert r.status_code == 413
+
+
+async def test_leerer_name_422(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    r = await client.post("/api/v1/dateien/ordner", json={"name": "   "}, headers=h)
+    assert r.status_code == 422
+
+
+async def test_ungueltige_rolle_422(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    r = await client.post(
+        "/api/v1/admin/benutzer", json={"name": "x", "passwort": "pw", "rolle": "root"}, headers=h
+    )
+    assert r.status_code == 422
+
+
+async def test_letzter_admin_geschuetzt(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    liste = (await client.get("/api/v1/admin/benutzer", headers=h)).json()
+    chef = next(b for b in liste if b["name"] == "chef")
+    r = await client.patch(
+        f"/api/v1/admin/benutzer/{chef['id']}", json={"aktiv": False}, headers=h
+    )
+    assert r.status_code == 409
