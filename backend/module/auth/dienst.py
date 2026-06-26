@@ -106,6 +106,23 @@ class AuthDienst:
                 )
             return token
 
+    async def pruefe_basis(self, kennung, klartext) -> dict | None:
+        """Stateless Pruefung von Name/Kuerzel + Passwort (fuer WebDAV-Basic-Auth),
+        ohne eine Sitzung anzulegen. Konstante Zeit wie bei anmelden."""
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute(
+                    "SELECT * FROM benutzer WHERE aktiv AND "
+                    "(lower(name)=lower(%s) OR lower(kuerzel)=lower(%s))",
+                    (kennung, kennung),
+                )
+                benutzer = await cur.fetchone()
+        gespeichert = (benutzer["passwort_hash"] if benutzer else None) or _DUMMY_HASH
+        ok = passwort.pruefe(klartext, gespeichert)
+        if not benutzer or not benutzer["passwort_hash"] or not ok:
+            return None
+        return benutzer
+
     async def sitzung_pruefen(self, token) -> dict | None:
         if not token:
             return None

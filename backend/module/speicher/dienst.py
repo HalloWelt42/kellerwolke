@@ -83,6 +83,28 @@ class SpeicherDienst:
             return None
         return knoten
 
+    async def knoten_per_pfad(self, besitzer_id, pfad):
+        """Loest einen logischen Pfad (z.B. 'Dok/bericht.txt') zum Knoten auf.
+        Leerer Pfad liefert None (= Wurzel). Unbekannter Pfad liefert None."""
+        teile = [t for t in pfad.split("/") if t]
+        parent, knoten = None, None
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            for teil in teile:
+                knoten = await repo.knoten_finden(besitzer_id, parent, teil)
+                if not knoten:
+                    return None
+                parent = knoten["id"]
+        return knoten
+
+    async def groesse(self, knoten) -> int:
+        if knoten["typ"] != "datei" or not knoten["aktuelle_version_id"]:
+            return 0
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            version = await repo.version_holen(knoten["aktuelle_version_id"])
+        return version["groesse"] if version else 0
+
     async def versionen(self, besitzer_id, knoten_id):
         if not await self.knoten_des_nutzers(besitzer_id, knoten_id):
             return None

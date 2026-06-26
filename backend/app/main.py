@@ -20,6 +20,7 @@ from module.speicher.api import router as datei_router
 from module.speicher.dienst import SpeicherDienst
 from module.suche.api import router as suche_router
 from module.suche.dienst import SuchDienst
+from webdav.adapter import webdav_einbinden
 
 
 async def _admin_seed(auth: AuthDienst) -> None:
@@ -69,6 +70,7 @@ def app_bauen() -> FastAPI:
     app.include_router(datei_router)
     app.include_router(suche_router)
     app.include_router(admin_router)
+    webdav_einbinden(app)
     return app
 
 
