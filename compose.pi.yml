@@ -1,0 +1,57 @@
+# Vollstaendiger Stack fuer den Betrieb (z.B. Pi): Datenbank, Backend, Frontend.
+# Nur das Frontend ist nach aussen exponiert; es leitet /api und /webdav intern
+# an das Backend weiter. App-Daten gehoeren auf ext4; die externe Quelle wird
+# read-only eingehaengt.
+name: ${COMPOSE_PROJECT_NAME:-kellerwolke}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${KELLERWOLKE_DB_NAME:-kellerwolke}
+      POSTGRES_USER: ${KELLERWOLKE_DB_USER:-kellerwolke}
+      POSTGRES_PASSWORD: ${KELLERWOLKE_DB_PASS:-kellerwolke}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KELLERWOLKE_DB_USER:-kellerwolke} -d ${KELLERWOLKE_DB_NAME:-kellerwolke}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      KELLERWOLKE_DB_HOST: db
+      KELLERWOLKE_DB_PORT: "5432"
+      KELLERWOLKE_DB_NAME: ${KELLERWOLKE_DB_NAME:-kellerwolke}
+      KELLERWOLKE_DB_USER: ${KELLERWOLKE_DB_USER:-kellerwolke}
+      KELLERWOLKE_DB_PASS: ${KELLERWOLKE_DB_PASS:-kellerwolke}
+      KELLERWOLKE_OBJEKT_PFAD: /data/objects
+      KELLERWOLKE_APP_SECRET: ${KELLERWOLKE_APP_SECRET:-entwicklung-unsicher}
+      KELLERWOLKE_ADMIN_NAME: ${KELLERWOLKE_ADMIN_NAME:-admin}
+      KELLERWOLKE_ADMIN_PASSWORT: ${KELLERWOLKE_ADMIN_PASSWORT:-admin}
+      KELLERWOLKE_MAX_UPLOAD: ${KELLERWOLKE_MAX_UPLOAD:-2000000000}
+    volumes:
+      - ./data/objects:/data/objects
+      - ${KELLERWOLKE_EXTERN_PFAD:-./data}:/extern:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "${KELLERWOLKE_FRONTEND_PORT:-8470}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
