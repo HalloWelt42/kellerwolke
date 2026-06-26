@@ -5,6 +5,9 @@ Baum, Versionen, Journal). REST-API und WebDAV rufen ausschliesslich diesen
 Dienst, damit ETags und Journal immer konsistent bleiben.
 """
 
+import os
+import shutil
+
 from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 
@@ -14,10 +17,29 @@ class SpeicherDienst:
         self.pool = pool
         self.blobstore = blobstore
 
+    def _datentraeger(self):
+        """Gesamt- und Freiplatz des Datentraegers, auf dem der Objekt-Pool
+        liegt. Faellt auf den naechsten vorhandenen Ueberordner zurueck."""
+        pfad = str(getattr(self.blobstore, "wurzel", "")) or "."
+        while pfad and not os.path.exists(pfad):
+            eltern = os.path.dirname(pfad)
+            if eltern == pfad:
+                break
+            pfad = eltern
+        try:
+            du = shutil.disk_usage(pfad or "/")
+            return du.total, du.free
+        except OSError:
+            return None, None
+
     async def speicher_status(self, besitzer_id):
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
-            return await repo.speicher_status(besitzer_id)
+            status = await repo.speicher_status(besitzer_id)
+        gesamt, frei = self._datentraeger()
+        status["gesamt"] = gesamt
+        status["frei"] = frei
+        return status
 
     async def papierkorb_leeren(self, besitzer_id):
         """Loescht alle Knoten im Papierkorb endgueltig: Refcounts senken,

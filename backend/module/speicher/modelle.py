@@ -35,8 +35,10 @@ class KnotenAus(BaseModel):
 
 
 class SpeicherStatusAus(BaseModel):
-    benutzt: int
-    quota: int | None = None
+    benutzt: int                 # durch Kellerwolke belegt (Summe der Bloecke)
+    quota: int | None = None     # konto-Kontingent, falls gesetzt
+    gesamt: int | None = None    # Gesamtgroesse des Datentraegers
+    frei: int | None = None      # freier Platz auf dem Datentraeger
 
 
 class VersionAus(BaseModel):

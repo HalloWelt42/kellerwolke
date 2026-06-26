@@ -26,7 +26,9 @@ router = APIRouter(prefix="/api/v1/dateien", tags=["dateien"])
 @router.get("/speicher-status", response_model=SpeicherStatusAus)
 async def speicher_status(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     s = await speicher.speicher_status(benutzer["id"])
-    return SpeicherStatusAus(benutzt=s["benutzt"], quota=s["quota"])
+    return SpeicherStatusAus(
+        benutzt=s["benutzt"], quota=s["quota"], gesamt=s.get("gesamt"), frei=s.get("frei")
+    )
 
 
 @router.get("", response_model=list[KnotenAus])

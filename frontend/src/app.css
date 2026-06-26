@@ -84,6 +84,27 @@ body {
   height: 100vh;
 }
 
+/* Kein versehentliches Markieren von Bedienelementen. Textauswahl nur dort,
+   wo sie sinnvoll ist (Dateinamen, Detail-Texte, Eingaben, groessere Texte). */
+.app,
+.modal-hg,
+.login-hg {
+  user-select: none;
+}
+.z-name .titel,
+.k-name,
+.detail-name,
+.infozeile,
+.versionsliste,
+.detail-block p,
+.modal-inhalt p,
+.einst-inhalt p,
+.login-karte .unter,
+input,
+textarea {
+  user-select: text;
+}
+
 /* ===== App-Raster: Navigation | Inhalt | Detail ===== */
 .app {
   height: 100vh;

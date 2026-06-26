@@ -27,6 +27,8 @@ export interface Knoten {
 export interface SpeicherStatus {
   benutzt: number;
   quota: number | null;
+  gesamt?: number | null;
+  frei?: number | null;
 }
 
 export interface Version {
