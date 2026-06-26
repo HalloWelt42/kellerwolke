@@ -56,7 +56,7 @@ async def test_identischer_reupload_ist_noop(dienst, benutzer_id):
     # Gleicher Knoten, gleicher ETag - keine neue Version, kein Journal-Eintrag.
     assert k1["id"] == k2["id"]
     assert k1["etag"] == k2["etag"]
-    assert len(await dienst.versionen(k1["id"])) == 1
+    assert len(await dienst.versionen(benutzer_id, k1["id"])) == 1
     assert len(await dienst.journal_seit(benutzer_id, 0)) == 1
 
 
@@ -66,7 +66,7 @@ async def test_neue_version(dienst, benutzer_id):
     # Gleicher Knoten (stabile UUID), neue aktuelle Version.
     assert k1["id"] == k2["id"]
     assert k1["etag"] != k2["etag"]
-    versionen = await dienst.versionen(k2["id"])
+    versionen = await dienst.versionen(benutzer_id, k2["id"])
     assert len(versionen) == 2
     # Neueste Version ist abrufbar.
     assert await dienst.datei_lesen(benutzer_id, k2["id"]) == b"version zwei"

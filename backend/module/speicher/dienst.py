@@ -74,16 +74,32 @@ class SpeicherDienst:
             repo = PostgresMetadataRepository(conn)
             return await repo.kinder(besitzer_id, parent_id)
 
-    async def versionen(self, knoten_id):
+    async def knoten_des_nutzers(self, besitzer_id, knoten_id):
+        """Liefert den Knoten nur, wenn er dem Nutzer gehoert - sonst None."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+        if not knoten or knoten["besitzer_id"] != besitzer_id:
+            return None
+        return knoten
+
+    async def versionen(self, besitzer_id, knoten_id):
+        if not await self.knoten_des_nutzers(besitzer_id, knoten_id):
+            return None
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             return await repo.versionen(knoten_id)
+
+    async def papierkorb(self, besitzer_id):
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            return await repo.papierkorb(besitzer_id)
 
     async def umbenennen(self, besitzer_id, knoten_id, neuer_name):
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
-                await repo.knoten_umbenennen(knoten_id, neuer_name)
+                await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
                 return await repo.knoten_holen(knoten_id)
 
@@ -91,7 +107,7 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
-                await repo.knoten_verschieben(knoten_id, neuer_parent)
+                await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
                 return await repo.knoten_holen(knoten_id)
 
@@ -99,8 +115,23 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
-                await repo.knoten_loeschen(knoten_id)
+                await repo.knoten_loeschen(besitzer_id, knoten_id)
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "geloescht")
+
+    async def wiederherstellen(self, besitzer_id, knoten_id):
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]:
+                    return None
+                name = knoten["name"]
+                # Bei Namenskollision mit lebendem Geschwister umbenennen.
+                if await repo.knoten_finden(besitzer_id, knoten["parent_id"], name):
+                    name = f"{name} (wiederhergestellt)"
+                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name)
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "erstellt")
+                return await repo.knoten_holen(knoten_id)
 
     async def journal_seit(self, besitzer_id, seit_seq=0):
         async with self.pool.connection() as conn:

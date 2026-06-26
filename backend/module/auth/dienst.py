@@ -28,17 +28,43 @@ class AuthDienst:
     def __init__(self, pool) -> None:
         self.pool = pool
 
-    async def benutzer_anlegen(self, name, klartext_passwort=None, rolle="mitglied"):
+    async def benutzer_anlegen(self, name, klartext_passwort=None, rolle="mitglied", kuerzel=None):
         passwort_hash = passwort.hash_passwort(klartext_passwort) if klartext_passwort else None
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 async with conn.cursor(row_factory=dict_row) as cur:
                     await cur.execute(
-                        "INSERT INTO benutzer (name, passwort_hash, rolle) "
-                        "VALUES (%s,%s,%s) RETURNING *",
-                        (name, passwort_hash, rolle),
+                        "INSERT INTO benutzer (name, kuerzel, passwort_hash, rolle) "
+                        "VALUES (%s,%s,%s,%s) RETURNING *",
+                        (name, kuerzel, passwort_hash, rolle),
                     )
                     return await cur.fetchone()
+
+    async def liste_benutzer(self):
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT * FROM benutzer ORDER BY lower(name)")
+                return await cur.fetchall()
+
+    async def benutzer_aktualisieren(self, benutzer_id, aktiv=None, quota_bytes=None, rolle=None):
+        felder, werte = [], []
+        if aktiv is not None:
+            felder.append("aktiv=%s")
+            werte.append(aktiv)
+        if quota_bytes is not None:
+            felder.append("quota_bytes=%s")
+            werte.append(quota_bytes)
+        if rolle is not None:
+            felder.append("rolle=%s")
+            werte.append(rolle)
+        if not felder:
+            return
+        werte.append(benutzer_id)
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    f"UPDATE benutzer SET {', '.join(felder)} WHERE id=%s", werte
+                )
 
     async def anmelden(self, kennung, klartext) -> str | None:
         async with self.pool.connection() as conn:

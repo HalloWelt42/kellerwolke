@@ -92,22 +92,36 @@ class PostgresMetadataRepository:
             (version_id, etag, knoten_id),
         )
 
-    async def knoten_umbenennen(self, knoten_id, neuer_name):
+    async def knoten_umbenennen(self, besitzer_id, knoten_id, neuer_name):
         await self.conn.execute(
-            "UPDATE knoten SET name=%s, geaendert_am=now() WHERE id=%s",
-            (neuer_name, knoten_id),
+            "UPDATE knoten SET name=%s, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
+            (neuer_name, knoten_id, besitzer_id),
         )
 
-    async def knoten_verschieben(self, knoten_id, neuer_parent):
+    async def knoten_verschieben(self, besitzer_id, knoten_id, neuer_parent):
         await self.conn.execute(
-            "UPDATE knoten SET parent_id=%s, geaendert_am=now() WHERE id=%s",
-            (neuer_parent, knoten_id),
+            "UPDATE knoten SET parent_id=%s, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
+            (neuer_parent, knoten_id, besitzer_id),
         )
 
-    async def knoten_loeschen(self, knoten_id):
+    async def knoten_loeschen(self, besitzer_id, knoten_id):
         await self.conn.execute(
-            "UPDATE knoten SET geloescht=true, geaendert_am=now() WHERE id=%s",
-            (knoten_id,),
+            "UPDATE knoten SET geloescht=true, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
+            (knoten_id, besitzer_id),
+        )
+
+    async def knoten_wiederherstellen(self, besitzer_id, knoten_id, name):
+        await self.conn.execute(
+            "UPDATE knoten SET geloescht=false, name=%s, geaendert_am=now() "
+            "WHERE id=%s AND besitzer_id=%s",
+            (name, knoten_id, besitzer_id),
+        )
+
+    async def papierkorb(self, besitzer_id):
+        return await self._alle(
+            "SELECT * FROM knoten WHERE besitzer_id=%s AND geloescht "
+            "ORDER BY geaendert_am DESC",
+            (besitzer_id,),
         )
 
     # --- Versionen und Chunks -------------------------------------------------

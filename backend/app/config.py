@@ -46,6 +46,8 @@ class Einstellungen:
     db_pass: str = _text("KELLERWOLKE_DB_PASS", "kellerwolke")
     objekt_pfad: str = _text("KELLERWOLKE_OBJEKT_PFAD", str(WURZEL / "data" / "objects"))
     app_secret: str = _text("KELLERWOLKE_APP_SECRET", "entwicklung-unsicher")
+    admin_name: str = _text("KELLERWOLKE_ADMIN_NAME", "")
+    admin_passwort: str = _text("KELLERWOLKE_ADMIN_PASSWORT", "")
 
     @property
     def dsn(self) -> str:

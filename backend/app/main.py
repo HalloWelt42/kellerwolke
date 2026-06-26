@@ -1,4 +1,5 @@
-"""FastAPI-Einstieg. Bewusst duenn: oeffnet den DB-Pool, bindet Modul-Router ein.
+"""FastAPI-Einstieg. Bewusst duenn: oeffnet den DB-Pool, legt die Dienste in
+app.state ab, bindet die Modul-Router ein.
 
 Strikte Trennung: hier entsteht ausschliesslich die REST-API. Die Oberflaeche
 (Svelte) ist eine eigenstaendige Anwendung und spricht nur diese API.
@@ -10,12 +11,38 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import db
-from .config import version
+from .adapters.filesystem_blobstore import FilesystemBlobStore
+from .config import EINSTELLUNGEN, version
+from module.admin.api import router as admin_router
+from module.auth.api import router as auth_router
+from module.auth.dienst import AuthDienst
+from module.speicher.api import router as datei_router
+from module.speicher.dienst import SpeicherDienst
+from module.suche.api import router as suche_router
+from module.suche.dienst import SuchDienst
+
+
+async def _admin_seed(auth: AuthDienst) -> None:
+    """Legt beim ersten Start ein Admin-Konto an, wenn konfiguriert und noch
+    kein Konto existiert (Bootstrap)."""
+    if not EINSTELLUNGEN.admin_name or not EINSTELLUNGEN.admin_passwort:
+        return
+    if await auth.liste_benutzer():
+        return
+    await auth.benutzer_anlegen(
+        EINSTELLUNGEN.admin_name, EINSTELLUNGEN.admin_passwort, rolle="admin"
+    )
 
 
 @asynccontextmanager
 async def lebenszyklus(app: FastAPI):
     await db.starten()
+    pool = db.pool()
+    app.state.pool = pool
+    app.state.auth = AuthDienst(pool)
+    app.state.speicher = SpeicherDienst(pool, FilesystemBlobStore(EINSTELLUNGEN.objekt_pfad))
+    app.state.suche = SuchDienst(pool)
+    await _admin_seed(app.state.auth)
     try:
         yield
     finally:
@@ -38,6 +65,10 @@ def app_bauen() -> FastAPI:
     async def health():
         return {"status": "ok", "dienst": "kellerwolke", "version": version()}
 
+    app.include_router(auth_router)
+    app.include_router(datei_router)
+    app.include_router(suche_router)
+    app.include_router(admin_router)
     return app
 
 
