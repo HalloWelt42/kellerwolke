@@ -31,3 +31,9 @@ export interface AuthStatus {
   angemeldet: boolean;
   benutzer?: Benutzer | null;
 }
+
+export interface ExternEintrag {
+  name: string;
+  ist_ordner: boolean;
+  groesse: number;
+}

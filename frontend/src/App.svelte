@@ -3,6 +3,9 @@
   import { auth, ladeStatus, abmelden } from "./lib/auth.svelte";
   import Login from "./lib/Login.svelte";
   import Dateibrowser from "./lib/Dateibrowser.svelte";
+  import Admin from "./lib/Admin.svelte";
+
+  let adminOffen = $state(false);
 
   onMount(ladeStatus);
 </script>
@@ -17,6 +20,11 @@
       <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
       <div class="rechts">
         <span class="nutzer"><i class="fa-solid fa-user"></i> {auth.benutzer?.name}</span>
+        {#if auth.benutzer?.rolle === "admin"}
+          <button class="still" onclick={() => (adminOffen = true)} title="Verwaltung">
+            <i class="fa-solid fa-gear"></i>
+          </button>
+        {/if}
         <button class="still" onclick={abmelden} title="Abmelden">
           <i class="fa-solid fa-right-from-bracket"></i>
         </button>
@@ -24,6 +32,7 @@
     </header>
     <main><Dateibrowser /></main>
   </div>
+  {#if adminOffen}<Admin schliessen={() => (adminOffen = false)} />{/if}
 {/if}
 
 <style>

@@ -5,8 +5,9 @@
     titel: string;
     schliessen: () => void;
     children: Snippet;
+    breit?: boolean;
   }
-  let { titel, schliessen, children }: Props = $props();
+  let { titel, schliessen, children, breit = false }: Props = $props();
 
   function aufHintergrund(e: MouseEvent) {
     if (e.target === e.currentTarget) schliessen();
@@ -19,7 +20,7 @@
 <svelte:window onkeydown={aufTaste} />
 
 <div class="hintergrund" onclick={aufHintergrund} role="presentation">
-  <div class="modal" role="dialog" aria-modal="true">
+  <div class="modal" class:breit role="dialog" aria-modal="true">
     <div class="kopf">
       <h2>{titel}</h2>
       <button class="still" onclick={schliessen} aria-label="Schliessen">
@@ -49,6 +50,9 @@
     box-shadow: var(--schatten);
     width: min(440px, 92vw);
     overflow: hidden;
+  }
+  .modal.breit {
+    width: min(740px, 94vw);
   }
   .kopf {
     display: flex;

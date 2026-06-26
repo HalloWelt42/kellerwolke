@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as api from "./api";
-  import type { Knoten } from "./types";
+  import type { ExternEintrag, Knoten } from "./types";
   import Modal from "./Modal.svelte";
 
-  type Ansicht = "ordner" | "papierkorb" | "suche";
+  type Ansicht = "ordner" | "papierkorb" | "suche" | "extern";
 
   let pfad = $state<{ id: string | null; name: string }[]>([{ id: null, name: "Start" }]);
   let eintraege = $state<Knoten[]>([]);
+  let externEintraege = $state<ExternEintrag[]>([]);
+  let extern = $state<{ id: string; name: string; unterpfad: string[] } | null>(null);
   let ansicht = $state<Ansicht>("ordner");
   let laden = $state(false);
   let fehler = $state("");
@@ -63,7 +65,9 @@
   }
 
   function oeffnen(k: Knoten) {
-    if (k.typ === "ordner" || k.typ === "extern") {
+    if (k.typ === "extern") {
+      externOeffnen(k);
+    } else if (k.typ === "ordner") {
       pfad = [...pfad, { id: k.id, name: k.name }];
       ladeOrdner();
     } else {
@@ -77,6 +81,60 @@
     } catch (f) {
       fehler = (f as Error).message;
     }
+  }
+
+  // --- Externe read-only Quelle ---------------------------------------------
+
+  function externOeffnen(k: Knoten) {
+    extern = { id: k.id, name: k.name, unterpfad: [] };
+    ladeExtern();
+  }
+
+  async function ladeExtern() {
+    if (!extern) return;
+    const meins = ++lauf;
+    laden = true;
+    fehler = "";
+    ansicht = "extern";
+    try {
+      const ergebnis = await api.externAuflisten(extern.id, extern.unterpfad.join("/"));
+      if (meins === lauf) externEintraege = ergebnis;
+    } catch (f) {
+      if (meins === lauf) fehler = (f as Error).message;
+    } finally {
+      if (meins === lauf) laden = false;
+    }
+  }
+
+  function externGehe(e: ExternEintrag) {
+    if (!extern) return;
+    if (e.ist_ordner) {
+      extern.unterpfad = [...extern.unterpfad, e.name];
+      ladeExtern();
+    } else {
+      externRunter(e);
+    }
+  }
+
+  async function externRunter(e: ExternEintrag) {
+    if (!extern) return;
+    const rel = [...extern.unterpfad, e.name].join("/");
+    try {
+      await api.externHerunterladen(extern.id, rel, e.name);
+    } catch (f) {
+      fehler = (f as Error).message;
+    }
+  }
+
+  function externBreadcrumb(index: number) {
+    if (!extern) return;
+    if (index < 0) {
+      extern = null;
+      ladeOrdner();
+      return;
+    }
+    extern.unterpfad = extern.unterpfad.slice(0, index);
+    ladeExtern();
   }
 
   function breadcrumbGehe(index: number) {
@@ -162,6 +220,13 @@
   function datum(iso: string): string {
     return new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
   }
+
+  function groesseText(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  }
 </script>
 
 <div class="werkzeuge">
@@ -199,6 +264,19 @@
       <button class="krume" onclick={() => breadcrumbGehe(i)}>{teil.name}</button>
     {/each}
   </nav>
+{:else if ansicht === "extern" && extern}
+  <nav class="brotkrumen">
+    <button class="krume" onclick={() => externBreadcrumb(-1)}>Start</button>
+    <i class="fa-solid fa-chevron-right teiler"></i>
+    <button class="krume" onclick={() => externBreadcrumb(0)}>
+      <i class="fa-solid fa-folder-tree"></i> {extern.name}
+    </button>
+    {#each extern.unterpfad as teil, i}
+      <i class="fa-solid fa-chevron-right teiler"></i>
+      <button class="krume" onclick={() => externBreadcrumb(i + 1)}>{teil}</button>
+    {/each}
+    <span class="modus">read-only</span>
+  </nav>
 {:else}
   <nav class="brotkrumen">
     <button class="krume" onclick={ladeOrdner}><i class="fa-solid fa-arrow-left"></i> Zurück</button>
@@ -222,6 +300,31 @@
 >
   {#if laden}
     <div class="hinweis"><i class="fa-solid fa-spinner fa-spin"></i> Lädt ...</div>
+  {:else if ansicht === "extern"}
+    {#if externEintraege.length === 0}
+      <div class="hinweis leer">
+        <i class="fa-regular fa-folder-open"></i><span>Dieser Ordner ist leer</span>
+      </div>
+    {:else}
+      <ul class="liste">
+        {#each externEintraege as e (e.name)}
+          <li>
+            <button class="zeile" onclick={() => externGehe(e)}>
+              <i class="sym fa-solid {e.ist_ordner ? 'fa-folder' : 'fa-file'}" class:ordnerfarbe={e.ist_ordner}></i>
+              <span class="name">{e.name}</span>
+              <span class="zeit">{e.ist_ordner ? "" : groesseText(e.groesse)}</span>
+            </button>
+            <div class="aktionen">
+              {#if !e.ist_ordner}
+                <button class="still" title="Herunterladen" onclick={() => externRunter(e)}>
+                  <i class="fa-solid fa-download"></i>
+                </button>
+              {/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   {:else if eintraege.length === 0}
     <div class="hinweis leer">
       <i class="fa-regular fa-folder-open"></i>

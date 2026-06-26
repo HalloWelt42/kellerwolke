@@ -1,4 +1,4 @@
-import type { AuthStatus, Benutzer, Knoten, Version } from "./types";
+import type { AuthStatus, Benutzer, ExternEintrag, Knoten, Version } from "./types";
 
 // Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl fuer
 // eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
@@ -155,4 +155,72 @@ export function versionen(id: string): Promise<Version[]> {
 
 export function suchen(q: string): Promise<Knoten[]> {
   return hole<Knoten[]>(`/v1/suche?q=${encodeURIComponent(q)}`);
+}
+
+// --- Externe Quellen (read-only) --------------------------------------------
+
+export function externAuflisten(knotenId: string, unterpfad: string): Promise<ExternEintrag[]> {
+  return hole<ExternEintrag[]>(
+    `/v1/dateien/extern/${knotenId}?unterpfad=${encodeURIComponent(unterpfad)}`,
+  );
+}
+
+export async function externHerunterladen(
+  knotenId: string,
+  unterpfad: string,
+  name: string,
+): Promise<void> {
+  const antwort = await fetch(
+    `/api/v1/dateien/extern/${knotenId}/inhalt?unterpfad=${encodeURIComponent(unterpfad)}`,
+    { headers: { "X-Kellerwolke-Sitzung": token() } },
+  );
+  await pruefe(antwort);
+  const blob = await antwort.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// --- Admin ------------------------------------------------------------------
+
+export function listeBenutzer(): Promise<Benutzer[]> {
+  return hole<Benutzer[]>("/v1/admin/benutzer");
+}
+
+export function benutzerAnlegen(
+  name: string,
+  passwort: string,
+  rolle: string,
+  kuerzel?: string,
+): Promise<Benutzer> {
+  return hole<Benutzer>("/v1/admin/benutzer", {
+    method: "POST",
+    body: JSON.stringify({ name, passwort, rolle, kuerzel: kuerzel || null }),
+  });
+}
+
+export function benutzerAktualisieren(
+  id: string,
+  aenderung: { aktiv?: boolean; quota_bytes?: number | null; rolle?: string },
+): Promise<void> {
+  return hole<void>(`/v1/admin/benutzer/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(aenderung),
+  });
+}
+
+export function externeQuelleAnlegen(
+  besitzerId: string,
+  name: string,
+  pfad: string,
+): Promise<Knoten> {
+  return hole<Knoten>("/v1/admin/externe-quelle", {
+    method: "POST",
+    body: JSON.stringify({ besitzer_id: besitzerId, name, pfad }),
+  });
 }
