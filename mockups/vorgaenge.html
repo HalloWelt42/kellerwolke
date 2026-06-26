@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Vorgänge</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <button class="icon-knopf kopf-knopf" title="Vorgänge">
+            <i class="fa-solid fa-list-check"></i>
+            <span class="badge">2</span>
+          </button>
+          <button class="icon-knopf" title="Dunkles Thema"><i class="fa-solid fa-moon"></i></button>
+          <button class="icon-knopf" title="Verwaltung"><i class="fa-solid fa-gear"></i></button>
+          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche</div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt <span class="zahl">3</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen <span class="zahl">2</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+        <div class="speicher">
+          142 GB von 1,5 TB
+          <div class="balken"><span style="width: 9%"></span></div>
+        </div>
+      </nav>
+
+      <section class="inhalt">
+        <div class="werkzeuge">
+          <button class="knopf primaer"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <button class="knopf"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</button>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button class="aktiv" title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+          </div>
+        </div>
+        <nav class="breadcrumb">
+          <a>Meine Dateien</a><i class="fa-solid fa-chevron-right"></i>
+          <span class="aktuell">Urlaub 2025</span>
+        </nav>
+        <div class="liste">
+          <div class="listenkopf">
+            <span></span>
+            <span class="sortbar">Name <i class="fa-solid fa-arrow-down-short-wide"></i></span>
+            <span>Größe</span><span class="sp-geaendert">Geändert</span><span></span>
+          </div>
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym ordner fa-solid fa-folder"></i><span class="titel">Strandtage</span></span>
+            <span class="z-meta">142 Dateien</span>
+            <span class="z-meta z-geaendert">18.06.2025, 20:11</span><span class="z-akt"></span>
+          </div>
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-video"></i><span class="titel">Urlaub_2025.mp4</span></span>
+            <span class="z-meta">1,9 GB</span>
+            <span class="z-meta z-geaendert">wird geladen ...</span><span class="z-akt"></span>
+          </div>
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-image"></i><span class="titel">Ankunft_Hafen.jpg</span></span>
+            <span class="z-meta">3,4 MB</span>
+            <span class="z-meta z-geaendert">14.06.2025, 17:30</span><span class="z-akt"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Vorgaenge-Schublade -->
+    <aside class="vorgaenge">
+      <div class="vorgaenge-kopf">
+        <h2><i class="fa-solid fa-list-check"></i> Vorgänge</h2>
+        <button class="icon-knopf" title="Schliessen"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="vorgaenge-liste">
+        <div class="vorgaenge-abschnitt">Läuft</div>
+
+        <!-- Indizierung, laufend -->
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel">
+              <i class="fa-solid fa-magnifying-glass-chart"></i>
+              <span>Externe Quelle "Archiv" indizieren</span>
+            </div>
+            <span class="status-pill laeuft">Läuft</span>
+          </div>
+          <div class="fortschritt"><span style="width: 41%"></span></div>
+          <div class="vorgang-meta">
+            <span>16.040 von 38.902 Dateien</span><span>41 %</span>
+          </div>
+          <div class="vorgang-meta">
+            <span>4,2 von 9,1 GB</span><span>noch ca. 7 Min</span>
+          </div>
+          <div class="vorgang-aktionen">
+            <button class="icon-knopf" title="Pausieren"><i class="fa-solid fa-pause"></i></button>
+            <button class="icon-knopf gefahr" title="Abbrechen"><i class="fa-solid fa-stop"></i></button>
+          </div>
+        </div>
+
+        <!-- Upload, laufend (grosse Datei) -->
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <span>Urlaub_2025.mp4 hochladen</span>
+            </div>
+            <span class="status-pill laeuft">Läuft</span>
+          </div>
+          <div class="fortschritt"><span style="width: 63%"></span></div>
+          <div class="vorgang-meta">
+            <span>1,20 von 1,90 GB</span><span>63 %</span>
+          </div>
+          <div class="vorgang-meta">
+            <span>18,4 MB/s</span><span>noch ca. 40 Sek</span>
+          </div>
+          <div class="vorgang-aktionen">
+            <button class="icon-knopf gefahr" title="Abbrechen"><i class="fa-solid fa-stop"></i></button>
+          </div>
+        </div>
+
+        <div class="vorgaenge-abschnitt">Pausiert</div>
+
+        <!-- Indizierung, pausiert -->
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel">
+              <i class="fa-solid fa-magnifying-glass-chart"></i>
+              <span>Externe Quelle "Familienfotos" indizieren</span>
+            </div>
+            <span class="status-pill pausiert">Pausiert</span>
+          </div>
+          <div class="fortschritt"><span style="width: 22%"></span></div>
+          <div class="vorgang-meta">
+            <span>3.110 von 14.200 Dateien</span><span>22 %</span>
+          </div>
+          <div class="vorgang-aktionen">
+            <button class="icon-knopf" title="Fortsetzen"><i class="fa-solid fa-play"></i></button>
+            <button class="icon-knopf gefahr" title="Abbrechen"><i class="fa-solid fa-stop"></i></button>
+          </div>
+        </div>
+
+        <div class="vorgaenge-abschnitt">Abgeschlossen</div>
+
+        <!-- Indizierung, fertig -->
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel">
+              <i class="fa-solid fa-circle-check"></i>
+              <span>Ordner "Dokumente" indizieren</span>
+            </div>
+            <span class="status-pill fertig">Fertig</span>
+          </div>
+          <div class="vorgang-meta">
+            <span>12.004 Dateien indiziert</span><span>vor 5 Min</span>
+          </div>
+        </div>
+
+        <!-- Indizierung, Fehler -->
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>Externe Quelle "USB-Stick" indizieren</span>
+            </div>
+            <span class="status-pill fehler">Fehler</span>
+          </div>
+          <div class="vorgang-meta">
+            <span>Quelle nicht erreichbar (abgebrochen bei 8 %)</span>
+          </div>
+          <div class="vorgang-aktionen">
+            <button class="icon-knopf" title="Erneut versuchen"><i class="fa-solid fa-rotate-right"></i></button>
+            <button class="icon-knopf" title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
