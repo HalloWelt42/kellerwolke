@@ -4,11 +4,21 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.abhaengig import aktueller_admin, hole_auth
-from module.admin.modelle import BenutzerAnlegen, BenutzerUpdate
+from app.abhaengig import aktueller_admin, hole_auth, hole_speicher
+from module.admin.modelle import BenutzerAnlegen, BenutzerUpdate, ExternQuelleEingabe
 from module.auth.modelle import BenutzerAus
+from module.speicher.modelle import KnotenAus
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+@router.post("/externe-quelle", response_model=KnotenAus, status_code=201)
+async def externe_quelle(eingabe: ExternQuelleEingabe, admin=Depends(aktueller_admin),
+                         speicher=Depends(hole_speicher)):
+    knoten = await speicher.externe_quelle_anlegen(
+        eingabe.besitzer_id, eingabe.parent_id, eingabe.name, eingabe.pfad
+    )
+    return KnotenAus.model_validate(knoten)
 
 
 @router.get("/benutzer", response_model=list[BenutzerAus])

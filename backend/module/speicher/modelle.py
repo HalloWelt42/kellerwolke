@@ -38,6 +38,12 @@ class VersionAus(BaseModel):
     erstellt_am: datetime
 
 
+class ExternEintragAus(BaseModel):
+    name: str
+    ist_ordner: bool
+    groesse: int
+
+
 class OrdnerEingabe(BaseModel):
     name: str
     parent_id: UUID | None = None

@@ -11,6 +11,7 @@ from psycopg.errors import UniqueViolation
 from app.abhaengig import aktueller_benutzer, hole_speicher, hole_suche
 from app.config import EINSTELLUNGEN
 from module.speicher.modelle import (
+    ExternEintragAus,
     KnotenAus,
     OrdnerEingabe,
     UmbenennenEingabe,
@@ -32,6 +33,38 @@ async def auflisten(parent_id: UUID | None = None, benutzer=Depends(aktueller_be
 @router.get("/papierkorb", response_model=list[KnotenAus])
 async def papierkorb(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     return [KnotenAus.model_validate(k) for k in await speicher.papierkorb(benutzer["id"])]
+
+
+@router.get("/extern/{knoten_id}", response_model=list[ExternEintragAus])
+async def extern_auflisten(knoten_id: UUID, unterpfad: str = "",
+                           benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    try:
+        eintraege = await speicher.externe_kinder(benutzer["id"], knoten_id, unterpfad)
+    except (PermissionError, FileNotFoundError, NotADirectoryError):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    if eintraege is None:
+        raise HTTPException(status_code=404, detail="Keine externe Quelle")
+    return [
+        ExternEintragAus(name=e.name, ist_ordner=e.ist_ordner, groesse=e.groesse)
+        for e in eintraege
+    ]
+
+
+@router.get("/extern/{knoten_id}/inhalt")
+async def extern_inhalt(knoten_id: UUID, unterpfad: str,
+                        benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    try:
+        daten = await speicher.externe_datei_lesen(benutzer["id"], knoten_id, unterpfad)
+    except (PermissionError, FileNotFoundError, IsADirectoryError):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    if daten is None:
+        raise HTTPException(status_code=404, detail="Keine externe Quelle")
+    name = unterpfad.rstrip("/").rsplit("/", 1)[-1] or "datei"
+    return Response(
+        content=daten,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @router.post("/ordner", response_model=KnotenAus)

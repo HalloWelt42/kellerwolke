@@ -57,6 +57,13 @@ class PostgresMetadataRepository:
             (besitzer_id, parent_id, name),
         )
 
+    async def extern_anlegen(self, besitzer_id, parent_id, name, extern_pfad):
+        return await self._eine(
+            "INSERT INTO knoten (besitzer_id, parent_id, name, typ, extern_pfad) "
+            "VALUES (%s,%s,%s,'extern',%s) RETURNING *",
+            (besitzer_id, parent_id, name, extern_pfad),
+        )
+
     async def knoten_holen(self, knoten_id):
         return await self._eine("SELECT * FROM knoten WHERE id=%s", (knoten_id,))
 

@@ -197,6 +197,61 @@ async def test_letzter_admin_geschuetzt(umgebung):
     assert r.status_code == 409
 
 
+async def test_externe_quelle_einhaengen_und_lesen(umgebung, tmp_path):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    quelle = tmp_path / "platte"
+    (quelle / "unterordner").mkdir(parents=True)
+    (quelle / "datei.txt").write_bytes(b"externer Inhalt")
+    (quelle / "unterordner" / "tief.txt").write_bytes(b"tief")
+
+    liste = (await client.get("/api/v1/admin/benutzer", headers=h)).json()
+    chef = next(b for b in liste if b["name"] == "chef")
+    r = await client.post(
+        "/api/v1/admin/externe-quelle",
+        json={"besitzer_id": chef["id"], "name": "Platte", "pfad": str(quelle)},
+        headers=h,
+    )
+    assert r.status_code == 201, r.text
+    extern_id = r.json()["id"]
+    assert r.json()["typ"] == "extern"
+
+    eintraege = (await client.get(f"/api/v1/dateien/extern/{extern_id}", headers=h)).json()
+    assert {e["name"] for e in eintraege} == {"unterordner", "datei.txt"}
+
+    inhalt = await client.get(
+        f"/api/v1/dateien/extern/{extern_id}/inhalt", params={"unterpfad": "datei.txt"}, headers=h
+    )
+    assert inhalt.content == b"externer Inhalt"
+
+    tief = (await client.get(
+        f"/api/v1/dateien/extern/{extern_id}", params={"unterpfad": "unterordner"}, headers=h
+    )).json()
+    assert any(e["name"] == "tief.txt" for e in tief)
+
+    # Pfad-Ausbruch wird geblockt
+    r = await client.get(
+        f"/api/v1/dateien/extern/{extern_id}/inhalt",
+        params={"unterpfad": "../../etc/passwd"}, headers=h,
+    )
+    assert r.status_code == 404
+
+
+async def test_externe_quelle_nur_admin(umgebung, tmp_path):
+    client, app = umgebung
+    await app.state.auth.benutzer_anlegen("gast", "pw")
+    h_gast = await _anmelden(client, "gast", "pw")
+    h_chef = await _anmelden(client)
+    liste = (await client.get("/api/v1/admin/benutzer", headers=h_chef)).json()
+    gast = next(b for b in liste if b["name"] == "gast")
+    r = await client.post(
+        "/api/v1/admin/externe-quelle",
+        json={"besitzer_id": gast["id"], "name": "X", "pfad": str(tmp_path)},
+        headers=h_gast,
+    )
+    assert r.status_code == 403
+
+
 async def test_sync_journal(umgebung):
     client, _ = umgebung
     h = await _anmelden(client)

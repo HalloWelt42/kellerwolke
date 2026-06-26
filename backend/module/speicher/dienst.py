@@ -5,6 +5,7 @@ Baum, Versionen, Journal). REST-API und WebDAV rufen ausschliesslich diesen
 Dienst, damit ETags und Journal immer konsistent bleiben.
 """
 
+from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 
 
@@ -96,6 +97,34 @@ class SpeicherDienst:
                     return None
                 parent = knoten["id"]
         return knoten
+
+    async def externe_quelle_anlegen(self, besitzer_id, parent_id, name, extern_pfad):
+        """Haengt einen bestehenden Verzeichnisbaum read-only als 'extern'-Knoten
+        ein (Admin-Funktion). Nichts wird kopiert; gelesen wird spaeter direkt."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.extern_anlegen(besitzer_id, parent_id, name, extern_pfad)
+                await repo.journal_anhaengen(besitzer_id, knoten["id"], "erstellt")
+                return knoten
+
+    async def _externe_quelle(self, besitzer_id, knoten_id):
+        knoten = await self.knoten_des_nutzers(besitzer_id, knoten_id)
+        if not knoten or knoten["typ"] != "extern" or not knoten["extern_pfad"]:
+            return None
+        return DateibaumQuelle(knoten["extern_pfad"])
+
+    async def externe_kinder(self, besitzer_id, knoten_id, unterpfad=""):
+        quelle = await self._externe_quelle(besitzer_id, knoten_id)
+        if quelle is None:
+            return None
+        return quelle.auflisten(unterpfad)
+
+    async def externe_datei_lesen(self, besitzer_id, knoten_id, unterpfad):
+        quelle = await self._externe_quelle(besitzer_id, knoten_id)
+        if quelle is None:
+            return None
+        return quelle.lesen(unterpfad)
 
     async def groesse(self, knoten) -> int:
         if knoten["typ"] != "datei" or not knoten["aktuelle_version_id"]:
