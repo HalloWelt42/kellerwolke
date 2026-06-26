@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as api from "./api";
-  import type { ExternEintrag, Knoten } from "./types";
+  import type { ExternEintrag, Knoten, Version } from "./types";
   import Modal from "./Modal.svelte";
 
   type Ansicht = "ordner" | "papierkorb" | "suche" | "extern";
@@ -15,6 +15,8 @@
   let fehler = $state("");
   let suchbegriff = $state("");
   let ziehen = $state(false);
+  let ziehZiel = $state<string | null>(null);
+  let versionen = $state<{ liste: Version[]; name: string } | null>(null);
   let dialog = $state<{ art: "ordner" | "umbenennen" | null; knoten?: Knoten; wert: string }>({
     art: null,
     wert: "",
@@ -78,6 +80,37 @@
   async function runterladen(k: Knoten) {
     try {
       await api.herunterladen(k);
+    } catch (f) {
+      fehler = (f as Error).message;
+    }
+  }
+
+  // --- Verschieben per Drag-and-drop ----------------------------------------
+
+  function ziehStart(e: DragEvent, k: Knoten) {
+    e.dataTransfer?.setData("text/kellerwolke", k.id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }
+
+  async function aufOrdnerFallenlassen(e: DragEvent, ordner: Knoten) {
+    e.preventDefault();
+    e.stopPropagation();
+    ziehZiel = null;
+    const id = e.dataTransfer?.getData("text/kellerwolke");
+    if (!id || id === ordner.id) return;
+    try {
+      await api.verschieben(id, ordner.id);
+      await ladeOrdner();
+    } catch (f) {
+      fehler = (f as Error).message;
+    }
+  }
+
+  // --- Versionen ------------------------------------------------------------
+
+  async function zeigeVersionen(k: Knoten) {
+    try {
+      versionen = { liste: await api.versionen(k.id), name: k.name };
     } catch (f) {
       fehler = (f as Error).message;
     }
@@ -333,8 +366,28 @@
   {:else}
     <ul class="liste">
       {#each eintraege as k (k.id)}
-        <li>
-          <button class="zeile" onclick={() => oeffnen(k)} disabled={ansicht === "papierkorb"}>
+        <li
+          class:zielordner={ziehZiel === k.id}
+          ondragover={ansicht === "ordner" && k.typ === "ordner"
+            ? (e) => {
+                e.preventDefault();
+                ziehZiel = k.id;
+              }
+            : undefined}
+          ondragleave={() => {
+            if (ziehZiel === k.id) ziehZiel = null;
+          }}
+          ondrop={ansicht === "ordner" && k.typ === "ordner"
+            ? (e) => aufOrdnerFallenlassen(e, k)
+            : undefined}
+        >
+          <button
+            class="zeile"
+            onclick={() => oeffnen(k)}
+            disabled={ansicht === "papierkorb"}
+            draggable={ansicht === "ordner"}
+            ondragstart={(e) => ziehStart(e, k)}
+          >
             <i class="sym fa-solid {symbol(k)}" class:ordnerfarbe={k.typ !== "datei"}></i>
             <span class="name">{k.name}</span>
             <span class="zeit">{datum(k.geaendert_am)}</span>
@@ -348,6 +401,9 @@
               {#if k.typ === "datei"}
                 <button class="still" title="Herunterladen" onclick={() => runterladen(k)}>
                   <i class="fa-solid fa-download"></i>
+                </button>
+                <button class="still" title="Versionen" onclick={() => zeigeVersionen(k)}>
+                  <i class="fa-solid fa-clock-rotate-left"></i>
                 </button>
               {/if}
               <button class="still" title="Umbenennen" onclick={() => umbenennenStarten(k)}>
@@ -380,6 +436,25 @@
       <button class="still" onclick={() => (dialog = { art: null, wert: "" })}>Abbrechen</button>
       <button class="primaer" onclick={dialogBestaetigen}>Speichern</button>
     </div>
+  </Modal>
+{/if}
+
+{#if versionen}
+  <Modal titel={`Versionen: ${versionen.name}`} schliessen={() => (versionen = null)}>
+    {#if versionen.liste.length === 0}
+      <p class="leer-hinweis">Keine Versionen vorhanden.</p>
+    {:else}
+      <ul class="versionsliste">
+        {#each versionen.liste as v, i (v.id)}
+          <li>
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span class="vdatum">{datum(v.erstellt_am)}</span>
+            {#if i === 0}<span class="aktuell">aktuell</span>{/if}
+            <span class="zeit">{groesseText(v.groesse)}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </Modal>
 {/if}
 
@@ -547,5 +622,42 @@
     display: flex;
     justify-content: flex-end;
     gap: 0.6rem;
+  }
+  .liste li.zielordner {
+    background: var(--akzent-weich);
+    outline: 1px solid var(--akzent);
+    border-radius: 8px;
+  }
+  .versionsliste {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .versionsliste li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.2rem;
+    border-bottom: 1px solid var(--rand);
+  }
+  .versionsliste i {
+    color: var(--gedaempft);
+  }
+  .vdatum {
+    flex: 1;
+  }
+  .aktuell {
+    font-size: 0.75rem;
+    color: var(--gut);
+    border: 1px solid var(--gut);
+    border-radius: 6px;
+    padding: 0 0.4rem;
+  }
+  .leer-hinweis {
+    color: var(--gedaempft);
+    margin: 0;
   }
 </style>
