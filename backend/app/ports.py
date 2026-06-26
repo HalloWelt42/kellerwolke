@@ -42,7 +42,7 @@ class Quelle(Protocol):
     """Read-only Durchreiche auf einen bestehenden Verzeichnisbaum.
 
     Nichts wird kopiert oder gehasht; gelesen wird direkt von der Platte.
-    Auf dem Live-System z.B. /mnt/tb26, lokal ein Testordner.
+    Im Betrieb ein gemounteter Datentraeger, lokal ein Testordner.
     """
 
     def auflisten(self, relativ: str) -> list[Eintrag]:
