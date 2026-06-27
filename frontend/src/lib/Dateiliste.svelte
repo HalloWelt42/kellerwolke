@@ -16,6 +16,8 @@
     uploadStoppen,
     favoritUmschalten,
     geteiltOeffnen,
+    setzeSortierung,
+    aktuellerOrdner,
   } from "./zustand.svelte";
   import { auswahl } from "./auswahl.svelte";
 
@@ -32,7 +34,62 @@
   import Kontextmenue from "./Kontextmenue.svelte";
   import type { MenuEintrag } from "./Kontextmenue.svelte";
 
-  const geordnet = $derived(zustand.eintraege.map((k) => k.id));
+  // --- Filtern, Sortieren, Lazy-Load -----------------------------------------
+  const gefiltert = $derived.by(() => {
+    const f = zustand.filter.trim().toLowerCase();
+    if (!f) return zustand.eintraege;
+    return zustand.eintraege.filter((k) => k.name.toLowerCase().includes(f));
+  });
+
+  function typrang(k: Knoten): number {
+    return k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2;
+  }
+  const sortiert = $derived.by(() => {
+    const key = zustand.sortKey;
+    const dir = zustand.sortRichtung === "auf" ? 1 : -1;
+    return [...gefiltert].sort((a, b) => {
+      // Ordner/Externe immer vor Dateien, unabhaengig von der Richtung.
+      if (typrang(a) !== typrang(b)) return typrang(a) - typrang(b);
+      let v: number;
+      if (key === "groesse") v = (a.groesse ?? 0) - (b.groesse ?? 0);
+      else if (key === "geaendert")
+        v = new Date(a.geaendert_am).getTime() - new Date(b.geaendert_am).getTime();
+      else v = a.name.localeCompare(b.name, "de", { sensitivity: "base", numeric: true });
+      return v * dir;
+    });
+  });
+
+  const SCHRITT = 200;
+  let sichtbar = $state(SCHRITT);
+  const angezeigt = $derived(sortiert.slice(0, sichtbar));
+  const mehrVorhanden = $derived(sichtbar < sortiert.length);
+
+  // Lazy-Load nur bis zur aktuellen Sichtbarkeitsgrenze rendern; bei
+  // Standort-/Filter-/Sortierwechsel von vorne beginnen (nicht bei Live-Poll).
+  const standort = $derived(
+    `${zustand.bereich}:${aktuellerOrdner() ?? ""}:${zustand.geteiltPfad.length}`,
+  );
+  $effect(() => {
+    standort;
+    zustand.filter = "";
+  });
+  $effect(() => {
+    void standort;
+    void zustand.filter;
+    void zustand.sortKey;
+    void zustand.sortRichtung;
+    sichtbar = SCHRITT;
+  });
+
+  function aufListenScroll() {
+    if (!containerEl || !mehrVorhanden) return;
+    if (containerEl.scrollTop + containerEl.clientHeight >= containerEl.scrollHeight - 300) {
+      sichtbar += SCHRITT;
+    }
+  }
+
+  // Auswahl/Marquee arbeiten auf der angezeigten Reihenfolge.
+  const geordnet = $derived(sortiert.map((k) => k.id));
   const imPapierkorb = $derived(zustand.bereich === "papierkorb");
   const externAnsicht = $derived(zustand.bereich === "extern" && zustand.externBrowse !== null);
   const modus = $derived<"dateien" | "papierkorb" | "suche">(
@@ -450,7 +507,7 @@
       {/each}
     {/if}
   </div>
-{:else if zustand.eintraege.length === 0}
+{:else if sortiert.length === 0}
   <div
     class="liste"
     bind:this={containerEl}
@@ -460,9 +517,10 @@
     ondrop={flaecheDrop}
   >
     <div class="leer">
-      <i class="fa-regular fa-folder-open"></i>
+      <i class="fa-regular {zustand.filter ? 'fa-circle-xmark' : 'fa-folder-open'}"></i>
       <span>
-        {#if zustand.bereich === "papierkorb"}Der Papierkorb ist leer
+        {#if zustand.filter}Kein Treffer für "{zustand.filter}"
+        {:else if zustand.bereich === "papierkorb"}Der Papierkorb ist leer
         {:else if zustand.bereich === "suche"}Nichts gefunden
         {:else if zustand.bereich === "extern"}Keine externen Quellen
         {:else if zustand.bereich === "favoriten"}Noch keine Favoriten - markiere Dateien mit dem Stern
@@ -481,11 +539,12 @@
     bind:this={containerEl}
     role="presentation"
     onmousedown={flaecheMouseDown}
+    onscroll={aufListenScroll}
     ondragover={flaecheDragOver}
     ondragleave={flaecheDragLeave}
     ondrop={flaecheDrop}
   >
-    {#each zustand.eintraege as k (k.id)}
+    {#each angezeigt as k (k.id)}
       <Kachel
         {k}
         gewaehlt={auswahl.istGewaehlt(k.id)}
@@ -506,6 +565,12 @@
         onOrdnerDrop={(e) => ordnerDrop(e, k)}
       />
     {/each}
+    {#if mehrVorhanden}
+      <button class="mehr-laden" style="grid-column: 1 / -1;" onclick={() => (sichtbar += SCHRITT)}>
+        <i class="fa-solid fa-chevron-down"></i>
+        {sortiert.length - sichtbar} weitere von {sortiert.length} anzeigen
+      </button>
+    {/if}
     {#if marquee}
       <div
         class="marquee"
@@ -524,18 +589,61 @@
     bind:this={containerEl}
     role="presentation"
     onmousedown={flaecheMouseDown}
+    onscroll={aufListenScroll}
     ondragover={flaecheDragOver}
     ondragleave={flaecheDragLeave}
     ondrop={flaecheDrop}
   >
     <div class="listenkopf">
       <span></span>
-      <span class="sortbar">Name <i class="fa-solid fa-arrow-down-short-wide"></i></span>
-      <span>Größe</span>
-      <span class="sp-geaendert">{imPapierkorb ? "Gelöscht" : "Geändert"}</span>
+      <button
+        class="sortbar"
+        class:aktiv={zustand.sortKey === "name"}
+        title="Nach Name sortieren"
+        onclick={() => setzeSortierung("name")}
+      >
+        Name
+        {#if zustand.sortKey === "name"}
+          <i
+            class="fa-solid {zustand.sortRichtung === 'auf'
+              ? 'fa-arrow-up-short-wide'
+              : 'fa-arrow-down-short-wide'}"
+          ></i>
+        {/if}
+      </button>
+      <button
+        class="sortbar"
+        class:aktiv={zustand.sortKey === "groesse"}
+        title="Nach Größe sortieren"
+        onclick={() => setzeSortierung("groesse")}
+      >
+        Größe
+        {#if zustand.sortKey === "groesse"}
+          <i
+            class="fa-solid {zustand.sortRichtung === 'auf'
+              ? 'fa-arrow-up-short-wide'
+              : 'fa-arrow-down-short-wide'}"
+          ></i>
+        {/if}
+      </button>
+      <button
+        class="sortbar sp-geaendert"
+        class:aktiv={zustand.sortKey === "geaendert"}
+        title="Nach Datum sortieren"
+        onclick={() => setzeSortierung("geaendert")}
+      >
+        {imPapierkorb ? "Gelöscht" : "Geändert"}
+        {#if zustand.sortKey === "geaendert"}
+          <i
+            class="fa-solid {zustand.sortRichtung === 'auf'
+              ? 'fa-arrow-up-short-wide'
+              : 'fa-arrow-down-short-wide'}"
+          ></i>
+        {/if}
+      </button>
       <span></span>
     </div>
-    {#each zustand.eintraege as k (k.id)}
+    {#each angezeigt as k (k.id)}
       <Dateizeile
         {k}
         gewaehlt={auswahl.istGewaehlt(k.id)}
@@ -558,6 +666,12 @@
         onOrdnerDrop={(e) => ordnerDrop(e, k)}
       />
     {/each}
+    {#if mehrVorhanden}
+      <button class="mehr-laden" onclick={() => (sichtbar += SCHRITT)}>
+        <i class="fa-solid fa-chevron-down"></i>
+        {sortiert.length - sichtbar} weitere von {sortiert.length} anzeigen
+      </button>
+    {/if}
     {#if marquee}
       <div
         class="marquee"

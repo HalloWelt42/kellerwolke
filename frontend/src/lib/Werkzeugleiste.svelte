@@ -35,6 +35,18 @@
 
   <span class="luecke"></span>
 
+  {#if zustand.bereich !== "extern" && zustand.bereich !== "geteilt"}
+    <div class="werkzeug-filter">
+      <i class="fa-solid fa-filter"></i>
+      <input type="text" placeholder="In dieser Ansicht filtern ..." bind:value={zustand.filter} />
+      {#if zustand.filter}
+        <button class="icon-knopf" title="Filter löschen" aria-label="Filter löschen" onclick={() => (zustand.filter = "")} style="width: 24px; height: 24px;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   <div class="ansicht-umschalter">
     <button
       class:aktiv={zustand.ansicht === "liste"}

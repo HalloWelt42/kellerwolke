@@ -461,6 +461,55 @@ textarea {
   letter-spacing: inherit;
   padding: 0;
 }
+.listenkopf .sortbar:hover {
+  color: var(--text-2);
+}
+.listenkopf .sortbar.aktiv {
+  color: var(--text);
+}
+.listenkopf .sortbar.aktiv i {
+  color: var(--akzent);
+}
+.werkzeug-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  background: var(--flaeche-2);
+  border: 1px solid var(--rand);
+  border-radius: var(--r2);
+  padding: 0 var(--a3);
+  height: 36px;
+}
+.werkzeug-filter > i {
+  color: var(--text-3);
+}
+.werkzeug-filter input {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  width: 11rem;
+}
+.mehr-laden {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--a2);
+  width: 100%;
+  padding: var(--a3);
+  color: var(--text-3);
+  font-size: 0.85rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color var(--schnell), background var(--schnell);
+}
+.mehr-laden:hover {
+  color: var(--text);
+  background: var(--flaeche-2);
+}
 .zeile {
   height: var(--zeile-h);
   border-bottom: 1px solid var(--rand);

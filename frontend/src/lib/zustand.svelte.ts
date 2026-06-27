@@ -40,6 +40,9 @@ export const zustand = $state<{
   speicher: SpeicherStatus | null;
   version: string;
   geteiltPfad: Pfadteil[];
+  filter: string;
+  sortKey: "name" | "groesse" | "geaendert";
+  sortRichtung: "auf" | "ab";
 }>({
   bereich: "dateien",
   pfad: [{ id: null, name: "Meine Dateien" }],
@@ -56,7 +59,19 @@ export const zustand = $state<{
   speicher: null,
   version: "",
   geteiltPfad: [],
+  filter: "",
+  sortKey: "name",
+  sortRichtung: "auf",
 });
+
+export function setzeSortierung(key: "name" | "groesse" | "geaendert"): void {
+  if (zustand.sortKey === key) {
+    zustand.sortRichtung = zustand.sortRichtung === "auf" ? "ab" : "auf";
+  } else {
+    zustand.sortKey = key;
+    zustand.sortRichtung = "auf";
+  }
+}
 
 // --- Live-Abgleich ueber das Aenderungs-Journal -----------------------------
 // Pollt das Journal des Nutzers; sobald neue Eintraege auftauchen (eigene
