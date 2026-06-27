@@ -29,6 +29,7 @@ export interface SpeicherStatus {
   quota: number | null;
   gesamt?: number | null;
   frei?: number | null;
+  ort?: string | null;
 }
 
 export interface Version {

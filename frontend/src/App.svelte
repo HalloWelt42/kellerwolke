@@ -19,10 +19,10 @@
   import Breadcrumb from "./lib/Breadcrumb.svelte";
   import Dateiliste from "./lib/Dateiliste.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
-  import Admin from "./lib/Admin.svelte";
+  import Einstellungen from "./lib/Einstellungen.svelte";
   import Modal from "./lib/Modal.svelte";
 
-  let adminOffen = $state(false);
+  let verwaltungOffen = $state(false);
   let nutzerMenuOffen = $state(false);
   let neuerOrdnerOffen = $state(false);
   let papierkorbLeerenOffen = $state(false);
@@ -69,6 +69,8 @@
   <div class="start-laden"><i class="fa-solid fa-cloud fa-beat-fade"></i></div>
 {:else if !auth.angemeldet}
   <Login />
+{:else if verwaltungOffen}
+  <Einstellungen schliessen={() => (verwaltungOffen = false)} />
 {:else}
   <div class="app" class:mit-detail={mitDetail}>
     <header class="kopf">
@@ -110,7 +112,7 @@
                 {thema.aktuell === "hell" ? "Dunkles Thema" : "Helles Thema"}
               </button>
               {#if auth.benutzer?.rolle === "admin"}
-                <button role="menuitem" onclick={() => { nutzerMenuOffen = false; adminOffen = true; }}>
+                <button role="menuitem" onclick={() => { nutzerMenuOffen = false; verwaltungOffen = true; }}>
                   <i class="fa-solid fa-gear"></i> Verwaltung
                 </button>
               {/if}
@@ -181,9 +183,6 @@
     </Modal>
   {/if}
 
-  {#if adminOffen}
-    <Admin schliessen={() => (adminOffen = false)} />
-  {/if}
 {/if}
 
 <style>

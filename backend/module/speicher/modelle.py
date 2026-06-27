@@ -39,6 +39,7 @@ class SpeicherStatusAus(BaseModel):
     quota: int | None = None     # konto-Kontingent, falls gesetzt
     gesamt: int | None = None    # Gesamtgroesse des Datentraegers
     frei: int | None = None      # freier Platz auf dem Datentraeger
+    ort: str | None = None       # aktueller Pfad des Objekt-Pools
 
 
 class VersionAus(BaseModel):

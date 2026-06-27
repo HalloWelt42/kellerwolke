@@ -39,6 +39,7 @@ class SpeicherDienst:
         gesamt, frei = self._datentraeger()
         status["gesamt"] = gesamt
         status["frei"] = frei
+        status["ort"] = str(getattr(self.blobstore, "wurzel", "")) or None
         return status
 
     async def papierkorb_leeren(self, besitzer_id):
