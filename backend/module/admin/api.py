@@ -65,6 +65,14 @@ async def anlegen(eingabe: BenutzerAnlegen, admin=Depends(aktueller_admin), auth
 @router.patch("/benutzer/{benutzer_id}", status_code=204)
 async def aktualisieren(benutzer_id: UUID, eingabe: BenutzerUpdate,
                         admin=Depends(aktueller_admin), auth=Depends(hole_auth)):
+    # Ein Admin darf sich nicht selbst aussperren: weder das eigene Konto
+    # deaktivieren noch sich die Admin-Rolle entziehen (auch wenn es weitere
+    # Admins gaebe). Ergaenzt den Letzter-Admin-Schutz im Auth-Dienst.
+    if str(benutzer_id) == str(admin["id"]):
+        if eingabe.aktiv is False:
+            raise HTTPException(status_code=409, detail="Das eigene Konto kann nicht deaktiviert werden")
+        if eingabe.rolle is not None and eingabe.rolle != "admin":
+            raise HTTPException(status_code=409, detail="Die eigene Admin-Rolle kann nicht entzogen werden")
     try:
         await auth.benutzer_aktualisieren(
             benutzer_id, aktiv=eingabe.aktiv, quota_bytes=eingabe.quota_bytes, rolle=eingabe.rolle

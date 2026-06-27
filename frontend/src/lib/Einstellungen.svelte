@@ -2,6 +2,7 @@
   import * as api from "./api";
   import type { Benutzer, SpeicherStatus } from "./types";
   import { groesseText } from "./format";
+  import { auth } from "./auth.svelte";
 
   interface Props {
     schliessen: () => void;
@@ -181,6 +182,7 @@
                 <select
                   class="feld schmal"
                   value={b.rolle}
+                  disabled={b.id === auth.benutzer?.id}
                   onchange={(e) => rolleSetzen(b, (e.target as HTMLSelectElement).value)}
                 >
                   <option value="mitglied">Mitglied</option>
@@ -189,6 +191,10 @@
                 <button
                   class="einst-status"
                   class:gesperrt={!b.aktiv}
+                  disabled={b.id === auth.benutzer?.id}
+                  title={b.id === auth.benutzer?.id
+                    ? "Das eigene Konto kann nicht gesperrt werden"
+                    : undefined}
                   onclick={() => aktivUmschalten(b)}
                 >
                   {b.aktiv ? "aktiv" : "gesperrt"}

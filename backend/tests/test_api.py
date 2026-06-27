@@ -233,6 +233,26 @@ async def test_letzter_admin_geschuetzt(umgebung):
     assert r.status_code == 409
 
 
+async def test_admin_sperrt_sich_nicht_selbst(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)  # chef ist Admin
+    chef = next(b for b in (await client.get("/api/v1/admin/benutzer", headers=h)).json()
+                if b["name"] == "chef")
+    # Zweiten Admin anlegen, damit es NICHT um den letzten Admin geht.
+    await client.post("/api/v1/admin/benutzer",
+                      json={"name": "co", "passwort": "pw", "rolle": "admin"}, headers=h)
+    # Trotzdem: chef darf sich selbst weder deaktivieren noch herabstufen.
+    r = await client.patch(f"/api/v1/admin/benutzer/{chef['id']}", json={"aktiv": False}, headers=h)
+    assert r.status_code == 409
+    r = await client.patch(f"/api/v1/admin/benutzer/{chef['id']}", json={"rolle": "mitglied"}, headers=h)
+    assert r.status_code == 409
+    # Den anderen Admin darf chef hingegen deaktivieren.
+    co = next(b for b in (await client.get("/api/v1/admin/benutzer", headers=h)).json()
+              if b["name"] == "co")
+    r = await client.patch(f"/api/v1/admin/benutzer/{co['id']}", json={"aktiv": False}, headers=h)
+    assert r.status_code == 204
+
+
 async def test_externe_quelle_einhaengen_und_lesen(umgebung, tmp_path):
     client, _ = umgebung
     h = await _anmelden(client)
