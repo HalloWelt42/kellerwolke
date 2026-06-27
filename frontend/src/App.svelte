@@ -2,7 +2,14 @@
   import { onMount } from "svelte";
   import { auth, ladeStatus, abmelden } from "./lib/auth.svelte";
   import { thema, themaUmschalten } from "./lib/thema.svelte";
-  import { zustand, starteSuche, zeigeDateien, ordnerAnlegen, leerePapierkorb } from "./lib/zustand.svelte";
+  import {
+    zustand,
+    starteSuche,
+    zeigeDateien,
+    ordnerAnlegen,
+    leerePapierkorb,
+    ladeVersion,
+  } from "./lib/zustand.svelte";
   import { auswahl } from "./lib/auswahl.svelte";
   import Login from "./lib/Login.svelte";
   import Navigation from "./lib/Navigation.svelte";
@@ -26,6 +33,7 @@
     if (auth.angemeldet && !initialGeladen) {
       initialGeladen = true;
       zeigeDateien();
+      ladeVersion();
     }
     if (!auth.angemeldet) initialGeladen = false;
   });

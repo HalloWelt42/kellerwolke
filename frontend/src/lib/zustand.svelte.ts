@@ -34,6 +34,7 @@ export const zustand = $state<{
   externEintraege: ExternEintrag[];
   uploads: UploadFortschritt[];
   speicher: SpeicherStatus | null;
+  version: string;
 }>({
   bereich: "dateien",
   pfad: [{ id: null, name: "Meine Dateien" }],
@@ -48,7 +49,16 @@ export const zustand = $state<{
   externEintraege: [],
   uploads: [],
   speicher: null,
+  version: "",
 });
+
+export async function ladeVersion(): Promise<void> {
+  try {
+    zustand.version = await api.version();
+  } catch {
+    // Versionsanzeige ist optional.
+  }
+}
 
 export async function ladeSpeicher(): Promise<void> {
   try {

@@ -38,4 +38,16 @@
   </button>
 
   <Speicheranzeige />
+
+  {#if zustand.version}
+    <div class="nav-version">Kellerwolke v{zustand.version}</div>
+  {/if}
 </nav>
+
+<style>
+  .nav-version {
+    margin: var(--a3) var(--a3) var(--a1);
+    font-size: 0.72rem;
+    color: var(--text-3);
+  }
+</style>

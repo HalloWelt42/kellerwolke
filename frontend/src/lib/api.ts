@@ -78,6 +78,11 @@ export function status(): Promise<AuthStatus> {
   return hole<AuthStatus>("/v1/auth/status");
 }
 
+export async function version(): Promise<string> {
+  const daten = await hole<{ version: string }>("/health");
+  return daten.version;
+}
+
 // --- Dateien ----------------------------------------------------------------
 
 export function kinder(parentId: string | null): Promise<Knoten[]> {

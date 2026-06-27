@@ -293,6 +293,11 @@ textarea {
   font-size: 0.78rem;
   color: var(--text-2);
 }
+.nav-version {
+  margin: var(--a3) var(--a3) var(--a1);
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
 .balken {
   height: 6px;
   border-radius: 3px;
