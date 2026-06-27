@@ -130,6 +130,21 @@ async def test_als_zip_packt_ordner_rekursiv(dienst, benutzer_id):
     assert await dienst.als_zip(benutzer_id, []) is None
 
 
+async def test_externe_quelle_schreibbar(dienst, benutzer_id, tmp_path):
+    import uuid
+
+    extern_wurzel = tmp_path / "extern"
+    extern_wurzel.mkdir()
+    quelle = await dienst.externe_quelle_anlegen(benutzer_id, None, "Stick", str(extern_wurzel))
+    assert await dienst.externe_ordner_anlegen(benutzer_id, quelle["id"], "", "Neu") is True
+    assert await dienst.externe_datei_schreiben(benutzer_id, quelle["id"], "Neu", "a.txt", b"hallo") is True
+    # Auf der Platte und ueber den Lesepfad sichtbar.
+    assert (extern_wurzel / "Neu" / "a.txt").read_bytes() == b"hallo"
+    assert await dienst.externe_datei_lesen(benutzer_id, quelle["id"], "Neu/a.txt") == b"hallo"
+    # Fremder/fehlender Knoten -> False (Isolation).
+    assert await dienst.externe_datei_schreiben(benutzer_id, uuid.uuid4(), "", "x.txt", b"y") is False
+
+
 async def test_journal_zaehlt_monoton(dienst, benutzer_id):
     await dienst.datei_hochladen(benutzer_id, None, "1.txt", b"a")
     await dienst.datei_hochladen(benutzer_id, None, "2.txt", b"b")

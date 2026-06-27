@@ -47,3 +47,18 @@ class DateibaumQuelle:
             ist_ordner=ist_ordner,
             groesse=0 if ist_ordner else ziel.stat().st_size,
         )
+
+    def schreiben(self, relativ: str, daten: bytes) -> None:
+        """Legt eine Datei an oder ueberschreibt sie. Pfad bleibt durch
+        _aufloesen in der Quelle eingegrenzt (kein '..', kein Symlink-Ausbruch)."""
+        ziel = self._aufloesen(relativ)
+        if ziel == self.wurzel or ziel.is_dir():
+            raise IsADirectoryError(relativ)
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_bytes(daten)
+
+    def ordner_anlegen(self, relativ: str) -> None:
+        ziel = self._aufloesen(relativ)
+        if ziel == self.wurzel:
+            raise PermissionError("Wurzel kann nicht angelegt werden")
+        ziel.mkdir(parents=True, exist_ok=True)

@@ -18,6 +18,7 @@ from app.abhaengig import (
 from app.config import EINSTELLUNGEN
 from module.speicher.modelle import (
     ExternEintragAus,
+    ExternOrdnerEingabe,
     FreigabeAus,
     KnotenAus,
     KontoAus,
@@ -132,6 +133,41 @@ async def extern_inhalt(knoten_id: UUID, unterpfad: str,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+@router.post("/extern/{knoten_id}/upload", status_code=204)
+async def extern_upload(knoten_id: UUID, datei: UploadFile, unterpfad: str = Form(default=""),
+                        benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    stuecke, gesamt = [], 0
+    while True:
+        stueck = await datei.read(1024 * 1024)
+        if not stueck:
+            break
+        gesamt += len(stueck)
+        if gesamt > EINSTELLUNGEN.max_upload:
+            raise HTTPException(status_code=413, detail="Datei zu gross")
+        stuecke.append(stueck)
+    try:
+        ok = await speicher.externe_datei_schreiben(
+            benutzer["id"], knoten_id, unterpfad, datei.filename or "datei", b"".join(stuecke)
+        )
+    except (PermissionError, IsADirectoryError, OSError, ValueError):
+        raise HTTPException(status_code=400, detail="Schreiben nicht moeglich")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Keine externe Quelle")
+
+
+@router.post("/extern/{knoten_id}/ordner", status_code=204)
+async def extern_ordner(knoten_id: UUID, eingabe: ExternOrdnerEingabe,
+                        benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    try:
+        ok = await speicher.externe_ordner_anlegen(
+            benutzer["id"], knoten_id, eingabe.unterpfad, eingabe.name
+        )
+    except (PermissionError, OSError, ValueError):
+        raise HTTPException(status_code=400, detail="Anlegen nicht moeglich")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Keine externe Quelle")
 
 
 @router.post("/ordner", response_model=KnotenAus)

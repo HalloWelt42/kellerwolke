@@ -385,6 +385,35 @@ class SpeicherDienst:
             return None
         return quelle.lesen(unterpfad)
 
+    @staticmethod
+    def _basisname(name: str) -> str:
+        """Nur den reinen Dateinamen zulassen - keine Pfadanteile, kein '..'."""
+        rein = Path(name).name
+        if not rein or rein in (".", ".."):
+            raise ValueError("Ungueltiger Name")
+        return rein
+
+    def _externer_pfad(self, unterpfad: str, name: str) -> str:
+        basis = self._basisname(name)
+        unter = (unterpfad or "").strip("/")
+        return f"{unter}/{basis}" if unter else basis
+
+    async def externe_datei_schreiben(self, besitzer_id, knoten_id, unterpfad, name, daten):
+        """Schreibt eine Datei in eine schreibbare externe Quelle. Liefert False,
+        wenn der Knoten keine externe Quelle des Nutzers ist (Isolation)."""
+        quelle = await self._externe_quelle(besitzer_id, knoten_id)
+        if quelle is None:
+            return False
+        quelle.schreiben(self._externer_pfad(unterpfad, name), daten)
+        return True
+
+    async def externe_ordner_anlegen(self, besitzer_id, knoten_id, unterpfad, name):
+        quelle = await self._externe_quelle(besitzer_id, knoten_id)
+        if quelle is None:
+            return False
+        quelle.ordner_anlegen(self._externer_pfad(unterpfad, name))
+        return True
+
     async def groesse(self, knoten) -> int:
         if knoten["typ"] != "datei" or not knoten["aktuelle_version_id"]:
             return 0

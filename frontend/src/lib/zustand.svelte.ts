@@ -460,9 +460,35 @@ export function externBreadcrumb(index: number): void {
 // --- Schreibaktionen --------------------------------------------------------
 
 export async function ordnerAnlegen(name: string): Promise<void> {
+  // In einer schreibbaren externen Quelle landet das Anlegen dort, sonst im
+  // eigenen Baum.
+  const b = zustand.externBrowse;
+  if (zustand.bereich === "extern" && b) {
+    try {
+      await api.externOrdnerAnlegen(b.knotenId, b.unterpfad.join("/"), name);
+      await ladeExtern();
+    } catch (f) {
+      zustand.fehler = (f as Error).message;
+    }
+    return;
+  }
   try {
     await api.ordnerAnlegen(name, aktuellerOrdner());
     await ladeOrdner();
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
+
+async function externHochladen(dateien: File[]): Promise<void> {
+  const b = zustand.externBrowse;
+  if (!b) return;
+  zustand.fehler = "";
+  try {
+    for (const d of dateien) {
+      await api.externHochladen(b.knotenId, b.unterpfad.join("/"), d);
+    }
+    await ladeExtern();
   } catch (f) {
     zustand.fehler = (f as Error).message;
   }
@@ -553,6 +579,11 @@ export async function hochladen(dateien: FileList | File[] | null): Promise<void
   if (!dateien) return;
   const liste = Array.from(dateien);
   if (liste.length === 0) return;
+  // In einer externen Quelle direkt dorthin schreiben (ohne die Fortschritts-
+  // Karte des eigenen Speichers).
+  if (zustand.bereich === "extern" && zustand.externBrowse) {
+    return externHochladen(liste);
+  }
   const ordner = aktuellerOrdner();
   zustand.fehler = "";
   uploadAbgebrochen = false;

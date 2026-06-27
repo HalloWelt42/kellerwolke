@@ -340,6 +340,33 @@ export async function externHerunterladen(
   URL.revokeObjectURL(url);
 }
 
+export function externOrdnerAnlegen(
+  knotenId: string,
+  unterpfad: string,
+  name: string,
+): Promise<void> {
+  return hole<void>(`/v1/dateien/extern/${knotenId}/ordner`, {
+    method: "POST",
+    body: JSON.stringify({ name, unterpfad }),
+  });
+}
+
+export async function externHochladen(
+  knotenId: string,
+  unterpfad: string,
+  datei: File,
+): Promise<void> {
+  const formular = new FormData();
+  formular.append("datei", datei);
+  formular.append("unterpfad", unterpfad);
+  const antwort = await fetch(`/api/v1/dateien/extern/${knotenId}/upload`, {
+    method: "POST",
+    headers: { "X-Kellerwolke-Sitzung": token() },
+    body: formular,
+  });
+  await pruefe(antwort);
+}
+
 // --- Admin ------------------------------------------------------------------
 
 export function listeBenutzer(): Promise<Benutzer[]> {

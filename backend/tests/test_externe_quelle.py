@@ -43,3 +43,22 @@ def test_info(tmp_path):
     quelle = DateibaumQuelle(tmp_path)
     assert quelle.info("unterordner").ist_ordner is True
     assert quelle.info("datei.txt").groesse == 5
+
+
+def test_schreiben_und_ordner_anlegen(tmp_path):
+    quelle = DateibaumQuelle(tmp_path)
+    quelle.ordner_anlegen("neu")
+    quelle.schreiben("neu/bericht.txt", b"Inhalt")
+    assert (tmp_path / "neu").is_dir()
+    assert (tmp_path / "neu" / "bericht.txt").read_bytes() == b"Inhalt"
+    # ueber den Lesepfad wieder sichtbar
+    assert quelle.lesen("neu/bericht.txt") == b"Inhalt"
+
+
+def test_schreiben_kein_ausbruch(tmp_path):
+    wurzel = tmp_path / "quelle"
+    wurzel.mkdir()
+    quelle = DateibaumQuelle(wurzel)
+    with pytest.raises(PermissionError):
+        quelle.schreiben("../eindringling.txt", b"boese")
+    assert not (tmp_path / "eindringling.txt").exists()

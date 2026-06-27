@@ -41,6 +41,13 @@
       <input type="file" multiple onchange={aufDateiwahl} hidden />
     </label>
   {:else if zustand.bereich === "extern" && zustand.externBrowse}
+    <button class="knopf primaer" onclick={onNeuerOrdner}>
+      <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
+    </button>
+    <label class="knopf">
+      <i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen
+      <input type="file" multiple onchange={aufDateiwahl} hidden />
+    </label>
     <button class="knopf" onclick={ladeExtern}>
       <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
     </button>
