@@ -111,6 +111,25 @@ async def test_endgueltig_loeschen_einzeln(dienst, benutzer_id):
     assert await dienst.knoten_endgueltig_loeschen(benutzer_id, knoten["id"]) is False
 
 
+async def test_als_zip_packt_ordner_rekursiv(dienst, benutzer_id):
+    import io
+    import zipfile
+
+    ordner = await dienst.ordner_anlegen(benutzer_id, None, "Paket")
+    await dienst.datei_hochladen(benutzer_id, ordner["id"], "a.txt", b"AAA")
+    unter = await dienst.ordner_anlegen(benutzer_id, ordner["id"], "Unter")
+    await dienst.datei_hochladen(benutzer_id, unter["id"], "b.txt", b"BB")
+    daten = await dienst.als_zip(benutzer_id, [ordner["id"]])
+    assert daten is not None
+    with zipfile.ZipFile(io.BytesIO(daten)) as zf:
+        namen = set(zf.namelist())
+        assert "Paket/a.txt" in namen
+        assert "Paket/Unter/b.txt" in namen
+        assert zf.read("Paket/a.txt") == b"AAA"
+    # Nichts zu packen (leere bzw. nur fremde/ungueltige Auswahl) -> None.
+    assert await dienst.als_zip(benutzer_id, []) is None
+
+
 async def test_journal_zaehlt_monoton(dienst, benutzer_id):
     await dienst.datei_hochladen(benutzer_id, None, "1.txt", b"a")
     await dienst.datei_hochladen(benutzer_id, None, "2.txt", b"b")

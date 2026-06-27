@@ -99,3 +99,7 @@ class UmbenennenEingabe(BaseModel):
 
 class VerschiebenEingabe(BaseModel):
     parent_id: UUID | None = None
+
+
+class ZipEingabe(BaseModel):
+    ids: list[UUID]

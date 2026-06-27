@@ -21,6 +21,7 @@ from module.speicher.modelle import (
     UmbenennenEingabe,
     VerschiebenEingabe,
     VersionAus,
+    ZipEingabe,
 )
 
 router = APIRouter(prefix="/api/v1/dateien", tags=["dateien"])
@@ -160,6 +161,19 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
     knoten = await speicher.datei_hochladen(benutzer["id"], parent_id, name, daten)
     await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
     return KnotenAus.model_validate(knoten)
+
+
+@router.post("/zip")
+async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer),
+                  speicher=Depends(hole_speicher)):
+    daten = await speicher.als_zip(benutzer["id"], [str(i) for i in eingabe.ids])
+    if daten is None:
+        raise HTTPException(status_code=404, detail="Nichts zum Packen")
+    return Response(
+        content=daten,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="kellerwolke.zip"'},
+    )
 
 
 @router.get("/{knoten_id}/inhalt")

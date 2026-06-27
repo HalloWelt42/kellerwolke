@@ -6,6 +6,7 @@
     oeffnen,
     zeigeDetail,
     herunterladen,
+    zipHerunterladen,
     hochladen,
     umbenennen,
     verschiebe,
@@ -342,6 +343,12 @@
       }
       if (!mehrere && k.typ === "datei") {
         eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => herunterladen(k) });
+      } else if (!mehrere && k.typ === "ordner") {
+        eintraege.push({
+          label: "Als ZIP herunterladen",
+          icon: "fa-file-zipper",
+          fn: () => zipHerunterladen([k.id], `${k.name}.zip`),
+        });
       } else if (mehrere) {
         eintraege.push({
           label: "Herunterladen",
@@ -374,10 +381,21 @@
   // --- Stapel-Aktionen --------------------------------------------------------
 
   async function stapelHerunterladen() {
-    for (const id of auswahl.ids) {
-      const k = zustand.eintraege.find((e) => e.id === id);
-      if (k && k.typ === "datei") await herunterladen(k);
+    const ids = [...auswahl.ids];
+    if (ids.length === 0) return;
+    const knoten = ids
+      .map((id) => zustand.eintraege.find((e) => e.id === id))
+      .filter((k): k is Knoten => !!k);
+    // Einzelne Datei direkt, alles andere (mehrere oder Ordner) als ZIP.
+    if (knoten.length === 1 && knoten[0].typ === "datei") {
+      await herunterladen(knoten[0]);
+      return;
     }
+    const name =
+      knoten.length === 1 && knoten[0].typ === "ordner"
+        ? `${knoten[0].name}.zip`
+        : "kellerwolke.zip";
+    await zipHerunterladen(ids, name);
   }
 
   // --- Tastatur ---------------------------------------------------------------

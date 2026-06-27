@@ -487,6 +487,14 @@ export async function herunterladen(k: Knoten): Promise<void> {
   }
 }
 
+export async function zipHerunterladen(ids: string[], dateiname: string): Promise<void> {
+  try {
+    await api.zipHerunterladen(ids, dateiname);
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
+
 let aktuellerUploadGriff: (() => void) | null = null;
 let uploadAbgebrochen = false;
 

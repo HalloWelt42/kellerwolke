@@ -6,8 +6,10 @@ Dienst, damit ETags und Journal immer konsistent bleiben.
 """
 
 import asyncio
+import io
 import os
 import shutil
+import zipfile
 from pathlib import Path
 
 from app.adapters.externe_quelle import DateibaumQuelle
@@ -296,6 +298,36 @@ class SpeicherDienst:
             teile = await repo.chunks(knoten["aktuelle_version_id"])
         bloecke = [self.blobstore.get(str(besitzer_id), c["blob_hash"]) for c in teile]
         return b"".join(bloecke)
+
+    async def als_zip(self, besitzer_id, ids):
+        """Packt die angegebenen Knoten in ein ZIP und liefert die Bytes.
+        Dateien direkt, Ordner rekursiv (mit relativem Pfad im Archiv). Nur
+        eigene, nicht geloeschte Knoten. Liefert None, wenn nichts zu packen
+        ist (Isolation: fremde/geloeschte Knoten werden uebersprungen)."""
+        dateien = []  # (archivpfad, knoten_id)
+
+        async def sammeln(knoten, prefix):
+            if knoten["typ"] == "datei":
+                dateien.append((prefix + knoten["name"], knoten["id"]))
+            elif knoten["typ"] == "ordner":
+                unter = prefix + knoten["name"] + "/"
+                for kind in await self.kinder(besitzer_id, knoten["id"]):
+                    await sammeln(kind, unter)
+
+        for kid in ids:
+            knoten = await self.knoten_des_nutzers(besitzer_id, kid)
+            if not knoten or knoten["geloescht"] or knoten["typ"] not in ("datei", "ordner"):
+                continue
+            await sammeln(knoten, "")
+
+        if not dateien:
+            return None
+
+        puffer = io.BytesIO()
+        with zipfile.ZipFile(puffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for archivpfad, datei_id in dateien:
+                zf.writestr(archivpfad, await self.datei_lesen(besitzer_id, datei_id))
+        return puffer.getvalue()
 
     async def kinder(self, besitzer_id, parent_id):
         async with self.pool.connection() as conn:

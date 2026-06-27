@@ -244,6 +244,24 @@ export async function herunterladen(knoten: Knoten): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export async function zipHerunterladen(ids: string[], dateiname: string): Promise<void> {
+  const antwort = await fetch("/api/v1/dateien/zip", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Kellerwolke-Sitzung": token() },
+    body: JSON.stringify({ ids }),
+  });
+  await pruefe(antwort);
+  const blob = await antwort.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = dateiname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function umbenennen(id: string, name: string): Promise<Knoten> {
   return hole<Knoten>(`/v1/dateien/${id}/name`, {
     method: "PATCH",
