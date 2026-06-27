@@ -72,3 +72,13 @@ export interface ExternEintrag {
   ist_ordner: boolean;
   groesse: number;
 }
+
+export interface Vorgang {
+  id: string;
+  art: string; // z.B. "indizierung"
+  titel: string;
+  status: string; // laeuft | fertig | fehler | abgebrochen
+  erledigt: number;
+  gesamt: number; // 0 = unbestimmt
+  fehler?: string | null;
+}

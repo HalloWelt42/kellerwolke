@@ -12,6 +12,7 @@
     ladeVersion,
     starteLiveAbgleich,
     stoppeLiveAbgleich,
+    vorgaengeUmschalten,
   } from "./lib/zustand.svelte";
   import { auswahl } from "./lib/auswahl.svelte";
   import Login from "./lib/Login.svelte";
@@ -22,6 +23,7 @@
   import Splitscreen from "./lib/Splitscreen.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
   import Einstellungen from "./lib/Einstellungen.svelte";
+  import Vorgaenge from "./lib/Vorgaenge.svelte";
   import Teilen from "./lib/Teilen.svelte";
   import Modal from "./lib/Modal.svelte";
   import type { Knoten } from "./lib/types";
@@ -53,6 +55,9 @@
   const istSplit = $derived(zustand.ansicht === "split" && zustand.bereich === "dateien");
   const mitDetail = $derived(zustand.detail !== null && auswahl.anzahl <= 1 && !istSplit);
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
+  const laufendeVorgaenge = $derived(
+    zustand.vorgaenge.filter((v) => v.status === "laeuft").length,
+  );
 
   function suchen(e: Event) {
     e.preventDefault();
@@ -105,6 +110,17 @@
         {/if}
       </form>
       <div class="kopf-rechts">
+        <button
+          class="icon-knopf kopf-knopf"
+          title="Vorgänge"
+          aria-label="Vorgänge"
+          onclick={vorgaengeUmschalten}
+        >
+          <i class="fa-solid fa-list-check"></i>
+          {#if laufendeVorgaenge > 0}
+            <span class="badge">{laufendeVorgaenge}</span>
+          {/if}
+        </button>
         <div class="nutzer-bereich">
           <button class="nutzer-chip" onclick={() => (nutzerMenuOffen = !nutzerMenuOffen)}>
             <span class="avatar">{avatarText}</span>
@@ -158,6 +174,10 @@
       <DetailPane k={zustand.detail} onTeilen={(k) => (teilenKnoten = k)} />
     {/if}
   </div>
+
+  {#if zustand.vorgaengeOffen}
+    <Vorgaenge />
+  {/if}
 
   {#if neuerOrdnerOffen}
     <Modal titel="Neuer Ordner" schliessen={() => (neuerOrdnerOffen = false)}>

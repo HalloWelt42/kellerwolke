@@ -1,6 +1,6 @@
 import * as api from "./api";
 import { auswahl } from "./auswahl.svelte";
-import type { ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
+import type { ExternEintrag, Knoten, SpeicherStatus, Version, Vorgang } from "./types";
 
 // Zentraler Zustand des Dateibrowsers: Single Source of Truth fuer Navigation,
 // Liste, Detail-Pane und Auswahl. Die Zonen (Navigation, Inhalt, Detail) lesen
@@ -44,6 +44,8 @@ export const zustand = $state<{
   sortKey: "name" | "groesse" | "geaendert";
   sortRichtung: "auf" | "ab";
   navAus: boolean;
+  vorgaenge: Vorgang[];
+  vorgaengeOffen: boolean;
 }>({
   bereich: "dateien",
   pfad: [{ id: null, name: "Meine Dateien" }],
@@ -64,7 +66,42 @@ export const zustand = $state<{
   sortKey: "name",
   sortRichtung: "auf",
   navAus: false,
+  vorgaenge: [],
+  vorgaengeOffen: false,
 });
+
+// --- Hintergrund-Vorgaenge ---------------------------------------------------
+
+export async function ladeVorgaenge(): Promise<void> {
+  try {
+    zustand.vorgaenge = await api.vorgaenge();
+  } catch {
+    // Vorgaenge sind Nebeninfo; Fehler hier nicht aufdraengen.
+  }
+}
+
+export function vorgaengeUmschalten(): void {
+  zustand.vorgaengeOffen = !zustand.vorgaengeOffen;
+  if (zustand.vorgaengeOffen) ladeVorgaenge();
+}
+
+export async function vorgangAbbrechen(id: string): Promise<void> {
+  try {
+    await api.vorgangAbbrechen(id);
+    await ladeVorgaenge();
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
+
+export async function vorgaengeAufraeumen(): Promise<void> {
+  try {
+    await api.vorgaengeAufraeumen();
+    await ladeVorgaenge();
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
 
 export function navUmschalten(): void {
   zustand.navAus = !zustand.navAus;
@@ -117,12 +154,21 @@ async function pollJournal(): Promise<void> {
   }
 }
 
+async function liveTick(): Promise<void> {
+  await pollJournal();
+  // Vorgaenge nur abfragen, wenn die Schublade offen ist oder noch etwas
+  // laeuft - sonst spart man die Anfrage.
+  if (zustand.vorgaengeOffen || zustand.vorgaenge.some((v) => v.status === "laeuft")) {
+    await ladeVorgaenge();
+  }
+}
+
 export function starteLiveAbgleich(): void {
   if (liveTimer) return;
   liveInit = false;
   letzteSeq = 0;
-  pollJournal();
-  liveTimer = setInterval(pollJournal, 4000);
+  liveTick();
+  liveTimer = setInterval(liveTick, 4000);
 }
 
 export function stoppeLiveAbgleich(): void {
@@ -562,5 +608,7 @@ export async function hochladen(dateien: FileList | File[] | null): Promise<void
     zustand.uploads = [];
     await ladeOrdner();
     ladeSpeicher();
+    // Jeder Upload startet einen Indizierungs-Vorgang - sofort anzeigen.
+    ladeVorgaenge();
   }
 }

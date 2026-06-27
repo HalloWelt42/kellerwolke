@@ -8,6 +8,7 @@ import type {
   SpeicherStatus,
   Verschiebung,
   Version,
+  Vorgang,
 } from "./types";
 
 // Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl fuer
@@ -168,6 +169,18 @@ export function papierkorbLeeren(): Promise<void> {
 
 export function speicherStatus(): Promise<SpeicherStatus> {
   return hole<SpeicherStatus>("/v1/dateien/speicher-status");
+}
+
+export function vorgaenge(): Promise<Vorgang[]> {
+  return hole<Vorgang[]>("/v1/vorgaenge");
+}
+
+export function vorgangAbbrechen(id: string): Promise<void> {
+  return hole<void>(`/v1/vorgaenge/${id}/abbrechen`, { method: "POST" });
+}
+
+export function vorgaengeAufraeumen(): Promise<void> {
+  return hole<void>("/v1/vorgaenge/aufraeumen", { method: "POST" });
 }
 
 export function ordnerAnlegen(name: string, parentId: string | null): Promise<Knoten> {

@@ -1501,3 +1501,144 @@ select.feld {
 .pane .zeile .z-akt {
   display: none;
 }
+
+/* ===== Vorgaenge-Schublade (Hintergrund-Jobs) ===== */
+.kopf-knopf {
+  position: relative;
+}
+.kopf-knopf .badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--akzent);
+  color: var(--akzent-text);
+  font-size: 0.62rem;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}
+.vorgaenge {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 384px;
+  background: var(--flaeche);
+  border-left: 1px solid var(--rand);
+  box-shadow: var(--schatten-2);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+}
+.vorgaenge-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--a3) var(--a4);
+  border-bottom: 1px solid var(--rand);
+}
+.vorgaenge-kopf h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+}
+.vorgaenge-liste {
+  padding: var(--a4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--a3);
+  flex: 1;
+}
+.vorgaenge-abschnitt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  margin: var(--a2) 0 calc(-1 * var(--a1));
+}
+.vorgang {
+  border: 1px solid var(--rand);
+  border-radius: var(--r2);
+  background: var(--flaeche-2);
+  padding: var(--a3);
+}
+.vorgang-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  justify-content: space-between;
+  margin-bottom: var(--a2);
+}
+.vorgang-titel {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  min-width: 0;
+  font-weight: 500;
+}
+.vorgang-titel i {
+  color: var(--akzent);
+  width: 16px;
+  text-align: center;
+}
+.vorgang-titel span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-pill {
+  flex: none;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px var(--a2);
+  border-radius: 999px;
+  border: 1px solid;
+}
+.status-pill.laeuft {
+  color: var(--akzent);
+  border-color: var(--akzent);
+}
+.status-pill.fertig {
+  color: var(--gut);
+  border-color: var(--gut);
+}
+.status-pill.fehler {
+  color: var(--gefahr);
+  border-color: var(--gefahr);
+}
+.status-pill.abgebrochen {
+  color: var(--text-3);
+  border-color: var(--rand);
+}
+.vorgang-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--a2);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin-top: var(--a2);
+  font-variant-numeric: tabular-nums;
+}
+.vorgang-aktionen {
+  display: flex;
+  gap: var(--a1);
+  margin-top: var(--a2);
+}
+.vorgang-aktionen .icon-knopf {
+  width: 32px;
+  height: 32px;
+}
+.vorgaenge-fuss {
+  border-top: 1px solid var(--rand);
+  padding: var(--a3) var(--a4);
+  display: flex;
+  justify-content: flex-end;
+}
