@@ -168,12 +168,66 @@ textarea {
   align-items: center;
   gap: var(--a2);
 }
+.nutzer-bereich {
+  position: relative;
+}
 .nutzer-chip {
   display: flex;
   align-items: center;
   gap: var(--a2);
   color: var(--text-2);
-  padding: 0 var(--a2);
+  padding: var(--a1) var(--a2);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--r2);
+  cursor: pointer;
+  font: inherit;
+}
+.nutzer-chip:hover {
+  background: var(--flaeche-2);
+}
+.nutzer-chip .pfeil {
+  font-size: 0.7rem;
+  color: var(--text-3);
+}
+.nutzer-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--flaeche);
+  border: 1px solid var(--rand);
+  border-radius: var(--r2);
+  box-shadow: var(--schatten-2);
+  padding: var(--a1);
+  z-index: 15;
+}
+.nutzer-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--a3);
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: var(--a2) var(--a3);
+  border-radius: var(--r1);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.nutzer-menu button i {
+  width: 16px;
+  text-align: center;
+  color: var(--text-2);
+}
+.nutzer-menu button:hover {
+  background: var(--flaeche-2);
+}
+.nutzer-menu .ktrenner {
+  height: 1px;
+  background: var(--rand);
+  margin: var(--a1) var(--a2);
 }
 .avatar {
   width: 28px;
@@ -445,10 +499,10 @@ textarea {
   min-width: 0;
 }
 .z-name .sym {
-  width: 22px;
+  width: 30px;
   text-align: center;
   color: var(--text-2);
-  font-size: 1.05rem;
+  font-size: 1.55rem;
 }
 .sym.ordner {
   color: var(--ordner);

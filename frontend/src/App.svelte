@@ -14,6 +14,7 @@
   import Modal from "./lib/Modal.svelte";
 
   let adminOffen = $state(false);
+  let nutzerMenuOffen = $state(false);
   let neuerOrdnerOffen = $state(false);
   let papierkorbLeerenOffen = $state(false);
   let ordnerName = $state("");
@@ -81,23 +82,31 @@
         {/if}
       </form>
       <div class="kopf-rechts">
-        <button
-          class="icon-knopf"
-          title={thema.aktuell === "hell" ? "Dunkles Thema" : "Helles Thema"}
-          aria-label="Thema umschalten"
-          onclick={themaUmschalten}
-        >
-          <i class="fa-solid {thema.aktuell === 'hell' ? 'fa-moon' : 'fa-sun'}"></i>
-        </button>
-        {#if auth.benutzer?.rolle === "admin"}
-          <button class="icon-knopf" title="Verwaltung" aria-label="Verwaltung" onclick={() => (adminOffen = true)}>
-            <i class="fa-solid fa-gear"></i>
+        <div class="nutzer-bereich">
+          <button class="nutzer-chip" onclick={() => (nutzerMenuOffen = !nutzerMenuOffen)}>
+            <span class="avatar">{avatarText}</span>
+            {auth.benutzer?.name}
+            <i class="fa-solid fa-chevron-down pfeil"></i>
           </button>
-        {/if}
-        <div class="nutzer-chip"><span class="avatar">{avatarText}</span> {auth.benutzer?.name}</div>
-        <button class="icon-knopf" title="Abmelden" aria-label="Abmelden" onclick={abmelden}>
-          <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
+          {#if nutzerMenuOffen}
+            <div class="nutzer-menu-hg" role="presentation" onclick={() => (nutzerMenuOffen = false)}></div>
+            <div class="nutzer-menu" role="menu">
+              <button role="menuitem" onclick={() => { themaUmschalten(); }}>
+                <i class="fa-solid {thema.aktuell === 'hell' ? 'fa-moon' : 'fa-sun'}"></i>
+                {thema.aktuell === "hell" ? "Dunkles Thema" : "Helles Thema"}
+              </button>
+              {#if auth.benutzer?.rolle === "admin"}
+                <button role="menuitem" onclick={() => { nutzerMenuOffen = false; adminOffen = true; }}>
+                  <i class="fa-solid fa-gear"></i> Verwaltung
+                </button>
+              {/if}
+              <div class="ktrenner"></div>
+              <button role="menuitem" onclick={() => { nutzerMenuOffen = false; abmelden(); }}>
+                <i class="fa-solid fa-right-from-bracket"></i> Abmelden
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
     </header>
 
