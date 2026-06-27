@@ -151,15 +151,15 @@
     <button class="einst-eintrag" class:aktiv={seite === "konten"} onclick={() => (seite = "konten")}>
       <i class="fa-solid fa-users"></i> Konten
     </button>
-    <button class="einst-eintrag" class:aktiv={seite === "extern"} onclick={() => (seite = "extern")}>
-      <i class="fa-solid fa-folder-tree"></i> Externe Quellen
-    </button>
     <button
       class="einst-eintrag"
       class:aktiv={seite === "speicher"}
       onclick={() => (seite = "speicher")}
     >
       <i class="fa-solid fa-hard-drive"></i> Speicherorte
+    </button>
+    <button class="einst-eintrag" class:aktiv={seite === "extern"} onclick={() => (seite = "extern")}>
+      <i class="fa-solid fa-folder-tree"></i> Externe Quellen
     </button>
   </nav>
 

@@ -150,7 +150,7 @@
     </section>
 
     {#if mitDetail && zustand.detail}
-      <DetailPane k={zustand.detail} />
+      <DetailPane k={zustand.detail} onTeilen={(k) => (teilenKnoten = k)} />
     {/if}
   </div>
 

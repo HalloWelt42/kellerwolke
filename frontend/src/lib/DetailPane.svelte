@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { zustand, schliesseDetail, herunterladen } from "./zustand.svelte";
+  import { zustand, schliesseDetail, herunterladen, istSchreibbar } from "./zustand.svelte";
   import { symbol, groesseText, datum, typLabel } from "./format";
   import type { Knoten } from "./types";
 
   interface Props {
     k: Knoten;
+    onTeilen?: (k: Knoten) => void;
   }
-  let { k }: Props = $props();
+  let { k, onTeilen }: Props = $props();
 
   const sym = $derived(symbol(k));
   const pfadText = $derived(
@@ -64,9 +65,16 @@
     </div>
 
     <div class="detail-block" style="margin-top: auto;">
-      <button class="knopf primaer" style="width: 100%;" onclick={() => herunterladen(k)}>
-        <i class="fa-solid fa-download"></i> Herunterladen
-      </button>
+      <div style="display: flex; gap: var(--a2);">
+        <button class="knopf primaer" style="flex: 1;" onclick={() => herunterladen(k)}>
+          <i class="fa-solid fa-download"></i> Herunterladen
+        </button>
+        {#if istSchreibbar()}
+          <button class="knopf" style="flex: 1;" onclick={() => onTeilen?.(k)}>
+            <i class="fa-solid fa-share-nodes"></i> Teilen
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 </aside>
