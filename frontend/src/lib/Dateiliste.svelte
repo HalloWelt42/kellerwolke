@@ -442,7 +442,7 @@
     {/each}
   </div>
 {:else if externAnsicht}
-  <!-- Externe read-only Quelle -->
+  <!-- Externe Quelle -->
   <div class="liste" bind:this={containerEl}>
     {#if zustand.externEintraege.length === 0}
       <div class="leer">

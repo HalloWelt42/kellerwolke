@@ -63,7 +63,6 @@
         <a onclick={() => externBreadcrumb(i + 1)}>{teil}</a>
       {/if}
     {/each}
-    <span class="nur-lesen">nur lesen</span>
   </nav>
 {:else if zustand.bereich === "extern"}
   <nav class="breadcrumb">

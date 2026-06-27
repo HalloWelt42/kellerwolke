@@ -398,7 +398,7 @@ export function oeffnen(k: Knoten): void {
   }
 }
 
-// --- Externe read-only Quelle ----------------------------------------------
+// --- Externe Quellen --------------------------------------------------------
 
 export function externOeffnen(k: Knoten): void {
   zustand.bereich = "extern";

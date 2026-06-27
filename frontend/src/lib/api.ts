@@ -311,7 +311,7 @@ export function suchen(q: string): Promise<Knoten[]> {
   return hole<Knoten[]>(`/v1/suche?q=${encodeURIComponent(q)}`);
 }
 
-// --- Externe Quellen (read-only) --------------------------------------------
+// --- Externe Quellen --------------------------------------------------------
 
 export function externAuflisten(knotenId: string, unterpfad: string): Promise<ExternEintrag[]> {
   return hole<ExternEintrag[]>(
