@@ -6,6 +6,7 @@
     zeigeExterneQuellen,
     zeigeFavoriten,
     zeigeGeteilt,
+    navUmschalten,
   } from "./zustand.svelte";
   import Speicheranzeige from "./Speicheranzeige.svelte";
 
@@ -14,7 +15,17 @@
 </script>
 
 <nav class="nav">
-  <div class="nav-titel">Bereiche</div>
+  <div class="nav-titel">
+    Bereiche
+    <button
+      class="nav-einklapp"
+      title="Navigation ausblenden"
+      aria-label="Navigation ausblenden"
+      onclick={navUmschalten}
+    >
+      <i class="fa-solid fa-angles-left"></i>
+    </button>
+  </div>
 
   <button class="nav-eintrag" class:aktiv={zustand.bereich === "dateien"} onclick={zeigeDateien}>
     <i class="fa-solid fa-folder"></i> Meine Dateien

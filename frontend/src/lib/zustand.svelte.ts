@@ -43,6 +43,7 @@ export const zustand = $state<{
   filter: string;
   sortKey: "name" | "groesse" | "geaendert";
   sortRichtung: "auf" | "ab";
+  navAus: boolean;
 }>({
   bereich: "dateien",
   pfad: [{ id: null, name: "Meine Dateien" }],
@@ -62,7 +63,12 @@ export const zustand = $state<{
   filter: "",
   sortKey: "name",
   sortRichtung: "auf",
+  navAus: false,
 });
+
+export function navUmschalten(): void {
+  zustand.navAus = !zustand.navAus;
+}
 
 export function setzeSortierung(key: "name" | "groesse" | "geaendert"): void {
   if (zustand.sortKey === key) {

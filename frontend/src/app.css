@@ -121,6 +121,22 @@ textarea {
     "kopf kopf kopf"
     "nav inhalt detail";
 }
+/* Sidebar ausgeblendet: Navigation verschwindet, Inhalt nimmt die Breite ein. */
+.app.nav-aus {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "kopf"
+    "inhalt";
+}
+.app.nav-aus.mit-detail {
+  grid-template-columns: 1fr 320px;
+  grid-template-areas:
+    "kopf kopf"
+    "inhalt detail";
+}
+.app.nav-aus > .nav {
+  display: none;
+}
 
 /* ===== Kopfleiste ===== */
 .kopf {
@@ -264,11 +280,28 @@ textarea {
   margin-top: auto;
 }
 .nav-titel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--a2);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text-3);
   padding: var(--a3) var(--a3) var(--a1);
+}
+.nav-einklapp {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r1);
+  transition: color var(--schnell), background var(--schnell);
+}
+.nav-einklapp:hover {
+  color: var(--text);
+  background: var(--flaeche-2);
 }
 .nav-eintrag {
   display: flex;

@@ -75,7 +75,7 @@
 {:else if verwaltungOffen}
   <Einstellungen schliessen={() => (verwaltungOffen = false)} />
 {:else}
-  <div class="app" class:mit-detail={mitDetail}>
+  <div class="app" class:mit-detail={mitDetail} class:nav-aus={zustand.navAus}>
     <header class="kopf">
       <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
       <form class="kopf-suche" onsubmit={suchen}>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { zustand, istSchreibbar, hochladen, ladeExtern } from "./zustand.svelte";
+  import { zustand, istSchreibbar, hochladen, ladeExtern, navUmschalten } from "./zustand.svelte";
 
   interface Props {
     onNeuerOrdner: () => void;
@@ -15,6 +15,17 @@
 </script>
 
 <div class="werkzeuge">
+  {#if zustand.navAus}
+    <button
+      class="icon-knopf"
+      title="Navigation einblenden"
+      aria-label="Navigation einblenden"
+      onclick={navUmschalten}
+    >
+      <i class="fa-solid fa-bars"></i>
+    </button>
+  {/if}
+
   {#if istSchreibbar()}
     <button class="knopf primaer" onclick={onNeuerOrdner}>
       <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
