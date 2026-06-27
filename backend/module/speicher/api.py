@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from psycopg.errors import UniqueViolation
 
-from app.abhaengig import aktueller_benutzer, hole_auth, hole_speicher, hole_suche
+from app.abhaengig import (
+    aktueller_benutzer,
+    hole_auth,
+    hole_speicher,
+    hole_suche,
+    hole_vorgaenge,
+)
 from app.config import EINSTELLUNGEN
 from module.speicher.modelle import (
     ExternEintragAus,
@@ -143,7 +149,7 @@ async def ordner_anlegen(eingabe: OrdnerEingabe, benutzer=Depends(aktueller_benu
 @router.post("/upload", response_model=KnotenAus)
 async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=None),
                     benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher),
-                    suche=Depends(hole_suche)):
+                    suche=Depends(hole_suche), vorgaenge=Depends(hole_vorgaenge)):
     if parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], parent_id):
         raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
     # In Stuecken lesen und harte Obergrenze durchsetzen (Speicher-Schutz).
@@ -159,7 +165,13 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
     daten = b"".join(stuecke)
     name = datei.filename or "datei"
     knoten = await speicher.datei_hochladen(benutzer["id"], parent_id, name, daten)
-    await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
+
+    # Indizierung laeuft als Hintergrund-Vorgang, damit der Upload nicht darauf
+    # wartet und ein Index-Fehler den Upload nicht scheitern laesst.
+    async def _indizieren(_vorgang):
+        await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
+
+    vorgaenge.starte(benutzer["id"], "indizierung", f"{name} indizieren", _indizieren)
     return KnotenAus.model_validate(knoten)
 
 

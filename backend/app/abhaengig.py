@@ -20,6 +20,10 @@ def hole_suche(request: Request):
     return request.app.state.suche
 
 
+def hole_vorgaenge(request: Request):
+    return request.app.state.vorgaenge
+
+
 async def aktueller_benutzer(request: Request) -> dict:
     token = request.headers.get("x-kellerwolke-sitzung", "")
     benutzer = await request.app.state.auth.sitzung_pruefen(token)

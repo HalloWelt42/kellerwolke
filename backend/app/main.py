@@ -21,6 +21,8 @@ from module.speicher.dienst import SpeicherDienst
 from module.suche.api import router as suche_router
 from module.suche.dienst import SuchDienst
 from module.sync.api import router as sync_router
+from module.vorgaenge.api import router as vorgaenge_router
+from module.vorgaenge.dienst import VorgangRegistry
 from webdav.adapter import webdav_einbinden
 
 
@@ -48,10 +50,12 @@ async def lebenszyklus(app: FastAPI):
     aktiv = await app.state.speicher.aktiver_pfad_initialisieren(EINSTELLUNGEN.objekt_pfad)
     app.state.speicher.blobstore.setze_wurzel(aktiv)
     app.state.suche = SuchDienst(pool)
+    app.state.vorgaenge = VorgangRegistry()
     await _admin_seed(app.state.auth)
     try:
         yield
     finally:
+        await app.state.vorgaenge.stoppen()
         await db.stoppen()
 
 
@@ -76,6 +80,7 @@ def app_bauen() -> FastAPI:
     app.include_router(suche_router)
     app.include_router(admin_router)
     app.include_router(sync_router)
+    app.include_router(vorgaenge_router)
     webdav_einbinden(app)
     return app
 

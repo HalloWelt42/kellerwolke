@@ -1,6 +1,8 @@
 """API-Tests (httpx gegen die ASGI-App): Login, Datei-Lebenszyklus, Suche,
 Fremdzugriff-Schutz (Isolation) und Admin-Guard."""
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -9,6 +11,7 @@ from app.main import app_bauen
 from module.auth.dienst import AuthDienst
 from module.speicher.dienst import SpeicherDienst
 from module.suche.dienst import SuchDienst
+from module.vorgaenge.dienst import VorgangRegistry
 
 
 @pytest.fixture
@@ -18,6 +21,7 @@ async def umgebung(pool, tmp_path):
     app.state.auth = AuthDienst(pool)
     app.state.speicher = SpeicherDienst(pool, FilesystemBlobStore(tmp_path))
     app.state.suche = SuchDienst(pool)
+    app.state.vorgaenge = VorgangRegistry()
     await app.state.auth.benutzer_anlegen("chef", "geheim", rolle="admin")
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -107,9 +111,41 @@ async def test_suche_route(umgebung):
     client, _ = umgebung
     h = await _anmelden(client)
     await _upload(client, h, "brief.txt", "Rechnung bezahlt".encode())
-    r = await client.get("/api/v1/suche", params={"q": "Rechnung"}, headers=h)
-    assert r.status_code == 200
-    assert any(k["name"] == "brief.txt" for k in r.json())
+    # Indizierung laeuft jetzt als Hintergrund-Vorgang -> kurz auf das Ergebnis warten.
+    treffer = []
+    for _ in range(50):
+        r = await client.get("/api/v1/suche", params={"q": "Rechnung"}, headers=h)
+        assert r.status_code == 200
+        treffer = r.json()
+        if any(k["name"] == "brief.txt" for k in treffer):
+            break
+        await asyncio.sleep(0.02)
+    assert any(k["name"] == "brief.txt" for k in treffer)
+
+
+async def test_vorgaenge_route(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    await _upload(client, h, "doku.txt", b"Inhalt zum Indizieren")
+    # Der Upload erzeugt einen Indizierungs-Vorgang; er taucht in der Liste auf
+    # und ist nach kurzer Zeit fertig.
+    status = None
+    for _ in range(50):
+        r = await client.get("/api/v1/vorgaenge", headers=h)
+        assert r.status_code == 200
+        liste = r.json()
+        if liste:
+            status = liste[0]["status"]
+            assert liste[0]["art"] == "indizierung"
+            if status == "fertig":
+                break
+        await asyncio.sleep(0.02)
+    assert status == "fertig"
+    # Aufraeumen entfernt abgeschlossene Vorgaenge.
+    r = await client.post("/api/v1/vorgaenge/aufraeumen", headers=h)
+    assert r.status_code == 204
+    r = await client.get("/api/v1/vorgaenge", headers=h)
+    assert r.json() == []
 
 
 async def test_fremdzugriff_gibt_404(umgebung):
