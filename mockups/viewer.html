@@ -25,11 +25,11 @@
       iframe { width: 100%; height: 100%; border: none; display: block; background: var(--bg); }
       .overlay { position: absolute; inset: 0; pointer-events: none; }
       .feldchen {
-        position: absolute; pointer-events: auto;
+        position: absolute; pointer-events: none;
         outline: 1px dashed color-mix(in srgb, var(--akzent) 45%, transparent);
         outline-offset: -1px;
       }
-      .feldchen:hover {
+      .feldchen.aktiv {
         background: color-mix(in srgb, var(--akzent) 12%, transparent);
         outline: 1.5px solid var(--akzent);
         z-index: 5;
@@ -41,9 +41,9 @@
         font-size: 0.62rem; font-weight: 600; line-height: 16px; text-align: center;
         border-radius: 0 0 4px 0;
       }
-      .feldchen:hover .nr { background: var(--akzent-stark); }
+      .feldchen.aktiv .nr { background: var(--akzent-stark); }
       .etikett {
-        position: fixed; z-index: 20; pointer-events: none;
+        position: fixed; z-index: 100; pointer-events: none;
         background: var(--text); color: var(--bg);
         padding: 3px 8px; border-radius: var(--r1); font-size: 0.78rem;
         box-shadow: var(--schatten-2); white-space: nowrap; display: none;
@@ -60,7 +60,7 @@
       <label><input type="checkbox" id="zeigen" checked /> Nummern + Namen</label>
       <span class="hinweis" id="zaehler"></span>
       <span class="luecke"></span>
-      <span class="hinweis">Hover = Name, Klick = Name kopieren</span>
+      <span class="hinweis">Hover zeigt Namen; Tooltips und Bedienung im Mockup funktionieren normal</span>
       <button class="icon-knopf" id="thema" title="Thema umschalten"><i class="fa-solid fa-moon"></i></button>
     </div>
     <div class="buehne">
@@ -87,11 +87,11 @@
         ["suche.html", "13 Suche"],
         ["papierkorb.html", "14 Papierkorb"],
         ["extern.html", "15 Externe Quelle"],
-        ["admin.html", "16 Verwaltung (alt, Overlay)"],
-        ["vorgaenge.html", "17 Vorgaenge"],
-        ["einstellungen.html", "18 Einstellungen (neu, Vollansicht)"],
-        ["splitscreen.html", "19 Splitscreen"],
-        ["teilen.html", "20 Teilen"],
+        ["vorgaenge.html", "16 Vorgaenge"],
+        ["einstellungen.html", "17 Einstellungen / Verwaltung"],
+        ["splitscreen.html", "18 Splitscreen"],
+        ["teilen.html", "19 Teilen"],
+        ["sortfilter.html", "20 Sortieren / Filtern"],
       ];
 
       // Selektor -> Name. Spezifisch zuerst, damit jedes Element den treffendsten
@@ -112,6 +112,8 @@
         [".werkzeuge", "Werkzeugleiste"],
         [".breadcrumb", "Brotkrumen-Pfad"],
         [".nur-lesen", "Nur-lesen-Marke"],
+        [".werkzeug-filter", "Filter (Ansicht)"],
+        [".mehr-laden", "Lazy-Load"],
         [".listenkopf", "Listenkopf"],
         [".aus-box", "Auswahl-Checkbox"],
         [".z-akt", "Zeilen-Aktionen"],
@@ -185,8 +187,11 @@
         return document.documentElement.dataset.theme;
       }
 
+      let boxen = new Map(); // Element -> { box, text }
+
       function baue() {
         overlay.innerHTML = "";
+        boxen = new Map();
         if (!zeigen.checked) {
           zaehler.textContent = "";
           return;
@@ -226,26 +231,42 @@
           nr.className = "nr";
           nr.textContent = n;
           box.appendChild(nr);
-          const text = n + " - " + name;
-          box.addEventListener("mousemove", (ev) => {
-            etikett.textContent = text;
-            etikett.style.display = "block";
-            etikett.style.left = Math.min(ev.clientX + 12, window.innerWidth - etikett.offsetWidth - 8) + "px";
-            etikett.style.top = ev.clientY + 16 + "px";
-          });
-          box.addEventListener("mouseleave", () => (etikett.style.display = "none"));
-          box.addEventListener("click", () => {
-            navigator.clipboard && navigator.clipboard.writeText(name);
-            etikett.textContent = "kopiert: " + name;
-          });
           overlay.appendChild(box);
+          boxen.set(el, { box, text: n + " - " + name });
         }
         zaehler.textContent = n + " benannte Elemente";
+      }
+
+      // Hover wird IM Rahmen erkannt (das Overlay blockiert nichts mehr), damit
+      // native Tooltips und die Bedienelemente des Mockups normal funktionieren.
+      function aufRahmenHover(ev) {
+        for (const { box } of boxen.values()) box.classList.remove("aktiv");
+        let el = ev.target;
+        while (el && !boxen.has(el)) el = el.parentElement;
+        if (!el) {
+          etikett.style.display = "none";
+          return;
+        }
+        const eintrag = boxen.get(el);
+        eintrag.box.classList.add("aktiv");
+        const ir = rahmen.getBoundingClientRect();
+        etikett.textContent = eintrag.text;
+        etikett.style.display = "block";
+        const x = ir.left + ev.clientX + 12;
+        etikett.style.left = Math.min(x, window.innerWidth - etikett.offsetWidth - 8) + "px";
+        etikett.style.top = ir.top + ev.clientY + 16 + "px";
+      }
+      function aufRahmenRaus() {
+        etikett.style.display = "none";
+        for (const { box } of boxen.values()) box.classList.remove("aktiv");
       }
 
       rahmen.addEventListener("load", () => {
         baue();
         try {
+          const doc = rahmen.contentDocument;
+          doc.addEventListener("mousemove", aufRahmenHover);
+          doc.addEventListener("mouseleave", aufRahmenRaus);
           rahmen.contentWindow.addEventListener("scroll", baue, { passive: true });
           rahmen.contentWindow.addEventListener("resize", baue);
         } catch (e) {}

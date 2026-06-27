@@ -479,6 +479,49 @@ textarea {
   align-items: center;
   gap: var(--a1);
 }
+.listenkopf .sortbar:hover {
+  color: var(--text-2);
+}
+.listenkopf .sortbar.aktiv {
+  color: var(--text);
+}
+.listenkopf .sortbar.aktiv i {
+  color: var(--akzent);
+}
+
+/* Filter in der Werkzeugleiste */
+.werkzeug-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  background: var(--flaeche-2);
+  border: 1px solid var(--rand);
+  border-radius: var(--r2);
+  padding: 0 var(--a3);
+  height: 36px;
+}
+.werkzeug-filter i {
+  color: var(--text-3);
+}
+.werkzeug-filter input {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  width: 12rem;
+}
+
+/* Lazy-Load-Fuss bei sehr grossen Listen */
+.mehr-laden {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--a2);
+  padding: var(--a3);
+  color: var(--text-3);
+  font-size: 0.85rem;
+}
 .zeile {
   height: var(--zeile-h);
   border-bottom: 1px solid var(--rand);

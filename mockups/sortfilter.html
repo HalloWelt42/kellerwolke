@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Sortieren, Filtern, Lazy-Load</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip">
+              <span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche</div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+      </nav>
+
+      <section class="inhalt">
+        <div class="werkzeuge">
+          <button class="knopf primaer"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <button class="knopf"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</button>
+          <span class="luecke"></span>
+          <!-- Filter: grenzt die aktuelle Ansicht ein -->
+          <div class="werkzeug-filter">
+            <i class="fa-solid fa-filter"></i>
+            <input type="text" placeholder="In dieser Ansicht filtern ..." value="2026" />
+          </div>
+          <div class="ansicht-umschalter">
+            <button class="aktiv" title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+          </div>
+        </div>
+
+        <nav class="breadcrumb">
+          <a>Meine Dateien</a><i class="fa-solid fa-chevron-right"></i>
+          <span class="aktuell">Belege</span>
+        </nav>
+
+        <div class="liste">
+          <!-- Sortierbare Spaltenkoepfe: aktive Spalte zeigt Richtung -->
+          <div class="listenkopf">
+            <span></span>
+            <span class="sortbar aktiv" title="Nach Name sortieren">
+              Name <i class="fa-solid fa-arrow-up-short-wide"></i>
+            </span>
+            <span class="sortbar" title="Nach Groesse sortieren">Größe</span>
+            <span class="sortbar sp-geaendert" title="Nach Datum sortieren">Geändert</span>
+            <span></span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-pdf"></i><span class="titel">Abrechnung_2026.pdf</span></span>
+            <span class="z-meta">248 KB</span>
+            <span class="z-meta z-geaendert">11.05.2026, 22:05</span><span class="z-akt"></span>
+          </div>
+
+          <!-- Grenzfall: extrem langer Dateiname (wird sauber abgeschnitten) -->
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name">
+              <i class="sym fa-solid fa-file-lines"></i>
+              <span class="titel">Ganz_besonders_langer_Dateiname_der_die_komplette_Spalte_sprengt_und_trotzdem_sauber_mit_Auslassung_endet_2026_final_v3.txt</span>
+            </span>
+            <span class="z-meta">3 KB</span>
+            <span class="z-meta z-geaendert">09.05.2026, 14:22</span><span class="z-akt"></span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-excel"></i><span class="titel">Nebenkosten_2026.xlsx</span></span>
+            <span class="z-meta">86 KB</span>
+            <span class="z-meta z-geaendert">28.04.2026, 11:30</span><span class="z-akt"></span>
+          </div>
+
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-image"></i><span class="titel">Quittung_Baumarkt_2026.jpg</span></span>
+            <span class="z-meta">1,8 MB</span>
+            <span class="z-meta z-geaendert">21.04.2026, 16:02</span><span class="z-akt"></span>
+          </div>
+
+          <!-- Lazy-Load: bei sehr grossen Listen werden weitere Zeilen beim
+               Scrollen nachgeladen; unten ein Skelett + Hinweis -->
+          <div class="skelett-zeile">
+            <span class="sk kreis"></span><span class="sk" style="width: 52%"></span>
+            <span class="sk" style="width: 60%"></span><span class="sk" style="width: 80%"></span>
+          </div>
+          <div class="skelett-zeile">
+            <span class="sk kreis"></span><span class="sk" style="width: 38%"></span>
+            <span class="sk" style="width: 60%"></span><span class="sk" style="width: 80%"></span>
+          </div>
+          <div class="mehr-laden">
+            <i class="fa-solid fa-spinner fa-spin"></i> weitere von 12.480 Dateien werden geladen ...
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
