@@ -22,6 +22,8 @@ export interface Knoten {
   groesse?: number | null;
   // Anzahl nicht geloeschter Kinder (fuer den Ordner-Zaehler).
   kinder_anzahl?: number | null;
+  // Vom Nutzer als Favorit markiert.
+  favorit?: boolean;
 }
 
 export interface SpeicherStatus {

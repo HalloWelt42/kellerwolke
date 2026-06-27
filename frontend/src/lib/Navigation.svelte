@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { zustand, zeigeDateien, zeigePapierkorb, zeigeExterneQuellen } from "./zustand.svelte";
+  import {
+    zustand,
+    zeigeDateien,
+    zeigePapierkorb,
+    zeigeExterneQuellen,
+    zeigeFavoriten,
+  } from "./zustand.svelte";
   import Speicheranzeige from "./Speicheranzeige.svelte";
 
   // Linke Zone: Bereiche. Favoriten und Geteilt sind noch nicht hinterlegt und
@@ -13,8 +19,8 @@
     <i class="fa-solid fa-folder"></i> Meine Dateien
   </button>
 
-  <button class="nav-eintrag" disabled title="Bald verfügbar">
-    <i class="fa-solid fa-star"></i> Favoriten <span class="bald">bald</span>
+  <button class="nav-eintrag" class:aktiv={zustand.bereich === "favoriten"} onclick={zeigeFavoriten}>
+    <i class="fa-solid fa-star"></i> Favoriten
   </button>
 
   <button class="nav-eintrag" disabled title="Bald verfügbar">

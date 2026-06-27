@@ -107,6 +107,14 @@ export function papierkorb(): Promise<Knoten[]> {
   return hole<Knoten[]>("/v1/dateien/papierkorb");
 }
 
+export function favoriten(): Promise<Knoten[]> {
+  return hole<Knoten[]>("/v1/dateien/favoriten");
+}
+
+export function favoritSetzen(id: string, an: boolean): Promise<void> {
+  return hole<void>(`/v1/dateien/${id}/favorit`, { method: an ? "POST" : "DELETE" });
+}
+
 export function papierkorbLeeren(): Promise<void> {
   return hole<void>("/v1/dateien/papierkorb", { method: "DELETE" });
 }

@@ -7,7 +7,7 @@ import type { ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
 // hier und rufen die Aktionen auf. Backend-Funktionen kommen unveraendert aus
 // api.ts.
 
-export type Bereich = "dateien" | "extern" | "papierkorb" | "suche";
+export type Bereich = "dateien" | "extern" | "papierkorb" | "suche" | "favoriten";
 export type Ansicht = "liste" | "grid";
 
 export interface Pfadteil {
@@ -66,6 +66,7 @@ let liveTimer: ReturnType<typeof setInterval> | null = null;
 
 function aktualisiereAnsicht(): void {
   if (zustand.bereich === "dateien") ladeOrdner();
+  else if (zustand.bereich === "favoriten") ladeMit(() => api.favoriten());
   else if (zustand.bereich === "papierkorb") ladeMit(() => api.papierkorb());
   else if (zustand.bereich === "suche" && zustand.suchbegriff)
     ladeMit(() => api.suchen(zustand.suchbegriff));
@@ -182,6 +183,25 @@ export function zeigeDateien(): void {
   ladeOrdner();
 }
 
+export function zeigeFavoriten(): void {
+  zustand.bereich = "favoriten";
+  zustand.externBrowse = null;
+  zustand.suchbegriff = "";
+  auswahl.leeren();
+  detailSchliessen();
+  ladeMit(() => api.favoriten());
+}
+
+export async function favoritUmschalten(k: Knoten): Promise<void> {
+  try {
+    await api.favoritSetzen(k.id, !k.favorit);
+    if (zustand.bereich === "favoriten") await ladeMit(() => api.favoriten());
+    else await ladeOrdner();
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
+
 export function zeigePapierkorb(): void {
   zustand.bereich = "papierkorb";
   zustand.externBrowse = null;
@@ -252,10 +272,25 @@ export function schliesseDetail(): void {
 
 // --- Oeffnen (Doppelklick) --------------------------------------------------
 
+// Ordner frisch oeffnen (aus Favoriten/Suche): Bereich auf Dateien stellen und
+// den Pfad auf [Wurzel, Ordner] setzen (volle Ahnenkette ist dort nicht bekannt).
+export function oeffneOrdnerFrisch(k: Knoten): void {
+  zustand.bereich = "dateien";
+  zustand.pfad = [{ id: null, name: "Meine Dateien" }, { id: k.id, name: k.name }];
+  auswahl.leeren();
+  detailSchliessen();
+  ladeOrdner();
+}
+
 export function oeffnen(k: Knoten): void {
-  if (k.typ === "ordner") oeffneOrdner(k);
-  else if (k.typ === "extern") externOeffnen(k);
-  else herunterladen(k);
+  if (k.typ === "ordner") {
+    if (zustand.bereich === "dateien") oeffneOrdner(k);
+    else oeffneOrdnerFrisch(k);
+  } else if (k.typ === "extern") {
+    externOeffnen(k);
+  } else {
+    herunterladen(k);
+  }
 }
 
 // --- Externe read-only Quelle ----------------------------------------------

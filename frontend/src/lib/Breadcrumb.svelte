@@ -63,6 +63,10 @@
   <nav class="breadcrumb">
     <span class="aktuell">Externe Quellen</span>
   </nav>
+{:else if zustand.bereich === "favoriten"}
+  <nav class="breadcrumb">
+    <i class="fa-solid fa-star"></i> <span class="aktuell">Favoriten</span>
+  </nav>
 {:else if zustand.bereich === "papierkorb"}
   <nav class="breadcrumb">
     <i class="fa-solid fa-trash"></i> <span class="aktuell">Papierkorb</span>

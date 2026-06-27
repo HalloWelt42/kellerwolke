@@ -32,6 +32,8 @@ class KnotenAus(BaseModel):
     groesse: int | None = None
     # Anzahl nicht geloeschter Kinder (fuer den Ordner-Zaehler); None ausserhalb der Liste.
     kinder_anzahl: int | None = None
+    # Vom Nutzer als Favorit markiert.
+    favorit: bool = False
 
 
 class SpeicherStatusAus(BaseModel):

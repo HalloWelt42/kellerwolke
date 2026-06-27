@@ -48,6 +48,11 @@ async def papierkorb(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole
     return [KnotenAus.model_validate(k) for k in await speicher.papierkorb(benutzer["id"])]
 
 
+@router.get("/favoriten", response_model=list[KnotenAus])
+async def favoriten(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    return [KnotenAus.model_validate(k) for k in await speicher.favoriten(benutzer["id"])]
+
+
 @router.delete("/papierkorb", status_code=204)
 async def papierkorb_leeren(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     await speicher.papierkorb_leeren(benutzer["id"])
@@ -178,6 +183,20 @@ async def loeschen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
     if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
     await speicher.loeschen(benutzer["id"], knoten_id)
+
+
+@router.post("/{knoten_id}/favorit", status_code=204)
+async def favorit_an(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+                     speicher=Depends(hole_speicher)):
+    if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    await speicher.favorit_setzen(benutzer["id"], knoten_id, True)
+
+
+@router.delete("/{knoten_id}/favorit", status_code=204)
+async def favorit_aus(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+                      speicher=Depends(hole_speicher)):
+    await speicher.favorit_setzen(benutzer["id"], knoten_id, False)
 
 
 @router.post("/{knoten_id}/wiederherstellen", response_model=KnotenAus)

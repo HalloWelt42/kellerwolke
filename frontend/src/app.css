@@ -908,6 +908,9 @@ textarea {
   background: var(--gefahr-weich);
   color: var(--gefahr);
 }
+.icon-knopf.fav {
+  color: var(--ordner);
+}
 .feld {
   font: inherit;
   color: var(--text);

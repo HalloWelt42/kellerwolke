@@ -2,7 +2,7 @@
   import type { Knoten } from "./types";
   import { symbol, groesseText, datum } from "./format";
 
-  export type RowAktion = "herunterladen" | "umbenennen" | "loeschen" | "wiederherstellen";
+  export type RowAktion = "herunterladen" | "umbenennen" | "loeschen" | "wiederherstellen" | "favorit";
 
   interface Props {
     k: Knoten;
@@ -151,6 +151,17 @@
         <i class="fa-solid fa-rotate-left"></i>
       </button>
     {:else}
+      <button
+        class="icon-knopf"
+        class:fav={k.favorit}
+        title={k.favorit ? "Aus Favoriten entfernen" : "Zu Favoriten"}
+        onclick={(e) => {
+          e.stopPropagation();
+          onAktion("favorit");
+        }}
+      >
+        <i class="{k.favorit ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+      </button>
       {#if k.typ === "datei"}
         <button
           class="icon-knopf"

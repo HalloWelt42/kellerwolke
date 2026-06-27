@@ -14,6 +14,7 @@
     externGehe,
     externRunter,
     uploadStoppen,
+    favoritUmschalten,
   } from "./zustand.svelte";
   import { auswahl } from "./auswahl.svelte";
   import { groesseText, datum, symbolFuerName, zeitText } from "./format";
@@ -104,6 +105,7 @@
     else if (art === "umbenennen") umbenennenStart(k);
     else if (art === "loeschen") loeschen([k.id]);
     else if (art === "wiederherstellen") wiederherstellen([k.id]);
+    else if (art === "favorit") favoritUmschalten(k);
   }
 
   // --- Drag-and-drop (verschieben) -------------------------------------------
@@ -405,6 +407,7 @@
         {#if zustand.bereich === "papierkorb"}Der Papierkorb ist leer
         {:else if zustand.bereich === "suche"}Nichts gefunden
         {:else if zustand.bereich === "extern"}Keine externen Quellen
+        {:else if zustand.bereich === "favoriten"}Noch keine Favoriten - markiere Dateien mit dem Stern
         {:else}Dieser Ordner ist leer - Dateien hierher ziehen oder hochladen{/if}
       </span>
     </div>

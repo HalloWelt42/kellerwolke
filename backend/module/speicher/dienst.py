@@ -63,6 +63,22 @@ class SpeicherDienst:
         status["ort"] = str(getattr(self.blobstore, "wurzel", "")) or None
         return status
 
+    # --- Favoriten ------------------------------------------------------------
+
+    async def favoriten(self, besitzer_id):
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            return await repo.favoriten(besitzer_id)
+
+    async def favorit_setzen(self, besitzer_id, knoten_id, an: bool):
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                if an:
+                    await repo.favorit_setzen(besitzer_id, knoten_id)
+                else:
+                    await repo.favorit_entfernen(besitzer_id, knoten_id)
+
     # --- Speicherort (Datenablage) -------------------------------------------
 
     async def aktiver_pfad(self) -> str:

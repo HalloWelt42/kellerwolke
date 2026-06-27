@@ -83,29 +83,57 @@ class PostgresMetadataRepository:
     async def kinder(self, besitzer_id, parent_id):
         # Groesse der aktuellen Version gleich mitliefern (LEFT JOIN, hoechstens
         # ein Treffer je Knoten), damit die Liste sie ohne Zusatzabfrage zeigt.
-        # Zusaetzlich die Kinderzahl je Ordner (fuer den Ordner-Zaehler in der UI).
-        zaehler = (
+        # Zusaetzlich die Kinderzahl je Ordner (Zaehler) und Favoriten-Markierung.
+        zusatz = (
             "(SELECT count(*) FROM knoten c "
-            "WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl"
+            "WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl, "
+            "EXISTS(SELECT 1 FROM favorit f "
+            "WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit"
         )
         if parent_id is None:
             return await self._alle(
-                f"SELECT k.*, v.groesse, {zaehler} FROM knoten k "
+                f"SELECT k.*, v.groesse, {zusatz} FROM knoten k "
                 "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
                 "WHERE k.besitzer_id=%s AND k.parent_id IS NULL "
                 "AND NOT k.geloescht "
-            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
-            "lower(k.name)",
+                "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
+                "lower(k.name)",
                 (besitzer_id,),
             )
         return await self._alle(
-            f"SELECT k.*, v.groesse, {zaehler} FROM knoten k "
+            f"SELECT k.*, v.groesse, {zusatz} FROM knoten k "
             "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
             "WHERE k.besitzer_id=%s AND k.parent_id=%s "
             "AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
             "lower(k.name)",
             (besitzer_id, parent_id),
+        )
+
+    async def favoriten(self, besitzer_id):
+        return await self._alle(
+            "SELECT k.*, v.groesse, true AS favorit, "
+            "(SELECT count(*) FROM knoten c WHERE c.parent_id = k.id AND NOT c.geloescht) "
+            "AS kinder_anzahl "
+            "FROM favorit f JOIN knoten k ON k.id = f.knoten_id "
+            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "WHERE f.benutzer_id=%s AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
+            "lower(k.name)",
+            (besitzer_id,),
+        )
+
+    async def favorit_setzen(self, besitzer_id, knoten_id):
+        await self.conn.execute(
+            "INSERT INTO favorit (benutzer_id, knoten_id) VALUES (%s, %s) "
+            "ON CONFLICT DO NOTHING",
+            (besitzer_id, knoten_id),
+        )
+
+    async def favorit_entfernen(self, besitzer_id, knoten_id):
+        await self.conn.execute(
+            "DELETE FROM favorit WHERE benutzer_id=%s AND knoten_id=%s",
+            (besitzer_id, knoten_id),
         )
 
     async def speicher_status(self, besitzer_id):
