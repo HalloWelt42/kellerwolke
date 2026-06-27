@@ -49,6 +49,9 @@ class Einstellungen:
     admin_name: str = _text("KELLERWOLKE_ADMIN_NAME", "")
     admin_passwort: str = _text("KELLERWOLKE_ADMIN_PASSWORT", "")
     max_upload: int = _zahl("KELLERWOLKE_MAX_UPLOAD", 2_000_000_000)
+    # ZIP wird im Speicher gebaut; Gesamtgroesse deckeln (Schutz vor OOM/DoS,
+    # gerade auf dem Pi). Bei Bedarf hochsetzen.
+    max_zip: int = _zahl("KELLERWOLKE_MAX_ZIP", 500_000_000)
 
     @property
     def dsn(self) -> str:

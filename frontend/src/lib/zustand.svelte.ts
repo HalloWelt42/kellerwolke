@@ -584,6 +584,9 @@ export async function hochladen(dateien: FileList | File[] | null): Promise<void
   if (zustand.bereich === "extern" && zustand.externBrowse) {
     return externHochladen(liste);
   }
+  // Kein zweiter, ueberlappender Upload: der wuerde Fortschrittskarte und
+  // Abbruch-Griff des laufenden ueberschreiben.
+  if (zustand.uploads.length > 0) return;
   const ordner = aktuellerOrdner();
   zustand.fehler = "";
   uploadAbgebrochen = false;

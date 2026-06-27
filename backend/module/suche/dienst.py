@@ -15,7 +15,8 @@ from module.suche.extraktion import text_extrahieren
 
 def _name_tokens(name: str) -> str:
     # Trennzeichen zu Leerzeichen, damit "rechnung.txt" als 'rechnung' 'txt' indexiert.
-    return re.sub(r"[._/\\-]+", " ", name)
+    # NUL-Bytes entfernen - PostgreSQL-Textfelder lehnen sie ab (wie beim Inhalt).
+    return re.sub(r"[._/\\-]+", " ", name).replace("\x00", " ")
 
 
 class SuchDienst:

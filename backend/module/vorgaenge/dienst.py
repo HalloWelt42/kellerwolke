@@ -25,6 +25,11 @@ class Vorgang:
     task: Optional[asyncio.Task] = field(default=None, repr=False)
 
 
+# So viele abgeschlossene Vorgaenge bleiben je Nutzer hoechstens sichtbar -
+# damit das Dict ohne manuelles Aufraeumen nicht unbegrenzt waechst.
+_MAX_FERTIG_PRO_NUTZER = 50
+
+
 class VorgangRegistry:
     def __init__(self) -> None:
         self._vorgaenge: dict[str, Vorgang] = {}
@@ -41,7 +46,20 @@ class VorgangRegistry:
         v = Vorgang(id=str(uuid.uuid4()), besitzer_id=str(besitzer_id), art=art, titel=titel)
         self._vorgaenge[v.id] = v
         v.task = asyncio.create_task(self._lauf(v, arbeit))
+        self._kappe(str(besitzer_id))
         return v
+
+    def _kappe(self, besitzer_id: str) -> None:
+        """Aelteste abgeschlossene Vorgaenge des Nutzers FIFO entfernen, wenn die
+        Obergrenze ueberschritten ist. Laufende bleiben unangetastet."""
+        fertig = [
+            vid
+            for vid, v in self._vorgaenge.items()
+            if v.besitzer_id == besitzer_id and v.status != "laeuft"
+        ]
+        ueberzaehlig = len(fertig) - _MAX_FERTIG_PRO_NUTZER
+        for vid in fertig[:max(0, ueberzaehlig)]:
+            del self._vorgaenge[vid]
 
     async def _lauf(self, v: Vorgang, arbeit) -> None:
         try:

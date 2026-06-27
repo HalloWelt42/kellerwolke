@@ -14,6 +14,11 @@ from pathlib import Path
 
 from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.postgres_metadata import PostgresMetadataRepository
+from app.config import EINSTELLUNGEN
+
+
+class ArchivZuGross(Exception):
+    """Die ZIP-Auswahl ueberschreitet die konfigurierte Gesamtgroesse."""
 
 
 def _kopiere_pool(quelle, ziel, fortschritt):
@@ -299,35 +304,74 @@ class SpeicherDienst:
         bloecke = [self.blobstore.get(str(besitzer_id), c["blob_hash"]) for c in teile]
         return b"".join(bloecke)
 
+    async def _datei_groesse(self, knoten):
+        g = knoten.get("groesse")
+        return g if g is not None else await self.groesse(knoten)
+
     async def als_zip(self, besitzer_id, ids):
         """Packt die angegebenen Knoten in ein ZIP und liefert die Bytes.
-        Dateien direkt, Ordner rekursiv (mit relativem Pfad im Archiv). Nur
-        eigene, nicht geloeschte Knoten. Liefert None, wenn nichts zu packen
-        ist (Isolation: fremde/geloeschte Knoten werden uebersprungen)."""
-        dateien = []  # (archivpfad, knoten_id)
+        Dateien direkt, Ordner rekursiv (auch leere als Verzeichniseintrag). Nur
+        eigene, nicht geloeschte Knoten. Liefert None, wenn nichts zu packen ist.
+        Wirft ArchivZuGross, wenn die Gesamtgroesse die Grenze sprengt (das ZIP
+        entsteht im Speicher - Schutz vor OOM/DoS)."""
+        eintraege = []  # (archivpfad, knoten_id | None); None = Verzeichniseintrag
+        gesamt = 0
 
         async def sammeln(knoten, prefix):
+            nonlocal gesamt
             if knoten["typ"] == "datei":
-                dateien.append((prefix + knoten["name"], knoten["id"]))
+                gesamt += await self._datei_groesse(knoten)
+                if gesamt > EINSTELLUNGEN.max_zip:
+                    raise ArchivZuGross()
+                eintraege.append((prefix + knoten["name"], knoten["id"]))
             elif knoten["typ"] == "ordner":
                 unter = prefix + knoten["name"] + "/"
+                eintraege.append((unter, None))
                 for kind in await self.kinder(besitzer_id, knoten["id"]):
                     await sammeln(kind, unter)
 
-        for kid in ids:
+        # dict.fromkeys entdoppelt mehrfach uebergebene IDs (kein Doppel-Pack).
+        for kid in dict.fromkeys(ids):
             knoten = await self.knoten_des_nutzers(besitzer_id, kid)
             if not knoten or knoten["geloescht"] or knoten["typ"] not in ("datei", "ordner"):
                 continue
             await sammeln(knoten, "")
 
-        if not dateien:
+        if not eintraege:
             return None
 
+        belegt: set[str] = set()
+
+        def eindeutig(pfad: str) -> str:
+            # Gleiche Archivpfade (z.B. zwei 'bericht.txt' aus verschiedenen
+            # Ordnern) wuerden sich beim Entpacken ueberschreiben - durchnummerieren.
+            if pfad not in belegt:
+                belegt.add(pfad)
+                return pfad
+            stamm, punkt, endung = pfad.rpartition(".")
+            basis, suffix = (stamm, "." + endung) if punkt else (pfad, "")
+            n = 2
+            while f"{basis} ({n}){suffix}" in belegt:
+                n += 1
+            neu = f"{basis} ({n}){suffix}"
+            belegt.add(neu)
+            return neu
+
         puffer = io.BytesIO()
+        geschrieben = 0
         with zipfile.ZipFile(puffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for archivpfad, datei_id in dateien:
-                zf.writestr(archivpfad, await self.datei_lesen(besitzer_id, datei_id))
-        return puffer.getvalue()
+            for archivpfad, knoten_id in eintraege:
+                if knoten_id is None:
+                    zf.writestr(eindeutig(archivpfad), b"")  # (leerer) Ordner
+                    geschrieben += 1
+                    continue
+                try:
+                    inhalt = await self.datei_lesen(besitzer_id, knoten_id)
+                except FileNotFoundError:
+                    continue  # waehrend des Packens entfernt (TOCTOU): ueberspringen
+                zf.writestr(eindeutig(archivpfad), inhalt)
+                geschrieben += 1
+        return puffer.getvalue() if geschrieben else None
 
     async def kinder(self, besitzer_id, parent_id):
         async with self.pool.connection() as conn:
@@ -369,7 +413,12 @@ class SpeicherDienst:
 
     async def _externe_quelle(self, besitzer_id, knoten_id):
         knoten = await self.knoten_des_nutzers(besitzer_id, knoten_id)
-        if not knoten or knoten["typ"] != "extern" or not knoten["extern_pfad"]:
+        if (
+            not knoten
+            or knoten["geloescht"]
+            or knoten["typ"] != "extern"
+            or not knoten["extern_pfad"]
+        ):
             return None
         return DateibaumQuelle(knoten["extern_pfad"])
 

@@ -145,6 +145,47 @@ async def test_externe_quelle_schreibbar(dienst, benutzer_id, tmp_path):
     assert await dienst.externe_datei_schreiben(benutzer_id, uuid.uuid4(), "", "x.txt", b"y") is False
 
 
+async def test_als_zip_kollision_und_leerer_ordner(dienst, benutzer_id):
+    import io
+    import zipfile
+
+    a = await dienst.ordner_anlegen(benutzer_id, None, "A")
+    b = await dienst.ordner_anlegen(benutzer_id, None, "B")
+    da = await dienst.datei_hochladen(benutzer_id, a["id"], "report.txt", b"AAA")
+    db = await dienst.datei_hochladen(benutzer_id, b["id"], "report.txt", b"BBB")
+    leer = await dienst.ordner_anlegen(benutzer_id, None, "Leer")
+    daten = await dienst.als_zip(benutzer_id, [da["id"], db["id"], leer["id"]])
+    with zipfile.ZipFile(io.BytesIO(daten)) as zf:
+        namen = zf.namelist()
+        # Beide gleichnamigen Dateien erhalten (kein stiller Datenverlust).
+        treffer = [n for n in namen if n.startswith("report")]
+        assert len(treffer) == 2
+        assert {zf.read(n) for n in treffer} == {b"AAA", b"BBB"}
+        # Leerer Ordner bleibt als Verzeichniseintrag erhalten.
+        assert "Leer/" in namen
+
+
+async def test_als_zip_zu_gross(dienst, benutzer_id, monkeypatch):
+    from types import SimpleNamespace
+
+    from module.speicher import dienst as dmod
+
+    monkeypatch.setattr(dmod, "EINSTELLUNGEN", SimpleNamespace(max_zip=5))
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "gross.txt", b"mehr als fuenf")
+    with pytest.raises(dmod.ArchivZuGross):
+        await dienst.als_zip(benutzer_id, [knoten["id"]])
+
+
+async def test_externe_quelle_im_papierkorb_gesperrt(dienst, benutzer_id, tmp_path):
+    wurzel = tmp_path / "extern2"
+    wurzel.mkdir()
+    quelle = await dienst.externe_quelle_anlegen(benutzer_id, None, "Stick", str(wurzel))
+    await dienst.loeschen(benutzer_id, quelle["id"])  # in den Papierkorb
+    # Im Papierkorb weder lesbar noch beschreibbar.
+    assert await dienst.externe_kinder(benutzer_id, quelle["id"]) is None
+    assert await dienst.externe_datei_schreiben(benutzer_id, quelle["id"], "", "x.txt", b"y") is False
+
+
 async def test_journal_zaehlt_monoton(dienst, benutzer_id):
     await dienst.datei_hochladen(benutzer_id, None, "1.txt", b"a")
     await dienst.datei_hochladen(benutzer_id, None, "2.txt", b"b")

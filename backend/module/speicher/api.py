@@ -16,6 +16,7 @@ from app.abhaengig import (
     hole_vorgaenge,
 )
 from app.config import EINSTELLUNGEN
+from module.speicher.dienst import ArchivZuGross
 from module.speicher.modelle import (
     ExternEintragAus,
     ExternOrdnerEingabe,
@@ -214,7 +215,10 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
 @router.post("/zip")
 async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer),
                   speicher=Depends(hole_speicher)):
-    daten = await speicher.als_zip(benutzer["id"], [str(i) for i in eingabe.ids])
+    try:
+        daten = await speicher.als_zip(benutzer["id"], [str(i) for i in eingabe.ids])
+    except ArchivZuGross:
+        raise HTTPException(status_code=413, detail="Auswahl zu gross fuer ein ZIP")
     if daten is None:
         raise HTTPException(status_code=404, detail="Nichts zum Packen")
     return Response(

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as api from "./api";
+  import { ladeVorgaenge } from "./zustand.svelte";
   import type { Pfadteil } from "./zustand.svelte";
   import type { Knoten } from "./types";
   import { symbol, groesseText, datum } from "./format";
@@ -49,14 +50,21 @@
     );
   }
 
+  // Pro Pane ein Generationszaehler: bei schneller Navigation darf nur die
+  // jeweils neueste Antwort das Ergebnis schreiben (sonst Liste/Pfad-Divergenz).
+  const laeufe = [0, 0];
   async function lade(i: number) {
+    const meins = ++laeufe[i];
     const p = panes[i];
     p.laden = true;
+    let erg: Knoten[];
     try {
-      p.eintraege = sortiere(await api.kinder(ordnerId(p)));
+      erg = sortiere(await api.kinder(ordnerId(p)));
     } catch {
-      p.eintraege = [];
+      erg = [];
     }
+    if (meins !== laeufe[i]) return; // veraltete Antwort verwerfen
+    p.eintraege = erg;
     p.auswahl = [];
     p.laden = false;
   }
@@ -173,6 +181,8 @@
     }
     inp.value = "";
     lade(i);
+    // Jeder Upload startet serverseitig einen Indizierungs-Vorgang - anzeigen.
+    ladeVorgaenge();
   }
 
   function fokus(el: HTMLInputElement) {
