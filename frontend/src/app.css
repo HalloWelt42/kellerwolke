@@ -1402,6 +1402,13 @@ select.feld {
   background: var(--gefahr-weich);
   color: var(--gefahr);
 }
+/* Eigene Zeile: Aktiv-Schalter und Rollen-Auswahl sind gesperrt (man kann sich
+   nicht selbst aussperren) - klar sichtbar ausgegraut. */
+.einst-status:disabled,
+.einst-konten .feld:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .einst-reihe {
   display: flex;
   gap: var(--a2);
