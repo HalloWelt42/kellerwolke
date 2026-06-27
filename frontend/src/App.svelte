@@ -9,6 +9,8 @@
     ordnerAnlegen,
     leerePapierkorb,
     ladeVersion,
+    starteLiveAbgleich,
+    stoppeLiveAbgleich,
   } from "./lib/zustand.svelte";
   import { auswahl } from "./lib/auswahl.svelte";
   import Login from "./lib/Login.svelte";
@@ -34,8 +36,12 @@
       initialGeladen = true;
       zeigeDateien();
       ladeVersion();
+      starteLiveAbgleich();
     }
-    if (!auth.angemeldet) initialGeladen = false;
+    if (!auth.angemeldet) {
+      initialGeladen = false;
+      stoppeLiveAbgleich();
+    }
   });
 
   const mitDetail = $derived(zustand.detail !== null && auswahl.anzahl <= 1);

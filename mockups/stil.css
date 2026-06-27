@@ -248,6 +248,11 @@ textarea {
   border-right: 1px solid var(--rand);
   padding: var(--a3) var(--a2);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.nav-fuss {
+  margin-top: auto;
 }
 .nav-titel {
   font-size: 0.72rem;

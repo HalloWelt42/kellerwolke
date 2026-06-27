@@ -56,6 +56,55 @@ export const zustand = $state<{
   version: "",
 });
 
+// --- Live-Abgleich ueber das Aenderungs-Journal -----------------------------
+// Pollt das Journal des Nutzers; sobald neue Eintraege auftauchen (eigene
+// andere Sitzung, WebDAV, kuenftig Freigaben), wird die aktuelle Ansicht
+// aktualisiert - ohne Reload.
+let letzteSeq = 0;
+let liveInit = false;
+let liveTimer: ReturnType<typeof setInterval> | null = null;
+
+function aktualisiereAnsicht(): void {
+  if (zustand.bereich === "dateien") ladeOrdner();
+  else if (zustand.bereich === "papierkorb") ladeMit(() => api.papierkorb());
+  else if (zustand.bereich === "suche" && zustand.suchbegriff)
+    ladeMit(() => api.suchen(zustand.suchbegriff));
+  else if (zustand.bereich === "extern" && zustand.externBrowse) ladeExtern();
+  else if (zustand.bereich === "extern")
+    ladeMit(async () => (await api.kinder(null)).filter((k) => k.typ === "extern"));
+}
+
+async function pollJournal(): Promise<void> {
+  try {
+    const neue = await api.journalSeit(letzteSeq);
+    if (neue.length === 0) return;
+    letzteSeq = neue.reduce((m, e) => Math.max(m, e.seq), letzteSeq);
+    if (!liveInit) {
+      liveInit = true; // erster Lauf setzt nur den Stand
+      return;
+    }
+    aktualisiereAnsicht();
+    ladeSpeicher();
+  } catch {
+    // Live-Abgleich ist optional; bei Fehlern still weiter.
+  }
+}
+
+export function starteLiveAbgleich(): void {
+  if (liveTimer) return;
+  liveInit = false;
+  letzteSeq = 0;
+  pollJournal();
+  liveTimer = setInterval(pollJournal, 4000);
+}
+
+export function stoppeLiveAbgleich(): void {
+  if (liveTimer) {
+    clearInterval(liveTimer);
+    liveTimer = null;
+  }
+}
+
 export async function ladeVersion(): Promise<void> {
   try {
     zustand.version = await api.version();

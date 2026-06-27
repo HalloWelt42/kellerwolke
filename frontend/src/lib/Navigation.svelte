@@ -37,11 +37,12 @@
     <i class="fa-solid fa-trash"></i> Papierkorb
   </button>
 
-  <Speicheranzeige />
-
-  {#if zustand.version}
-    <div class="nav-version">Kellerwolke v{zustand.version}</div>
-  {/if}
+  <div class="nav-fuss">
+    <Speicheranzeige />
+    {#if zustand.version}
+      <div class="nav-version">Kellerwolke v{zustand.version}</div>
+    {/if}
+  </div>
 </nav>
 
 <style>

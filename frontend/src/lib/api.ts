@@ -83,6 +83,11 @@ export async function version(): Promise<string> {
   return daten.version;
 }
 
+// Aenderungs-Journal des Nutzers ab einer Sequenznummer (fuer Live-Abgleich).
+export function journalSeit(seit: number): Promise<{ seq: number }[]> {
+  return hole<{ seq: number }[]>(`/v1/sync/journal?seit=${seit}`);
+}
+
 // --- Dateien ----------------------------------------------------------------
 
 export function kinder(parentId: string | null): Promise<Knoten[]> {
