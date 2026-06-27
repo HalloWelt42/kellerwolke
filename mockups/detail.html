@@ -20,7 +20,11 @@
           <input type="text" placeholder="In allen Dateien suchen ..." />
         </div>
         <div class="kopf-rechts">
-          <div class="nutzer-chip"><span class="avatar">M</span> Marcel</div>
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip">
+              <span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -29,12 +33,24 @@
         <div class="nav-titel">Bereiche</div>
         <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
         <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
-        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt <span class="zahl">3</span></a>
-        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen <span class="zahl">2</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
         <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
-        <div class="speicher">
-          14,2 GB von 1,5 TB
-          <div class="balken"><span style="width: 1%"></span></div>
+        <div class="nav-fuss">
+          <div class="speicher">
+            <div class="ring-zeile">
+              <svg class="ring" viewBox="0 0 36 36" role="img" aria-label="Speicherbelegung">
+                <circle class="spur" cx="18" cy="18" r="15.5" pathLength="100"></circle>
+                <circle class="seg sonst" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="34 100" stroke-dashoffset="-6"></circle>
+                <circle class="seg kw" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="6 100" stroke-dashoffset="0"></circle>
+              </svg>
+              <div class="legende">
+                <div class="le"><span class="punkt kw"></span> Kellerwolke 92 GB</div>
+                <div class="le"><span class="punkt frei"></span> Frei 980 GB</div>
+              </div>
+            </div>
+          </div>
+          <div class="nav-version">Kellerwolke v0.29.0</div>
         </div>
       </nav>
 
