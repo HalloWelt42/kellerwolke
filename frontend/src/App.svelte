@@ -18,6 +18,7 @@
   import Werkzeugleiste from "./lib/Werkzeugleiste.svelte";
   import Breadcrumb from "./lib/Breadcrumb.svelte";
   import Dateiliste from "./lib/Dateiliste.svelte";
+  import Splitscreen from "./lib/Splitscreen.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
   import Einstellungen from "./lib/Einstellungen.svelte";
   import Teilen from "./lib/Teilen.svelte";
@@ -47,7 +48,8 @@
     }
   });
 
-  const mitDetail = $derived(zustand.detail !== null && auswahl.anzahl <= 1);
+  const istSplit = $derived(zustand.ansicht === "split" && zustand.bereich === "dateien");
+  const mitDetail = $derived(zustand.detail !== null && auswahl.anzahl <= 1 && !istSplit);
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
 
   function suchen(e: Event) {
@@ -136,11 +138,15 @@
         onNeuerOrdner={() => (neuerOrdnerOffen = true)}
         onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
       />
-      <Breadcrumb />
-      {#if zustand.fehler}
-        <div class="fehlerstreifen">{zustand.fehler}</div>
+      {#if istSplit}
+        <Splitscreen />
+      {:else}
+        <Breadcrumb />
+        {#if zustand.fehler}
+          <div class="fehlerstreifen">{zustand.fehler}</div>
+        {/if}
+        <Dateiliste onTeilen={(k) => (teilenKnoten = k)} />
       {/if}
-      <Dateiliste onTeilen={(k) => (teilenKnoten = k)} />
     </section>
 
     {#if mitDetail && zustand.detail}

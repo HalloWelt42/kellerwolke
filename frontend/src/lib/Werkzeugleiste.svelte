@@ -7,6 +7,10 @@
   }
   let { onNeuerOrdner, onPapierkorbLeeren }: Props = $props();
 
+  // Im Splitscreen liegen Anlegen/Hochladen/Filter je Bereich (Pane), daher
+  // entfaellt die globale Werkzeugleiste dafuer.
+  const istSplit = $derived(zustand.ansicht === "split" && zustand.bereich === "dateien");
+
   function aufDateiwahl(e: Event) {
     const ziel = e.target as HTMLInputElement;
     hochladen(ziel.files);
@@ -26,7 +30,9 @@
     </button>
   {/if}
 
-  {#if istSchreibbar()}
+  {#if istSplit}
+    <!-- Anlegen/Hochladen sitzen im Splitscreen je Bereich (Pane) -->
+  {:else if istSchreibbar()}
     <button class="knopf primaer" onclick={onNeuerOrdner}>
       <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
     </button>
@@ -46,7 +52,7 @@
 
   <span class="luecke"></span>
 
-  {#if zustand.bereich !== "extern" && zustand.bereich !== "geteilt"}
+  {#if zustand.bereich !== "extern" && zustand.bereich !== "geteilt" && !istSplit}
     <div class="werkzeug-filter">
       <i class="fa-solid fa-filter"></i>
       <input type="text" placeholder="In dieser Ansicht filtern ..." bind:value={zustand.filter} />
@@ -72,6 +78,13 @@
       onclick={() => (zustand.ansicht = "grid")}
     >
       <i class="fa-solid fa-table-cells-large"></i>
+    </button>
+    <button
+      class:aktiv={zustand.ansicht === "split"}
+      title="Splitscreen"
+      onclick={() => (zustand.ansicht = "split")}
+    >
+      <i class="fa-solid fa-table-columns"></i>
     </button>
   </div>
 </div>

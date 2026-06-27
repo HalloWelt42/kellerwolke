@@ -8,7 +8,7 @@ import type { ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
 // api.ts.
 
 export type Bereich = "dateien" | "extern" | "papierkorb" | "suche" | "favoriten" | "geteilt";
-export type Ansicht = "liste" | "grid";
+export type Ansicht = "liste" | "grid" | "split";
 
 export interface Pfadteil {
   id: string | null;
