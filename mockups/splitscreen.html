@@ -14,18 +14,12 @@
     <!-- Sidebar ausgeblendet (nav-aus): im Splitscreen mehr Platz -->
     <div class="app nav-aus">
       <header class="kopf">
-        <button class="icon-knopf" title="Navigation einblenden"><i class="fa-solid fa-bars"></i></button>
         <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
         <div class="kopf-suche">
           <i class="fa-solid fa-magnifying-glass"></i>
           <input type="text" placeholder="In allen Dateien suchen ..." />
         </div>
         <div class="kopf-rechts">
-          <div class="ansicht-umschalter">
-            <button title="Liste"><i class="fa-solid fa-list"></i></button>
-            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
-            <button class="aktiv" title="Splitscreen"><i class="fa-solid fa-table-columns"></i></button>
-          </div>
           <div class="nutzer-bereich">
             <button class="nutzer-chip">
               <span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i>
@@ -35,6 +29,15 @@
       </header>
 
       <section class="inhalt">
+        <div class="werkzeuge">
+          <button class="icon-knopf" title="Navigation einblenden"><i class="fa-solid fa-bars"></i></button>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+            <button class="aktiv" title="Splitscreen"><i class="fa-solid fa-table-columns"></i></button>
+          </div>
+        </div>
         <div class="split">
           <!-- Linker Bereich (aktiv, Quelle des Ziehens) -->
           <div class="pane aktiv">
