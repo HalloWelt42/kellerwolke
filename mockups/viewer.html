@@ -261,7 +261,30 @@
         for (const { box } of boxen.values()) box.classList.remove("aktiv");
       }
 
+      // Der Viewer ist der einzige Thema-Schalter. Das Thema des Rahmens
+      // angleichen und den dev-eigenen Schalter (.mock-leiste) im eingebetteten
+      // Mockup ausblenden, damit das Umschalten nicht doppelt vorkommt. Beim
+      // direkten Oeffnen einer Mockup-Seite bleibt die .mock-leiste erhalten.
+      function richteRahmenEin() {
+        let doc;
+        try {
+          doc = rahmen.contentDocument;
+        } catch (e) {
+          return;
+        }
+        if (!doc || !doc.documentElement) return;
+        doc.documentElement.dataset.theme = thema();
+        const leiste = doc.querySelector(".mock-leiste");
+        if (leiste) leiste.style.display = "none";
+      }
+
+      function aktualisiereThemaKnopf() {
+        const i = document.querySelector("#thema i");
+        if (i) i.className = "fa-solid " + (thema() === "hell" ? "fa-moon" : "fa-sun");
+      }
+
       rahmen.addEventListener("load", () => {
+        richteRahmenEin();
         baue();
         try {
           const doc = rahmen.contentDocument;
@@ -277,8 +300,11 @@
       document.getElementById("thema").onclick = () => {
         const neu = thema() === "hell" ? "dunkel" : "hell";
         document.documentElement.dataset.theme = neu;
+        aktualisiereThemaKnopf();
+        richteRahmenEin();
         baue();
       };
+      aktualisiereThemaKnopf();
     </script>
   </body>
 </html>
