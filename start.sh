@@ -11,7 +11,10 @@ bash "$HIER/tools/setup-env.sh"
 
 # Konfiguration: gesetzte Umgebungsvariable > .env > Standardwert.
 envget() {
-  local key="$1" def="$2" val="${!key:-}"
+  # Umgebungsvariable per eval lesen - portabel; ${!key} (indirekte Expansion)
+  # bricht auf bash 5.2 mit "set -u" ab.
+  local key="$1" def="$2" val=""
+  eval "val=\${$key-}"
   if [ -z "$val" ] && [ -f "$ENVFILE" ]; then
     val="$(sed -n "s/^${key}=//p" "$ENVFILE" | head -1)"
     val="${val%\"}"; val="${val#\"}"; val="${val%\'}"; val="${val#\'}"
