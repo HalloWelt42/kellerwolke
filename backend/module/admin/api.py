@@ -1,15 +1,43 @@
 """Admin-Router: Familienkonten anlegen/verwalten, Quota setzen (nur Admins)."""
 
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.abhaengig import aktueller_admin, hole_auth, hole_speicher
-from module.admin.modelle import BenutzerAnlegen, BenutzerUpdate, ExternQuelleEingabe
+from module.admin.modelle import (
+    BenutzerAnlegen,
+    BenutzerUpdate,
+    ExternQuelleEingabe,
+    SpeicherortAus,
+    VerschiebenEingabe,
+    VerschiebungAus,
+)
 from module.auth.modelle import BenutzerAus
 from module.speicher.modelle import KnotenAus
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+@router.get("/speicherort", response_model=SpeicherortAus)
+async def speicherort(admin=Depends(aktueller_admin), speicher=Depends(hole_speicher)):
+    return SpeicherortAus(pfad=await speicher.aktiver_pfad())
+
+
+@router.get("/speicherort/verschieben", response_model=VerschiebungAus)
+async def verschiebung_stand(admin=Depends(aktueller_admin), speicher=Depends(hole_speicher)):
+    return VerschiebungAus(**speicher.verschiebung)
+
+
+@router.post("/speicherort/verschieben", response_model=VerschiebungAus, status_code=202)
+async def verschieben(eingabe: VerschiebenEingabe, admin=Depends(aktueller_admin),
+                      speicher=Depends(hole_speicher)):
+    if speicher.verschiebung.get("status") == "laeuft":
+        raise HTTPException(status_code=409, detail="Eine Verschiebung laeuft bereits")
+    # Im Hintergrund anstossen; der Fortschritt wird per GET abgefragt.
+    asyncio.create_task(speicher.datenablage_verschieben(eingabe.ziel))
+    return VerschiebungAus(status="laeuft", ziel=eingabe.ziel)
 
 
 @router.post("/externe-quelle", response_model=KnotenAus, status_code=201)

@@ -32,6 +32,14 @@ export interface SpeicherStatus {
   ort?: string | null;
 }
 
+export interface Verschiebung {
+  status: string; // leer | laeuft | fertig | fehler
+  kopiert: number;
+  gesamt: number;
+  ziel: string | null;
+  fehler: string | null;
+}
+
 export interface Version {
   id: string;
   groesse: number;

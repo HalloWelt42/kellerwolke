@@ -1,4 +1,12 @@
-import type { AuthStatus, Benutzer, ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
+import type {
+  AuthStatus,
+  Benutzer,
+  ExternEintrag,
+  Knoten,
+  SpeicherStatus,
+  Verschiebung,
+  Version,
+} from "./types";
 
 // Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl fuer
 // eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
@@ -268,6 +276,17 @@ export function benutzerAktualisieren(
     method: "PATCH",
     body: JSON.stringify(aenderung),
   });
+}
+
+export function datenablageVerschieben(ziel: string): Promise<Verschiebung> {
+  return hole<Verschiebung>("/v1/admin/speicherort/verschieben", {
+    method: "POST",
+    body: JSON.stringify({ ziel }),
+  });
+}
+
+export function verschiebungStand(): Promise<Verschiebung> {
+  return hole<Verschiebung>("/v1/admin/speicherort/verschieben");
 }
 
 export function externeQuelleAnlegen(

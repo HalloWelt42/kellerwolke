@@ -15,6 +15,11 @@ class FilesystemBlobStore:
     def __init__(self, wurzel) -> None:
         self.wurzel = Path(wurzel)
 
+    def setze_wurzel(self, neu) -> None:
+        """Wechselt die Pool-Wurzel zur Laufzeit (nach dem Verschieben der
+        Datenablage auf ein anderes Laufwerk)."""
+        self.wurzel = Path(neu)
+
     def _pfad(self, benutzer_id: str, blob_hash: str) -> Path:
         return self.wurzel / benutzer_id / blob_hash[:2] / blob_hash
 

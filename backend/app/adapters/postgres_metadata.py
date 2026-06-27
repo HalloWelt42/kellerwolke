@@ -160,6 +160,16 @@ class PostgresMetadataRepository:
             (besitzer_id,),
         )
 
+    async def speicherort_holen(self):
+        return await self._eine("SELECT pfad FROM speicherort WHERE id = 1")
+
+    async def speicherort_setzen(self, pfad):
+        await self.conn.execute(
+            "INSERT INTO speicherort (id, pfad) VALUES (1, %s) "
+            "ON CONFLICT (id) DO UPDATE SET pfad = EXCLUDED.pfad, geaendert_am = now()",
+            (pfad,),
+        )
+
     async def papierkorb_wurzeln(self, besitzer_id):
         zeilen = await self._alle(
             "SELECT id FROM knoten WHERE besitzer_id=%s AND geloescht", (besitzer_id,)

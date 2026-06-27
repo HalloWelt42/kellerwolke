@@ -43,6 +43,10 @@ async def lebenszyklus(app: FastAPI):
     app.state.pool = pool
     app.state.auth = AuthDienst(pool)
     app.state.speicher = SpeicherDienst(pool, FilesystemBlobStore(EINSTELLUNGEN.objekt_pfad))
+    # Aktiven Pool-Pfad aus der DB ziehen (oder mit dem Standard aus .env seeden),
+    # damit ein verschobener Speicherort einen Neustart uebersteht.
+    aktiv = await app.state.speicher.aktiver_pfad_initialisieren(EINSTELLUNGEN.objekt_pfad)
+    app.state.speicher.blobstore.setze_wurzel(aktiv)
     app.state.suche = SuchDienst(pool)
     await _admin_seed(app.state.auth)
     try:

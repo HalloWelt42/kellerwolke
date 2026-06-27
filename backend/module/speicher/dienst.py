@@ -5,17 +5,38 @@ Baum, Versionen, Journal). REST-API und WebDAV rufen ausschliesslich diesen
 Dienst, damit ETags und Journal immer konsistent bleiben.
 """
 
+import asyncio
 import os
 import shutil
+from pathlib import Path
 
 from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.postgres_metadata import PostgresMetadataRepository
+
+
+def _kopiere_pool(quelle, ziel, fortschritt):
+    """Kopiert alle Bloecke aus quelle nach ziel (Struktur erhalten, vorhandene
+    ueberspringen). Ruft fortschritt(kopiert, gesamt) auf."""
+    quelle_p = Path(quelle)
+    ziel_p = Path(ziel)
+    dateien = [p for p in quelle_p.rglob("*") if p.is_file()]
+    gesamt = len(dateien)
+    fortschritt(0, gesamt)
+    for i, p in enumerate(dateien, 1):
+        ziel_datei = ziel_p / p.relative_to(quelle_p)
+        if not ziel_datei.exists():
+            ziel_datei.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, ziel_datei)
+        fortschritt(i, gesamt)
 
 
 class SpeicherDienst:
     def __init__(self, pool, blobstore) -> None:
         self.pool = pool
         self.blobstore = blobstore
+        # Stand der laufenden Datenablage-Verschiebung (in-memory, fuer Polling).
+        self.verschiebung = {"status": "leer", "kopiert": 0, "gesamt": 0, "ziel": None,
+                             "fehler": None}
 
     def _datentraeger(self):
         """Gesamt- und Freiplatz des Datentraegers, auf dem der Objekt-Pool
@@ -41,6 +62,60 @@ class SpeicherDienst:
         status["frei"] = frei
         status["ort"] = str(getattr(self.blobstore, "wurzel", "")) or None
         return status
+
+    # --- Speicherort (Datenablage) -------------------------------------------
+
+    async def aktiver_pfad(self) -> str:
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            row = await repo.speicherort_holen()
+            return row["pfad"] if row else str(self.blobstore.wurzel)
+
+    async def aktiver_pfad_initialisieren(self, standard: str) -> str:
+        """Beim Start: Speicherort-Zeile anlegen, falls leer; aktiven Pfad
+        zurueckgeben (Quelle der Wahrheit fuer die Pool-Wurzel)."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                row = await repo.speicherort_holen()
+                if not row:
+                    await repo.speicherort_setzen(standard)
+                    return standard
+                return row["pfad"]
+
+    async def datenablage_verschieben(self, ziel: str) -> None:
+        """Verschiebt den Objekt-Pool auf einen anderen Pfad: kopieren, aktiven
+        Pfad umstellen, Rest (waehrend des Kopierens Hinzugekommenes) nachziehen,
+        Quelle loeschen. Fortschritt steht in self.verschiebung."""
+        quelle = os.path.abspath(await self.aktiver_pfad())
+        ziel = os.path.abspath(os.path.expanduser(ziel))
+        self.verschiebung = {"status": "laeuft", "kopiert": 0, "gesamt": 0, "ziel": ziel,
+                             "fehler": None}
+
+        def fort(k, g):
+            self.verschiebung["kopiert"] = k
+            self.verschiebung["gesamt"] = g
+
+        try:
+            if ziel == quelle:
+                self.verschiebung["status"] = "fertig"
+                return
+            os.makedirs(ziel, exist_ok=True)
+            # 1. Bestand kopieren
+            await asyncio.to_thread(_kopiere_pool, quelle, ziel, fort)
+            # 2. Aktiven Pfad umstellen (neue Uploads landen ab jetzt im Ziel)
+            async with self.pool.connection() as conn:
+                async with conn.transaction():
+                    repo = PostgresMetadataRepository(conn)
+                    await repo.speicherort_setzen(ziel)
+            self.blobstore.setze_wurzel(ziel)
+            # 3. Waehrend des Kopierens Hinzugekommenes nachziehen, dann Quelle weg
+            await asyncio.to_thread(_kopiere_pool, quelle, ziel, fort)
+            await asyncio.to_thread(shutil.rmtree, quelle, True)
+            self.verschiebung["status"] = "fertig"
+        except Exception as f:  # noqa: BLE001 - Status fuer das Polling festhalten
+            self.verschiebung["status"] = "fehler"
+            self.verschiebung["fehler"] = str(f)
 
     async def papierkorb_leeren(self, besitzer_id):
         """Loescht alle Knoten im Papierkorb endgueltig: Refcounts senken,

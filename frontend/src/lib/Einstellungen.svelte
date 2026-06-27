@@ -81,7 +81,7 @@
     }
   }
 
-  // --- Speicherorte (Uebersicht) --------------------------------------------
+  // --- Speicherorte ---------------------------------------------------------
   let status = $state<SpeicherStatus | null>(null);
   const prozent = $derived(
     status && status.gesamt ? Math.min(100, Math.round((status.benutzt / status.gesamt) * 100)) : 0,
@@ -94,6 +94,43 @@
     }
   }
   ladeStatus();
+
+  // Datenablage verschieben
+  let zielPfad = $state("");
+  let verschiebung = $state<import("./types").Verschiebung | null>(null);
+  let verschiebeFehler = $state("");
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  const moveProzent = $derived(
+    verschiebung && verschiebung.gesamt > 0
+      ? Math.round((verschiebung.kopiert / verschiebung.gesamt) * 100)
+      : 0,
+  );
+
+  async function starteVerschieben() {
+    const ziel = zielPfad.trim();
+    if (!ziel) return;
+    verschiebeFehler = "";
+    try {
+      verschiebung = await api.datenablageVerschieben(ziel);
+      pollTimer = setInterval(async () => {
+        try {
+          verschiebung = await api.verschiebungStand();
+          if (verschiebung.status === "fertig" || verschiebung.status === "fehler") {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = null;
+            if (verschiebung.status === "fehler") verschiebeFehler = verschiebung.fehler ?? "Fehler";
+            else zielPfad = "";
+            await ladeStatus();
+          }
+        } catch {
+          // weiter pollen
+        }
+      }, 1000);
+    } catch (f) {
+      verschiebeFehler = (f as Error).message;
+    }
+  }
 </script>
 
 <div class="app">
@@ -232,10 +269,42 @@
         {:else}
           <p class="karte-unter">Lädt ...</p>
         {/if}
-        <p class="karte-unter" style="margin-top: var(--a3);">
-          Weitere Laufwerke hinzufügen und die Datenablage auf eine große Platte verschieben (als
-          Vorgang) folgt im nächsten Schritt.
+      </div>
+
+      <div class="karte">
+        <h2><i class="fa-solid fa-arrow-right-arrow-left"></i> Datenablage verschieben</h2>
+        <p class="karte-unter">
+          Kopiert alle Daten auf einen anderen Pfad (z.B. eine große Platte), stellt um und entfernt
+          dann die alte Ablage. Läuft im Hintergrund; die Datenbank und das Projekt bleiben am Ort.
         </p>
+        {#if verschiebung && verschiebung.status === "laeuft"}
+          <div class="fortschritt"><span style="width: {moveProzent}%"></span></div>
+          <p class="karte-unter" style="margin-top: var(--a2);">
+            Verschiebe ... {verschiebung.kopiert} von {verschiebung.gesamt} ({moveProzent} %)
+          </p>
+        {:else}
+          <form
+            class="einst-reihe"
+            onsubmit={(e) => {
+              e.preventDefault();
+              starteVerschieben();
+            }}
+          >
+            <input
+              class="feld"
+              type="text"
+              placeholder="Zielpfad auf dem Server (z.B. /mnt/tb26/kellerwolke)"
+              bind:value={zielPfad}
+            />
+            <button class="knopf primaer" type="submit" disabled={!zielPfad.trim()}>
+              <i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben
+            </button>
+          </form>
+        {/if}
+        {#if verschiebung && verschiebung.status === "fertig"}
+          <div class="meldung">Datenablage verschoben.</div>
+        {/if}
+        {#if verschiebeFehler}<div class="fehler">{verschiebeFehler}</div>{/if}
       </div>
     {/if}
   </section>
