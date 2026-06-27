@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Teilen</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      .geteilt-mit h3 {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-3);
+        margin: 0 0 var(--a2);
+      }
+      .geteilt-mit ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--a2);
+      }
+      .geteilt-mit li {
+        display: flex;
+        align-items: center;
+        gap: var(--a2);
+      }
+      .geteilt-mit .gname {
+        flex: 1;
+      }
+      .geteilt-mit .recht {
+        font-size: 0.72rem;
+        color: var(--text-2);
+        border: 1px solid var(--rand-stark);
+        border-radius: var(--r1);
+        padding: 0 var(--a2);
+      }
+      .teil-reihe {
+        display: flex;
+        gap: var(--a2);
+      }
+      .teil-reihe .feld.schmal {
+        width: auto;
+        min-width: 7rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip">
+              <span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche</div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt <span class="zahl">2</span></a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+      </nav>
+
+      <section class="inhalt">
+        <div class="werkzeuge">
+          <button class="knopf primaer"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <button class="knopf"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</button>
+        </div>
+        <nav class="breadcrumb"><a>Meine Dateien</a></nav>
+        <div class="liste">
+          <div class="listenkopf">
+            <span></span><span class="sortbar">Name</span><span>Größe</span>
+            <span class="sp-geaendert">Geändert</span><span></span>
+          </div>
+          <div class="zeile gewaehlt">
+            <span class="z-aus"><span class="aus-box an"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym ordner fa-solid fa-folder"></i><span class="titel">Urlaub 2025</span></span>
+            <span class="z-meta">142 Dateien</span>
+            <span class="z-meta z-geaendert">18.06.2025, 20:11</span><span class="z-akt"></span>
+          </div>
+          <div class="zeile">
+            <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+            <span class="z-name"><i class="sym fa-solid fa-file-pdf"></i><span class="titel">Steuer_2025.pdf</span></span>
+            <span class="z-meta">248 KB</span>
+            <span class="z-meta z-geaendert">11.05.2026, 22:05</span><span class="z-akt"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Teilen-Dialog -->
+    <div class="modal-hg">
+      <div class="modal">
+        <div class="modal-kopf">
+          <h2><i class="fa-solid fa-share-nodes"></i> "Urlaub 2025" teilen</h2>
+          <button class="icon-knopf" title="Schliessen"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-inhalt">
+          <form class="teil-reihe">
+            <select class="feld">
+              <option>Konto wählen ...</option>
+              <option>Britta</option>
+              <option>Jonas</option>
+            </select>
+            <select class="feld schmal">
+              <option>Lesen</option>
+              <option>Schreiben</option>
+            </select>
+            <button class="knopf primaer"><i class="fa-solid fa-share-nodes"></i> Teilen</button>
+          </form>
+
+          <div class="geteilt-mit">
+            <h3>Geteilt mit</h3>
+            <ul>
+              <li>
+                <span class="avatar">B</span>
+                <span class="gname">Britta</span>
+                <span class="recht">Lesen</span>
+                <button class="icon-knopf gefahr" title="Freigabe entfernen"><i class="fa-solid fa-xmark"></i></button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
