@@ -88,4 +88,7 @@ def text_extrahieren(name: str, daten: bytes) -> str:
         text = _docx_text(daten)
     else:
         text = ""
-    return text[:_MAX_ZEICHEN]
+    # PostgreSQL-Textfelder vertragen keine NUL-Bytes (0x00). Sie tauchen etwa in
+    # UTF-16-Texten oder falsch benannten Binaerdateien auf - durch Leerzeichen
+    # ersetzen, damit die Indexierung nicht abbricht (Tokens bleiben getrennt).
+    return text[:_MAX_ZEICHEN].replace("\x00", " ")

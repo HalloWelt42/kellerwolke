@@ -102,6 +102,14 @@ def test_extraktion_binaer_leer():
     assert text_extrahieren("bild.png", b"\x89PNG\x00\x01") == ""
 
 
+def test_extraktion_entfernt_nul_bytes():
+    # Eine Textdatei mit eingebettetem NUL (z.B. UTF-16) darf keine 0x00-Bytes
+    # liefern - PostgreSQL-Textfelder wuerden sonst die Indexierung sprengen.
+    roh = "Rechnung".encode("utf-16-le")  # enthaelt 0x00 zwischen den Zeichen
+    text = text_extrahieren("vertrag.txt", roh)
+    assert "\x00" not in text
+
+
 def test_extraktion_docx():
     from docx import Document
 
