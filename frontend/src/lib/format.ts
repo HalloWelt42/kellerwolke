@@ -9,6 +9,14 @@ export function groesseText(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
+// Restzeit grob als "noch ca. ..." (Sekunden < 0 = unbekannt).
+export function zeitText(sekunden: number): string {
+  if (sekunden < 0) return "";
+  if (sekunden < 60) return `noch ca. ${Math.max(1, Math.round(sekunden))} Sek`;
+  if (sekunden < 3600) return `noch ca. ${Math.round(sekunden / 60)} Min`;
+  return `noch ca. ${Math.round(sekunden / 3600)} Std`;
+}
+
 export function datum(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "-";

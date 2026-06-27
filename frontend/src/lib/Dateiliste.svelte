@@ -13,9 +13,10 @@
     wiederherstellen,
     externGehe,
     externRunter,
+    uploadStoppen,
   } from "./zustand.svelte";
   import { auswahl } from "./auswahl.svelte";
-  import { groesseText, datum, symbolFuerName } from "./format";
+  import { groesseText, datum, symbolFuerName, zeitText } from "./format";
   import type { Knoten } from "./types";
   import Dateizeile from "./Dateizeile.svelte";
   import type { RowAktion } from "./Dateizeile.svelte";
@@ -512,16 +513,25 @@
 
 {#if zustand.uploads.length > 0}
   <div class="schwebe-karte">
-    <h4>
-      {zustand.uploads.length}
-      {zustand.uploads.length === 1 ? "Datei wird" : "Dateien werden"} hochgeladen
-    </h4>
+    <div class="schwebe-kopf">
+      <h4>
+        {zustand.uploads.length}
+        {zustand.uploads.length === 1 ? "Datei wird" : "Dateien werden"} hochgeladen
+      </h4>
+      <button class="icon-knopf" title="Abbrechen" aria-label="Abbrechen" onclick={uploadStoppen}>
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
     {#each zustand.uploads as u (u.name)}
       <div class="fz">
         <div class="fz-kopf">
           <span class="fz-name">{u.name}</span><span class="pct">{u.prozent} %</span>
         </div>
         <div class="fortschritt"><span style="width: {u.prozent}%"></span></div>
+        <div class="fz-kopf fz-tempo">
+          <span>{u.tempo > 0 ? `${groesseText(u.tempo)}/s` : `${groesseText(u.gesamt)}`}</span>
+          <span>{u.prozent >= 100 ? "fertig" : zeitText(u.restzeit)}</span>
+        </div>
       </div>
     {/each}
   </div>

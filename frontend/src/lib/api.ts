@@ -109,17 +109,55 @@ export function ordnerAnlegen(name: string, parentId: string | null): Promise<Kn
   });
 }
 
-export async function hochladen(datei: File, parentId: string | null): Promise<Knoten> {
-  const formular = new FormData();
-  formular.append("datei", datei);
-  if (parentId) formular.append("parent_id", parentId);
-  const antwort = await fetch("/api/v1/dateien/upload", {
-    method: "POST",
-    headers: { "X-Kellerwolke-Sitzung": token() },
-    body: formular,
+export interface UploadGriff {
+  abbrechen: () => void;
+}
+
+// Upload ueber XMLHttpRequest, damit der echte Sende-Fortschritt verfolgt und
+// abgebrochen werden kann (fetch liefert keinen Upload-Fortschritt).
+export function hochladen(
+  datei: File,
+  parentId: string | null,
+  aufFortschritt?: (geladen: number, gesamt: number) => void,
+  griffSetzen?: (griff: UploadGriff) => void,
+): Promise<Knoten> {
+  return new Promise<Knoten>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/v1/dateien/upload");
+    xhr.setRequestHeader("X-Kellerwolke-Sitzung", token());
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) aufFortschritt?.(e.loaded, e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        setzeToken("");
+        reject(new ApiFehler(401, "Anmeldung erforderlich"));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as Knoten);
+        } catch {
+          reject(new ApiFehler(xhr.status, "Ungueltige Antwort"));
+        }
+      } else {
+        let text = xhr.statusText;
+        try {
+          text = JSON.parse(xhr.responseText).detail ?? text;
+        } catch {
+          // Text bleibt
+        }
+        reject(new ApiFehler(xhr.status, text));
+      }
+    };
+    xhr.onerror = () => reject(new ApiFehler(0, "Netzwerkfehler"));
+    xhr.onabort = () => reject(new ApiFehler(0, "Abgebrochen"));
+    griffSetzen?.({ abbrechen: () => xhr.abort() });
+    const formular = new FormData();
+    formular.append("datei", datei);
+    if (parentId) formular.append("parent_id", parentId);
+    xhr.send(formular);
   });
-  await pruefe(antwort);
-  return (await antwort.json()) as Knoten;
 }
 
 export async function herunterladen(knoten: Knoten): Promise<void> {

@@ -989,8 +989,24 @@ select.feld {
   z-index: 8;
 }
 .schwebe-karte h4 {
-  margin: 0 0 var(--a2);
+  margin: 0;
   font-size: 0.86rem;
+}
+.schwebe-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--a2);
+  margin-bottom: var(--a3);
+}
+.schwebe-kopf .icon-knopf {
+  width: 28px;
+  height: 28px;
+}
+.fz-tempo {
+  margin-top: var(--a1);
+  color: var(--text-3);
+  font-size: 0.74rem;
 }
 .fz {
   margin-bottom: var(--a3);

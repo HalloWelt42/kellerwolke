@@ -18,6 +18,10 @@ export interface Pfadteil {
 export interface UploadFortschritt {
   name: string;
   prozent: number;
+  geladen: number;
+  gesamt: number;
+  tempo: number; // Bytes pro Sekunde
+  restzeit: number; // Sekunden, -1 = unbekannt
 }
 
 export const zustand = $state<{
@@ -329,21 +333,70 @@ export async function herunterladen(k: Knoten): Promise<void> {
   }
 }
 
+let aktuellerUploadGriff: (() => void) | null = null;
+let uploadAbgebrochen = false;
+
+export function uploadStoppen(): void {
+  uploadAbgebrochen = true;
+  aktuellerUploadGriff?.();
+}
+
 export async function hochladen(dateien: FileList | File[] | null): Promise<void> {
   if (!dateien) return;
   const liste = Array.from(dateien);
   if (liste.length === 0) return;
   const ordner = aktuellerOrdner();
   zustand.fehler = "";
-  zustand.uploads = liste.map((d) => ({ name: d.name, prozent: 0 }));
+  uploadAbgebrochen = false;
+  zustand.uploads = liste.map((d) => ({
+    name: d.name,
+    prozent: 0,
+    geladen: 0,
+    gesamt: d.size,
+    tempo: 0,
+    restzeit: -1,
+  }));
   try {
     for (let i = 0; i < liste.length; i++) {
-      await api.hochladen(liste[i], ordner);
-      zustand.uploads[i].prozent = 100;
+      if (uploadAbgebrochen) break;
+      let letzteZeit = Date.now();
+      let letzteBytes = 0;
+      try {
+        await api.hochladen(
+          liste[i],
+          ordner,
+          (geladen, gesamt) => {
+            const u = zustand.uploads[i];
+            if (!u) return;
+            const jetzt = Date.now();
+            const dt = (jetzt - letzteZeit) / 1000;
+            if (dt >= 0.2) {
+              u.tempo = (geladen - letzteBytes) / dt;
+              letzteBytes = geladen;
+              letzteZeit = jetzt;
+            }
+            u.geladen = geladen;
+            u.gesamt = gesamt;
+            u.prozent = gesamt ? Math.round((geladen / gesamt) * 100) : 0;
+            u.restzeit = u.tempo > 0 ? (gesamt - geladen) / u.tempo : -1;
+          },
+          (griff) => {
+            aktuellerUploadGriff = griff.abbrechen;
+          },
+        );
+        const u = zustand.uploads[i];
+        if (u) {
+          u.prozent = 100;
+          u.restzeit = 0;
+        }
+      } catch (f) {
+        if (uploadAbgebrochen) break;
+        zustand.fehler = (f as Error).message;
+        break;
+      }
     }
-  } catch (f) {
-    zustand.fehler = (f as Error).message;
   } finally {
+    aktuellerUploadGriff = null;
     zustand.uploads = [];
     await ladeOrdner();
     ladeSpeicher();
