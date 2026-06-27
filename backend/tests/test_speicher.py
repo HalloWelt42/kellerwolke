@@ -98,6 +98,19 @@ async def test_soft_delete_und_papierkorb(dienst, benutzer_id):
     assert "weg.txt" not in namen
 
 
+async def test_endgueltig_loeschen_einzeln(dienst, benutzer_id):
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "endg.txt", b"x")
+    # Solange nicht im Papierkorb: kein endgueltiges Loeschen moeglich.
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, knoten["id"]) is False
+    await dienst.loeschen(benutzer_id, knoten["id"])
+    assert any(k["name"] == "endg.txt" for k in await dienst.papierkorb(benutzer_id))
+    # Endgueltig: aus dem Papierkorb verschwunden.
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, knoten["id"]) is True
+    assert not any(k["name"] == "endg.txt" for k in await dienst.papierkorb(benutzer_id))
+    # Erneuter Aufruf trifft keinen Knoten mehr.
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, knoten["id"]) is False
+
+
 async def test_journal_zaehlt_monoton(dienst, benutzer_id):
     await dienst.datei_hochladen(benutzer_id, None, "1.txt", b"a")
     await dienst.datei_hochladen(benutzer_id, None, "2.txt", b"b")

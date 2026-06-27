@@ -8,6 +8,7 @@
     zeigeDateien,
     ordnerAnlegen,
     leerePapierkorb,
+    endgueltigLoeschen,
     ladeVersion,
     starteLiveAbgleich,
     stoppeLiveAbgleich,
@@ -27,6 +28,7 @@
 
   let verwaltungOffen = $state(false);
   let teilenKnoten = $state<Knoten | null>(null);
+  let endgueltigKnoten = $state<Knoten | null>(null);
   let nutzerMenuOffen = $state(false);
   let neuerOrdnerOffen = $state(false);
   let papierkorbLeerenOffen = $state(false);
@@ -145,7 +147,10 @@
         {#if zustand.fehler}
           <div class="fehlerstreifen">{zustand.fehler}</div>
         {/if}
-        <Dateiliste onTeilen={(k) => (teilenKnoten = k)} />
+        <Dateiliste
+          onTeilen={(k) => (teilenKnoten = k)}
+          onEndgueltig={(k) => (endgueltigKnoten = k)}
+        />
       {/if}
     </section>
 
@@ -173,6 +178,26 @@
 
   {#if teilenKnoten}
     <Teilen knoten={teilenKnoten} schliessen={() => (teilenKnoten = null)} />
+  {/if}
+
+  {#if endgueltigKnoten}
+    <Modal titel="Endgültig löschen" schliessen={() => (endgueltigKnoten = null)}>
+      <p style="margin: 0; color: var(--text-2);">
+        "{endgueltigKnoten.name}" wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.
+      </p>
+      <div class="modal-knoepfe">
+        <button class="knopf still" onclick={() => (endgueltigKnoten = null)}>Abbrechen</button>
+        <button
+          class="knopf primaer"
+          onclick={() => {
+            if (endgueltigKnoten) endgueltigLoeschen([endgueltigKnoten.id]);
+            endgueltigKnoten = null;
+          }}
+        >
+          <i class="fa-solid fa-trash"></i> Endgültig löschen
+        </button>
+      </div>
+    </Modal>
   {/if}
 
   {#if papierkorbLeerenOffen}

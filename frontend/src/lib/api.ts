@@ -266,6 +266,10 @@ export function wiederherstellen(id: string): Promise<Knoten> {
   return hole<Knoten>(`/v1/dateien/${id}/wiederherstellen`, { method: "POST" });
 }
 
+export function endgueltigLoeschen(id: string): Promise<void> {
+  return hole<void>(`/v1/dateien/${id}/endgueltig`, { method: "DELETE" });
+}
+
 export function versionen(id: string): Promise<Version[]> {
   return hole<Version[]>(`/v1/dateien/${id}/versionen`);
 }

@@ -23,8 +23,9 @@
 
   interface Props {
     onTeilen?: (k: Knoten) => void;
+    onEndgueltig?: (k: Knoten) => void;
   }
-  let { onTeilen }: Props = $props();
+  let { onTeilen, onEndgueltig }: Props = $props();
   import { groesseText, datum, symbolFuerName, zeitText, symbol } from "./format";
   import type { Knoten } from "./types";
   import Dateizeile from "./Dateizeile.svelte";
@@ -168,6 +169,7 @@
     else if (art === "umbenennen") umbenennenStart(k);
     else if (art === "loeschen") loeschen([k.id]);
     else if (art === "wiederherstellen") wiederherstellen([k.id]);
+    else if (art === "endgueltig") onEndgueltig?.(k);
     else if (art === "favorit") favoritUmschalten(k);
   }
 

@@ -2,7 +2,13 @@
   import type { Knoten } from "./types";
   import { symbol, groesseText, datum } from "./format";
 
-  export type RowAktion = "herunterladen" | "umbenennen" | "loeschen" | "wiederherstellen" | "favorit";
+  export type RowAktion =
+    | "herunterladen"
+    | "umbenennen"
+    | "loeschen"
+    | "wiederherstellen"
+    | "endgueltig"
+    | "favorit";
 
   interface Props {
     k: Knoten;
@@ -149,6 +155,16 @@
         }}
       >
         <i class="fa-solid fa-rotate-left"></i>
+      </button>
+      <button
+        class="icon-knopf gefahr"
+        title="Endgültig löschen"
+        onclick={(e) => {
+          e.stopPropagation();
+          onAktion("endgueltig");
+        }}
+      >
+        <i class="fa-solid fa-trash"></i>
       </button>
     {:else}
       <button

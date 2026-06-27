@@ -217,6 +217,30 @@ class SpeicherDienst:
             self.blobstore.delete(str(besitzer_id), h)
         return anzahl
 
+    async def knoten_endgueltig_loeschen(self, besitzer_id, knoten_id):
+        """Entfernt einen einzelnen Papierkorb-Knoten samt Teilbaum endgueltig.
+        Nur erlaubt fuer eigene, bereits geloeschte Knoten. Gleiche GC-Logik wie
+        beim Leeren, aber nur fuer diese eine Wurzel. Liefert True bei Erfolg."""
+        verwaiste = []
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]:
+                    return False
+                wurzeln = [knoten_id]
+                for ref in await repo.blobrefs_im_teilbaum(wurzeln):
+                    neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
+                    if neu is not None and neu <= 0:
+                        verwaiste.append(ref["hash"])
+                await repo.knoten_hart_loeschen(wurzeln)
+                for h in verwaiste:
+                    await repo.blob_zeile_loeschen(besitzer_id, h)
+        # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
+        for h in verwaiste:
+            self.blobstore.delete(str(besitzer_id), h)
+        return True
+
     async def ordner_anlegen(self, besitzer_id, parent_id, name):
         async with self.pool.connection() as conn:
             async with conn.transaction():

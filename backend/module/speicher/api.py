@@ -222,6 +222,14 @@ async def loeschen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
     await speicher.loeschen(benutzer["id"], knoten_id)
 
 
+@router.delete("/{knoten_id}/endgueltig", status_code=204)
+async def endgueltig_loeschen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+                              speicher=Depends(hole_speicher)):
+    # Nur fuer eigene, bereits im Papierkorb liegende Knoten; sonst 404.
+    if not await speicher.knoten_endgueltig_loeschen(benutzer["id"], knoten_id):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+
+
 @router.post("/{knoten_id}/favorit", status_code=204)
 async def favorit_an(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
                      speicher=Depends(hole_speicher)):

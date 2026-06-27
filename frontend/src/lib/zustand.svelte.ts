@@ -468,6 +468,17 @@ export async function wiederherstellen(ids: string[]): Promise<void> {
   }
 }
 
+export async function endgueltigLoeschen(ids: string[]): Promise<void> {
+  try {
+    for (const id of ids) await api.endgueltigLoeschen(id);
+    auswahl.leeren();
+    detailSchliessen();
+    await ladeMit(() => api.papierkorb());
+  } catch (f) {
+    zustand.fehler = (f as Error).message;
+  }
+}
+
 export async function herunterladen(k: Knoten): Promise<void> {
   try {
     await api.herunterladen(k);
