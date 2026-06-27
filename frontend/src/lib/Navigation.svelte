@@ -5,6 +5,7 @@
     zeigePapierkorb,
     zeigeExterneQuellen,
     zeigeFavoriten,
+    zeigeGeteilt,
   } from "./zustand.svelte";
   import Speicheranzeige from "./Speicheranzeige.svelte";
 
@@ -23,8 +24,8 @@
     <i class="fa-solid fa-star"></i> Favoriten
   </button>
 
-  <button class="nav-eintrag" disabled title="Bald verfügbar">
-    <i class="fa-solid fa-share-nodes"></i> Geteilt <span class="bald">bald</span>
+  <button class="nav-eintrag" class:aktiv={zustand.bereich === "geteilt"} onclick={zeigeGeteilt}>
+    <i class="fa-solid fa-share-nodes"></i> Geteilt
   </button>
 
   <button

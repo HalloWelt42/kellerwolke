@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { zustand, breadcrumbGehe, externBreadcrumb, verschiebe } from "./zustand.svelte";
+  import {
+    zustand,
+    breadcrumbGehe,
+    externBreadcrumb,
+    geteiltBreadcrumb,
+    verschiebe,
+  } from "./zustand.svelte";
 
   // Breadcrumb-Ebenen sind Ablageziele: zieht man eine Auswahl auf eine
   // uebergeordnete Ebene, wandert sie dorthin (Verschieben nach oben).
@@ -66,6 +72,22 @@
 {:else if zustand.bereich === "favoriten"}
   <nav class="breadcrumb">
     <i class="fa-solid fa-star"></i> <span class="aktuell">Favoriten</span>
+  </nav>
+{:else if zustand.bereich === "geteilt"}
+  <nav class="breadcrumb">
+    {#if zustand.geteiltPfad.length === 0}
+      <i class="fa-solid fa-share-nodes"></i> <span class="aktuell">Geteilt</span>
+    {:else}
+      <a onclick={() => geteiltBreadcrumb(-1)}>Geteilt</a>
+      {#each zustand.geteiltPfad as teil, i (i)}
+        <i class="fa-solid fa-chevron-right"></i>
+        {#if i === zustand.geteiltPfad.length - 1}
+          <span class="aktuell">{teil.name}</span>
+        {:else}
+          <a onclick={() => geteiltBreadcrumb(i)}>{teil.name}</a>
+        {/if}
+      {/each}
+    {/if}
   </nav>
 {:else if zustand.bereich === "papierkorb"}
   <nav class="breadcrumb">

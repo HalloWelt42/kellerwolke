@@ -2,7 +2,9 @@ import type {
   AuthStatus,
   Benutzer,
   ExternEintrag,
+  Freigabe,
   Knoten,
+  Konto,
   SpeicherStatus,
   Verschiebung,
   Version,
@@ -113,6 +115,51 @@ export function favoriten(): Promise<Knoten[]> {
 
 export function favoritSetzen(id: string, an: boolean): Promise<void> {
   return hole<void>(`/v1/dateien/${id}/favorit`, { method: an ? "POST" : "DELETE" });
+}
+
+// --- Geteilt ----------------------------------------------------------------
+
+export function konten(): Promise<Konto[]> {
+  return hole<Konto[]>("/v1/dateien/konten");
+}
+
+export function teilen(id: string, zielBenutzerId: string, rechte: string): Promise<void> {
+  return hole<void>(`/v1/dateien/${id}/teilen`, {
+    method: "POST",
+    body: JSON.stringify({ ziel_benutzer_id: zielBenutzerId, rechte }),
+  });
+}
+
+export function teilenEntfernen(id: string, zielId: string): Promise<void> {
+  return hole<void>(`/v1/dateien/${id}/teilen/${zielId}`, { method: "DELETE" });
+}
+
+export function freigaben(id: string): Promise<Freigabe[]> {
+  return hole<Freigabe[]>(`/v1/dateien/${id}/freigaben`);
+}
+
+export function geteilt(): Promise<Knoten[]> {
+  return hole<Knoten[]>("/v1/dateien/geteilt");
+}
+
+export function geteiltKinder(id: string): Promise<Knoten[]> {
+  return hole<Knoten[]>(`/v1/dateien/geteilt/${id}`);
+}
+
+export async function geteiltHerunterladen(knoten: Knoten): Promise<void> {
+  const antwort = await fetch(`/api/v1/dateien/geteilt/${knoten.id}/inhalt`, {
+    headers: { "X-Kellerwolke-Sitzung": token() },
+  });
+  await pruefe(antwort);
+  const blob = await antwort.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = knoten.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function papierkorbLeeren(): Promise<void> {

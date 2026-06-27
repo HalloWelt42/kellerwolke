@@ -15,9 +15,15 @@
     externRunter,
     uploadStoppen,
     favoritUmschalten,
+    geteiltOeffnen,
   } from "./zustand.svelte";
   import { auswahl } from "./auswahl.svelte";
-  import { groesseText, datum, symbolFuerName, zeitText } from "./format";
+
+  interface Props {
+    onTeilen?: (k: Knoten) => void;
+  }
+  let { onTeilen }: Props = $props();
+  import { groesseText, datum, symbolFuerName, zeitText, symbol } from "./format";
   import type { Knoten } from "./types";
   import Dateizeile from "./Dateizeile.svelte";
   import type { RowAktion } from "./Dateizeile.svelte";
@@ -287,6 +293,7 @@
       if (istSchreibbar()) {
         if (!mehrere) {
           eintraege.push({ label: "Umbenennen", icon: "fa-pen", fn: () => umbenennenStart(k) });
+          eintraege.push({ label: "Teilen", icon: "fa-share-nodes", fn: () => onTeilen?.(k) });
         }
         eintraege.push({
           label: "Verschieben",
@@ -384,6 +391,57 @@
           <span class="z-akt">
             {#if !e.ist_ordner}
               <button class="icon-knopf" title="Herunterladen" onclick={() => externRunter(e)}>
+                <i class="fa-solid fa-download"></i>
+              </button>
+            {/if}
+          </span>
+        </div>
+      {/each}
+    {/if}
+  </div>
+{:else if zustand.bereich === "geteilt"}
+  <!-- Mit mir geteilt (read-only) -->
+  <div class="liste" bind:this={containerEl}>
+    {#if zustand.eintraege.length === 0}
+      <div class="leer">
+        <i class="fa-regular fa-share-from-square"></i><span>Nichts mit dir geteilt</span>
+      </div>
+    {:else}
+      <div class="listenkopf">
+        <span></span><span>Name</span><span>Größe</span>
+        <span class="sp-geaendert">Geändert</span><span></span>
+      </div>
+      {#each zustand.eintraege as k (k.id)}
+        {@const sym = symbol(k)}
+        <div class="zeile" role="row" tabindex="-1" onclick={() => geteiltOeffnen(k)}>
+          <span class="z-aus"></span>
+          <span class="z-name">
+            <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
+            <span class="titel">{k.name}</span>
+            {#if zustand.geteiltPfad.length === 0 && k.besitzer_name}
+              <span class="von">von {k.besitzer_name}</span>
+            {/if}
+          </span>
+          <span class="z-meta">
+            {k.typ === "ordner"
+              ? k.kinder_anzahl === 0
+                ? "Leer"
+                : `${k.kinder_anzahl} Dateien`
+              : k.groesse != null
+                ? groesseText(k.groesse)
+                : "-"}
+          </span>
+          <span class="z-meta z-geaendert">{datum(k.geaendert_am)}</span>
+          <span class="z-akt">
+            {#if k.typ === "datei"}
+              <button
+                class="icon-knopf"
+                title="Herunterladen"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  geteiltOeffnen(k);
+                }}
+              >
                 <i class="fa-solid fa-download"></i>
               </button>
             {/if}
@@ -576,5 +634,10 @@
   .verschiebe-hinweis .knopf {
     margin-left: auto;
     color: var(--akzent-stark);
+  }
+  .von {
+    color: var(--text-3);
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 </style>

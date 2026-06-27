@@ -24,6 +24,19 @@ export interface Knoten {
   kinder_anzahl?: number | null;
   // Vom Nutzer als Favorit markiert.
   favorit?: boolean;
+  // Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
+  besitzer_name?: string | null;
+}
+
+export interface Konto {
+  id: string;
+  name: string;
+}
+
+export interface Freigabe {
+  ziel_benutzer_id: string;
+  ziel_name: string;
+  rechte: string;
 }
 
 export interface SpeicherStatus {

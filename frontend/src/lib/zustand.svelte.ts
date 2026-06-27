@@ -7,7 +7,7 @@ import type { ExternEintrag, Knoten, SpeicherStatus, Version } from "./types";
 // hier und rufen die Aktionen auf. Backend-Funktionen kommen unveraendert aus
 // api.ts.
 
-export type Bereich = "dateien" | "extern" | "papierkorb" | "suche" | "favoriten";
+export type Bereich = "dateien" | "extern" | "papierkorb" | "suche" | "favoriten" | "geteilt";
 export type Ansicht = "liste" | "grid";
 
 export interface Pfadteil {
@@ -39,6 +39,7 @@ export const zustand = $state<{
   uploads: UploadFortschritt[];
   speicher: SpeicherStatus | null;
   version: string;
+  geteiltPfad: Pfadteil[];
 }>({
   bereich: "dateien",
   pfad: [{ id: null, name: "Meine Dateien" }],
@@ -54,6 +55,7 @@ export const zustand = $state<{
   uploads: [],
   speicher: null,
   version: "",
+  geteiltPfad: [],
 });
 
 // --- Live-Abgleich ueber das Aenderungs-Journal -----------------------------
@@ -67,7 +69,10 @@ let liveTimer: ReturnType<typeof setInterval> | null = null;
 function aktualisiereAnsicht(): void {
   if (zustand.bereich === "dateien") ladeOrdner();
   else if (zustand.bereich === "favoriten") ladeMit(() => api.favoriten());
-  else if (zustand.bereich === "papierkorb") ladeMit(() => api.papierkorb());
+  else if (zustand.bereich === "geteilt") {
+    const p = zustand.geteiltPfad;
+    ladeMit(() => (p.length ? api.geteiltKinder(p[p.length - 1].id as string) : api.geteilt()));
+  } else if (zustand.bereich === "papierkorb") ladeMit(() => api.papierkorb());
   else if (zustand.bereich === "suche" && zustand.suchbegriff)
     ladeMit(() => api.suchen(zustand.suchbegriff));
   else if (zustand.bereich === "extern" && zustand.externBrowse) ladeExtern();
@@ -181,6 +186,39 @@ export function zeigeDateien(): void {
   auswahl.leeren();
   detailSchliessen();
   ladeOrdner();
+}
+
+export function zeigeGeteilt(): void {
+  zustand.bereich = "geteilt";
+  zustand.externBrowse = null;
+  zustand.geteiltPfad = [];
+  zustand.suchbegriff = "";
+  auswahl.leeren();
+  detailSchliessen();
+  ladeMit(() => api.geteilt());
+}
+
+export function geteiltOeffnen(k: Knoten): void {
+  if (k.typ === "ordner") {
+    zustand.geteiltPfad = [...zustand.geteiltPfad, { id: k.id, name: k.name }];
+    auswahl.leeren();
+    ladeMit(() => api.geteiltKinder(k.id));
+  } else if (k.typ === "datei") {
+    api.geteiltHerunterladen(k).catch((f) => (zustand.fehler = (f as Error).message));
+  }
+}
+
+export function geteiltBreadcrumb(index: number): void {
+  if (index < 0) {
+    zustand.geteiltPfad = [];
+    auswahl.leeren();
+    ladeMit(() => api.geteilt());
+    return;
+  }
+  const ziel = zustand.geteiltPfad[index];
+  zustand.geteiltPfad = zustand.geteiltPfad.slice(0, index + 1);
+  auswahl.leeren();
+  ladeMit(() => api.geteiltKinder(ziel.id as string));
 }
 
 export function zeigeFavoriten(): void {

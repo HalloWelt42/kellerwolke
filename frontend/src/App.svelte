@@ -20,9 +20,12 @@
   import Dateiliste from "./lib/Dateiliste.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
   import Einstellungen from "./lib/Einstellungen.svelte";
+  import Teilen from "./lib/Teilen.svelte";
   import Modal from "./lib/Modal.svelte";
+  import type { Knoten } from "./lib/types";
 
   let verwaltungOffen = $state(false);
+  let teilenKnoten = $state<Knoten | null>(null);
   let nutzerMenuOffen = $state(false);
   let neuerOrdnerOffen = $state(false);
   let papierkorbLeerenOffen = $state(false);
@@ -137,7 +140,7 @@
       {#if zustand.fehler}
         <div class="fehlerstreifen">{zustand.fehler}</div>
       {/if}
-      <Dateiliste />
+      <Dateiliste onTeilen={(k) => (teilenKnoten = k)} />
     </section>
 
     {#if mitDetail && zustand.detail}
@@ -160,6 +163,10 @@
         <button class="knopf primaer" onclick={ordnerAnlegenBestaetigen}>Anlegen</button>
       </div>
     </Modal>
+  {/if}
+
+  {#if teilenKnoten}
+    <Teilen knoten={teilenKnoten} schliessen={() => (teilenKnoten = null)} />
   {/if}
 
   {#if papierkorbLeerenOffen}
