@@ -79,6 +79,66 @@ class SpeicherDienst:
                 else:
                     await repo.favorit_entfernen(besitzer_id, knoten_id)
 
+    # --- Freigaben (Geteilt) -------------------------------------------------
+
+    async def teilen(self, besitzer_id, knoten_id, ziel_id, rechte):
+        """Gibt einen eigenen Knoten an ein Konto frei (nur der Eigentuemer)."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id:
+                    return False
+                await repo.freigabe_setzen(knoten_id, ziel_id, rechte)
+                return True
+
+    async def teilen_entfernen(self, besitzer_id, knoten_id, ziel_id):
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id:
+                    return False
+                await repo.freigabe_entfernen(knoten_id, ziel_id)
+                return True
+
+    async def freigaben(self, besitzer_id, knoten_id):
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["besitzer_id"] != besitzer_id:
+                return None
+            return await repo.freigaben(knoten_id)
+
+    async def geteilt_mit(self, benutzer_id):
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            return await repo.geteilt_mit(benutzer_id)
+
+    async def geteilt_kinder(self, leser_id, knoten_id):
+        """Kinder eines geteilten Ordners - nur bei Lesezugriff (Eigentuemer oder
+        Freigabe auf dem Knoten/einem Vorfahren)."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if not await repo.lese_zugriff(leser_id, knoten_id):
+                return None
+            return await repo.kinder_nach_parent(knoten_id)
+
+    async def geteilt_datei_lesen(self, leser_id, knoten_id):
+        """Inhalt einer geteilten Datei - nur bei Lesezugriff. Gelesen wird aus
+        dem Pool des EIGENTUEMERS (nicht des Lesers)."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if not await repo.lese_zugriff(leser_id, knoten_id):
+                return None
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                return None
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+            eigentuemer = str(knoten["besitzer_id"])
+        bloecke = [self.blobstore.get(eigentuemer, c["blob_hash"]) for c in teile]
+        return (knoten, b"".join(bloecke))
+
     # --- Speicherort (Datenablage) -------------------------------------------
 
     async def aktiver_pfad(self) -> str:

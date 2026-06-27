@@ -34,6 +34,26 @@ class KnotenAus(BaseModel):
     kinder_anzahl: int | None = None
     # Vom Nutzer als Favorit markiert.
     favorit: bool = False
+    # Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
+    besitzer_name: str | None = None
+
+
+class TeilenEingabe(BaseModel):
+    ziel_benutzer_id: UUID
+    rechte: str = "lesen"
+
+
+class FreigabeAus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    ziel_benutzer_id: UUID
+    ziel_name: str
+    rechte: str
+
+
+class KontoAus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: UUID
+    name: str
 
 
 class SpeicherStatusAus(BaseModel):

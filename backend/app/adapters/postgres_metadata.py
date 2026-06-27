@@ -136,6 +136,82 @@ class PostgresMetadataRepository:
             (besitzer_id, knoten_id),
         )
 
+    # --- Freigaben (intern: an ein Konto) ------------------------------------
+
+    async def freigabe_setzen(self, knoten_id, ziel_id, rechte):
+        await self.conn.execute(
+            "DELETE FROM freigabe WHERE typ='intern' AND knoten_id=%s AND ziel_benutzer_id=%s",
+            (knoten_id, ziel_id),
+        )
+        await self.conn.execute(
+            "INSERT INTO freigabe (knoten_id, typ, ziel_benutzer_id, rechte) "
+            "VALUES (%s, 'intern', %s, %s)",
+            (knoten_id, ziel_id, rechte),
+        )
+
+    async def freigabe_entfernen(self, knoten_id, ziel_id):
+        await self.conn.execute(
+            "DELETE FROM freigabe WHERE typ='intern' AND knoten_id=%s AND ziel_benutzer_id=%s",
+            (knoten_id, ziel_id),
+        )
+
+    async def freigaben(self, knoten_id):
+        return await self._alle(
+            "SELECT f.ziel_benutzer_id, f.rechte, b.name AS ziel_name "
+            "FROM freigabe f JOIN benutzer b ON b.id = f.ziel_benutzer_id "
+            "WHERE f.typ='intern' AND f.knoten_id=%s ORDER BY lower(b.name)",
+            (knoten_id,),
+        )
+
+    async def geteilt_mit(self, benutzer_id):
+        """Knoten, die DIREKT an benutzer_id freigegeben sind (mit Eigentuemer-Name)."""
+        return await self._alle(
+            "SELECT k.*, v.groesse, ob.name AS besitzer_name, "
+            "(SELECT count(*) FROM knoten c WHERE c.parent_id=k.id AND NOT c.geloescht) "
+            "AS kinder_anzahl "
+            "FROM freigabe f "
+            "JOIN knoten k ON k.id = f.knoten_id "
+            "JOIN benutzer ob ON ob.id = k.besitzer_id "
+            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "WHERE f.typ='intern' AND f.ziel_benutzer_id=%s AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
+            "lower(k.name)",
+            (benutzer_id,),
+        )
+
+    async def lese_zugriff(self, benutzer_id, knoten_id) -> bool:
+        """True, wenn benutzer den Knoten lesen darf: Eigentuemer ODER der Knoten
+        selbst bzw. ein Vorfahr ist intern an benutzer freigegeben."""
+        treffer = await self._eine(
+            "WITH RECURSIVE kette AS ("
+            "  SELECT id, parent_id, besitzer_id FROM knoten WHERE id=%s "
+            "  UNION ALL "
+            "  SELECT k.id, k.parent_id, k.besitzer_id FROM knoten k "
+            "  JOIN kette ON k.id = kette.parent_id"
+            ") "
+            "SELECT 1 FROM kette WHERE besitzer_id=%s "
+            "UNION ALL "
+            "SELECT 1 FROM freigabe f WHERE f.typ='intern' AND f.ziel_benutzer_id=%s "
+            "  AND f.knoten_id IN (SELECT id FROM kette) "
+            "LIMIT 1",
+            (knoten_id, benutzer_id, benutzer_id),
+        )
+        return treffer is not None
+
+    async def kinder_nach_parent(self, parent_id):
+        """Kinder eines Ordners ohne Eigentuemer-Filter (fuer geteiltes Browsen;
+        der Zugriff auf den Ordner ist vorher per lese_zugriff geprueft)."""
+        return await self._alle(
+            "SELECT k.*, v.groesse, "
+            "(SELECT count(*) FROM knoten c WHERE c.parent_id=k.id AND NOT c.geloescht) "
+            "AS kinder_anzahl "
+            "FROM knoten k LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "WHERE k.parent_id=%s AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
+            "lower(k.name)",
+            (parent_id,),
+        )
+
     async def speicher_status(self, besitzer_id):
         benutzt = await self._eine(
             "SELECT coalesce(sum(groesse), 0) AS s FROM blob "

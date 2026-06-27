@@ -8,13 +8,16 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from psycopg.errors import UniqueViolation
 
-from app.abhaengig import aktueller_benutzer, hole_speicher, hole_suche
+from app.abhaengig import aktueller_benutzer, hole_auth, hole_speicher, hole_suche
 from app.config import EINSTELLUNGEN
 from module.speicher.modelle import (
     ExternEintragAus,
+    FreigabeAus,
     KnotenAus,
+    KontoAus,
     OrdnerEingabe,
     SpeicherStatusAus,
+    TeilenEingabe,
     UmbenennenEingabe,
     VerschiebenEingabe,
     VersionAus,
@@ -51,6 +54,40 @@ async def papierkorb(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole
 @router.get("/favoriten", response_model=list[KnotenAus])
 async def favoriten(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     return [KnotenAus.model_validate(k) for k in await speicher.favoriten(benutzer["id"])]
+
+
+@router.get("/konten", response_model=list[KontoAus])
+async def konten(benutzer=Depends(aktueller_benutzer), auth=Depends(hole_auth)):
+    """Konten-Liste (id+name) fuer den Teilen-Dialog - fuer jeden Angemeldeten."""
+    return [KontoAus.model_validate(b) for b in await auth.liste_benutzer()]
+
+
+@router.get("/geteilt", response_model=list[KnotenAus])
+async def geteilt(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    return [KnotenAus.model_validate(k) for k in await speicher.geteilt_mit(benutzer["id"])]
+
+
+@router.get("/geteilt/{knoten_id}", response_model=list[KnotenAus])
+async def geteilt_kinder(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+                         speicher=Depends(hole_speicher)):
+    kinder = await speicher.geteilt_kinder(benutzer["id"], knoten_id)
+    if kinder is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return [KnotenAus.model_validate(k) for k in kinder]
+
+
+@router.get("/geteilt/{knoten_id}/inhalt")
+async def geteilt_inhalt(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+                         speicher=Depends(hole_speicher)):
+    ergebnis = await speicher.geteilt_datei_lesen(benutzer["id"], knoten_id)
+    if ergebnis is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    knoten, daten = ergebnis
+    return Response(
+        content=daten,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{knoten["name"]}"'},
+    )
 
 
 @router.delete("/papierkorb", status_code=204)
@@ -197,6 +234,30 @@ async def favorit_an(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
 async def favorit_aus(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
                       speicher=Depends(hole_speicher)):
     await speicher.favorit_setzen(benutzer["id"], knoten_id, False)
+
+
+@router.get("/{knoten_id}/freigaben", response_model=list[FreigabeAus])
+async def freigaben(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+                    speicher=Depends(hole_speicher)):
+    liste = await speicher.freigaben(benutzer["id"], knoten_id)
+    if liste is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return [FreigabeAus.model_validate(f) for f in liste]
+
+
+@router.post("/{knoten_id}/teilen", status_code=204)
+async def teilen(knoten_id: UUID, eingabe: TeilenEingabe, benutzer=Depends(aktueller_benutzer),
+                 speicher=Depends(hole_speicher)):
+    rechte = eingabe.rechte if eingabe.rechte in ("lesen", "schreiben") else "lesen"
+    if not await speicher.teilen(benutzer["id"], knoten_id, eingabe.ziel_benutzer_id, rechte):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+
+
+@router.delete("/{knoten_id}/teilen/{ziel_id}", status_code=204)
+async def teilen_entfernen(knoten_id: UUID, ziel_id: UUID, benutzer=Depends(aktueller_benutzer),
+                           speicher=Depends(hole_speicher)):
+    if not await speicher.teilen_entfernen(benutzer["id"], knoten_id, ziel_id):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
 
 
 @router.post("/{knoten_id}/wiederherstellen", response_model=KnotenAus)
