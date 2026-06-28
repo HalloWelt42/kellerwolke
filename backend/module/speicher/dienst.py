@@ -16,6 +16,7 @@ from pathlib import Path
 from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.config import EINSTELLUNGEN
+from app.io_pool import im_thread
 from app.ports import SpeicherNichtVerfuegbar
 
 
@@ -70,7 +71,7 @@ class SpeicherDienst:
         status["gesamt"] = gesamt
         status["frei"] = frei
         status["ort"] = str(getattr(self.blobstore, "wurzel", "")) or None
-        status["verfuegbar"] = self.blobstore.verfuegbar()
+        status["verfuegbar"] = await self.speicher_erreichbar()
         return status
 
     # --- Favoriten ------------------------------------------------------------
@@ -146,7 +147,7 @@ class SpeicherDienst:
                 return None
             teile = await repo.chunks(knoten["aktuelle_version_id"])
             eigentuemer = str(knoten["besitzer_id"])
-        bloecke = [self.blobstore.get(eigentuemer, c["blob_hash"]) for c in teile]
+        bloecke = [await self.blob_get(eigentuemer, c["blob_hash"], c.get("groesse", 0)) for c in teile]
         return (knoten, b"".join(bloecke))
 
     # --- Speicherort (Datenablage) -------------------------------------------
@@ -157,9 +158,35 @@ class SpeicherDienst:
             row = await repo.speicherort_holen()
             return row["pfad"] if row else str(self.blobstore.wurzel)
 
-    def verfuegbar(self) -> bool:
-        """Ist der Objekt-Pool gerade erreichbar (richtiges Laufwerk gemountet)?"""
-        return self.blobstore.verfuegbar()
+    # --- Nicht-blockierende Blob-Ein-/Ausgabe --------------------------------
+    # Jeder Plattenzugriff laeuft im Thread-Pool mit Zeitlimit, damit eine
+    # haengende Platte den Event-Loop nie einfriert (siehe app/io_pool.py).
+
+    def _io_timeout(self, groesse: int = 0) -> float:
+        z = EINSTELLUNGEN.io_timeout
+        return z + (groesse / EINSTELLUNGEN.io_min_durchsatz if groesse else 0)
+
+    async def blob_put(self, benutzer_id: str, daten: bytes):
+        return await im_thread(
+            self.blobstore.put, benutzer_id, daten, timeout=self._io_timeout(len(daten))
+        )
+
+    async def blob_get(self, benutzer_id: str, blob_hash: str, groesse: int = 0) -> bytes:
+        return await im_thread(
+            self.blobstore.get, benutzer_id, blob_hash, timeout=self._io_timeout(groesse)
+        )
+
+    async def blob_delete(self, benutzer_id: str, blob_hash: str) -> None:
+        await im_thread(
+            self.blobstore.delete, benutzer_id, blob_hash, timeout=self._io_timeout()
+        )
+
+    async def speicher_erreichbar(self) -> bool:
+        """Wie verfuegbar(), aber nicht-blockierend mit Zeitlimit."""
+        try:
+            return await im_thread(self.blobstore.verfuegbar, timeout=EINSTELLUNGEN.io_timeout)
+        except SpeicherNichtVerfuegbar:
+            return False
 
     async def speicher_initialisieren(self, standard: str) -> str:
         """Beim Start: aktiven Pool-Pfad + Volume-Marker ermitteln, den BlobStore
@@ -239,7 +266,7 @@ class SpeicherDienst:
         loeschen. Liefert die Zahl entfernter Wurzeln."""
         # Vorab pruefen: ist der Pool nicht erreichbar, gar nicht erst die
         # DB-Zeilen loeschen (sonst blieben verwaiste Bloecke auf der Platte).
-        if not self.blobstore.verfuegbar():
+        if not await self.speicher_erreichbar():
             raise SpeicherNichtVerfuegbar("Papierkorb kann nicht geleert werden")
         verwaiste = []
         async with self.pool.connection() as conn:
@@ -258,14 +285,14 @@ class SpeicherDienst:
                 anzahl = len(wurzeln)
         # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
         for h in verwaiste:
-            self.blobstore.delete(str(besitzer_id), h)
+            await self.blob_delete(str(besitzer_id), h)
         return anzahl
 
     async def knoten_endgueltig_loeschen(self, besitzer_id, knoten_id):
         """Entfernt einen einzelnen Papierkorb-Knoten samt Teilbaum endgueltig.
         Nur erlaubt fuer eigene, bereits geloeschte Knoten. Gleiche GC-Logik wie
         beim Leeren, aber nur fuer diese eine Wurzel. Liefert True bei Erfolg."""
-        if not self.blobstore.verfuegbar():
+        if not await self.speicher_erreichbar():
             raise SpeicherNichtVerfuegbar("Knoten kann nicht endgueltig geloescht werden")
         verwaiste = []
         async with self.pool.connection() as conn:
@@ -284,7 +311,7 @@ class SpeicherDienst:
                     await repo.blob_zeile_loeschen(besitzer_id, h)
         # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
         for h in verwaiste:
-            self.blobstore.delete(str(besitzer_id), h)
+            await self.blob_delete(str(besitzer_id), h)
         return True
 
     async def ordner_anlegen(self, besitzer_id, parent_id, name):
@@ -298,7 +325,7 @@ class SpeicherDienst:
     async def datei_hochladen(self, besitzer_id, parent_id, name, daten):
         # 1. Block zuerst auf die Platte (inhaltsadressiert). neu sagt, ob dieser
         #    Aufruf den Block erzeugt hat - wichtig fuer die Kompensation unten.
-        blob_hash, neu = self.blobstore.put(str(besitzer_id), daten)
+        blob_hash, neu = await self.blob_put(str(besitzer_id), daten)
         groesse = len(daten)
         try:
             async with self.pool.connection() as conn:
@@ -330,7 +357,13 @@ class SpeicherDienst:
                     repo = PostgresMetadataRepository(conn)
                     rest = await repo.blob_holen(besitzer_id, blob_hash)
                 if not rest:
-                    self.blobstore.delete(str(besitzer_id), blob_hash)
+                    # Beste-Muehe-Aufraeumung: ein Zeitlimit hier darf den
+                    # urspruenglichen Fehler nicht verdecken (verwaister Block
+                    # wird spaeter von der Konsistenzpruefung gefunden).
+                    try:
+                        await self.blob_delete(str(besitzer_id), blob_hash)
+                    except SpeicherNichtVerfuegbar:
+                        pass
             raise
 
     async def datei_lesen(self, besitzer_id, knoten_id):
@@ -340,7 +373,10 @@ class SpeicherDienst:
             if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
                 raise FileNotFoundError("Datei nicht gefunden")
             teile = await repo.chunks(knoten["aktuelle_version_id"])
-        bloecke = [self.blobstore.get(str(besitzer_id), c["blob_hash"]) for c in teile]
+        bloecke = [
+            await self.blob_get(str(besitzer_id), c["blob_hash"], c.get("groesse", 0))
+            for c in teile
+        ]
         return b"".join(bloecke)
 
     async def _datei_groesse(self, knoten):

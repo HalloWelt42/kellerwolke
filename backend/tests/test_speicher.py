@@ -170,7 +170,13 @@ async def test_als_zip_zu_gross(dienst, benutzer_id, monkeypatch):
 
     from module.speicher import dienst as dmod
 
-    monkeypatch.setattr(dmod, "EINSTELLUNGEN", SimpleNamespace(max_zip=5))
+    # Nur max_zip kuenstlich klein setzen; die io-Felder vom echten Config
+    # uebernehmen, damit die nicht-blockierende Blob-I/O weiter funktioniert.
+    monkeypatch.setattr(dmod, "EINSTELLUNGEN", SimpleNamespace(
+        max_zip=5,
+        io_timeout=dmod.EINSTELLUNGEN.io_timeout,
+        io_min_durchsatz=dmod.EINSTELLUNGEN.io_min_durchsatz,
+    ))
     knoten = await dienst.datei_hochladen(benutzer_id, None, "gross.txt", b"mehr als fuenf")
     with pytest.raises(dmod.ArchivZuGross):
         await dienst.als_zip(benutzer_id, [knoten["id"]])

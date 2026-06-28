@@ -36,12 +36,25 @@ einer Platte genauso wie auf dem Zielgerät mit mehreren. Eine reine Geräte-ID-
 Prüfung (`st_dev`) würde auf der Einzelplatte falsch auslösen und kommt darum
 nicht als Hauptkriterium zum Einsatz.
 
+## Nicht-blockierende Blob-Ein-/Ausgabe
+
+Jeder Plattenzugriff (Schreiben, Lesen, Löschen eines Blocks, auch die
+Verfügbarkeitsprüfung) läuft in einem begrenzten Thread-Pool, nicht direkt im
+Event-Loop. So friert eine hängende Platte nie den Loop und damit die ganze
+App ein - andere Anfragen laufen ungestört weiter.
+
+Dazu ein Zeitlimit pro Zugriff: ein Grundwert plus ein größenabhängiger
+Aufschlag, damit legitime große Transfers nicht abgebrochen werden, ein echter
+Hänger aber irgendwann als nicht verfügbar (HTTP 503) zurückkommt, statt eine
+Anfrage ewig festzuhalten. Die begrenzte Pool-Größe deckelt zugleich, wie viele
+Threads eine hängende Platte maximal binden kann. Einstellbar über
+`KELLERWOLKE_IO_THREADS`, `KELLERWOLKE_IO_TIMEOUT` und
+`KELLERWOLKE_IO_MIN_DURCHSATZ`.
+
 ## Nächste Schritte
 
-Aufbauend auf dem Marker sind weitere Schichten geplant:
+Aufbauend auf Marker und nicht-blockierender I/O sind weitere Schichten geplant:
 
-- Nicht-blockierende Blob-Ein-/Ausgabe mit Zeitlimit, damit eine hängende
-  Platte die App nicht komplett blockiert.
 - Härtung der Datenablage-Verschiebung (Ziel prüfen, frischer Marker).
 - Boot-Robustheit (Dienst wartet auf den Mount) und Dienst-Autostart.
 - Konsistenz-Prüfung und Reparatur (verwaiste Blöcke nach Stromausfall).

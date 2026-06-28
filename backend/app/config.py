@@ -52,6 +52,15 @@ class Einstellungen:
     # ZIP wird im Speicher gebaut; Gesamtgroesse deckeln (Schutz vor OOM/DoS,
     # gerade auf dem Pi). Bei Bedarf hochsetzen.
     max_zip: int = _zahl("KELLERWOLKE_MAX_ZIP", 500_000_000)
+    # Blob-Ein-/Ausgabe laeuft in begrenzt vielen Threads, damit eine haengende
+    # Platte den Event-Loop (und die ganze App) nie einfriert. io_timeout ist das
+    # Grund-Zeitlimit (Sekunden) fuer kleine Operationen; bei put/get kommt
+    # groesse / io_min_durchsatz hinzu, damit legitime grosse Transfers nicht
+    # abgebrochen werden, ein echter Haenger aber irgendwann als nicht verfuegbar
+    # zurueckkommt.
+    io_threads: int = _zahl("KELLERWOLKE_IO_THREADS", 8)
+    io_timeout: int = _zahl("KELLERWOLKE_IO_TIMEOUT", 60)
+    io_min_durchsatz: int = _zahl("KELLERWOLKE_IO_MIN_DURCHSATZ", 1_000_000)
 
     @property
     def dsn(self) -> str:

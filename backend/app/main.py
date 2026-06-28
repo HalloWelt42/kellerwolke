@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import db
+from . import io_pool
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
 from .ports import SpeicherNichtVerfuegbar
@@ -59,6 +60,7 @@ async def lebenszyklus(app: FastAPI):
         yield
     finally:
         await app.state.vorgaenge.stoppen()
+        io_pool.herunterfahren()
         await db.stoppen()
 
 
