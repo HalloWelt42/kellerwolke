@@ -9,13 +9,26 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 
+class SpeicherNichtVerfuegbar(Exception):
+    """Der Objekt-Pool ist gerade nicht erreichbar: das Laufwerk ist abgehaengt
+    oder der Marker passt nicht. Bewusst KEIN Schreiben/Lesen, statt still auf
+    die falsche Platte (Systemplatte) auszuweichen. Die API uebersetzt das in
+    HTTP 503 - der Aufrufer soll spaeter erneut versuchen, nichts geht verloren."""
+
+
 @runtime_checkable
 class BlobStore(Protocol):
     """Inhaltsadressierte Ablage roher Bloecke, Pool pro Nutzer isoliert."""
 
+    def verfuegbar(self) -> bool:
+        """True nur, wenn das richtige Laufwerk gemountet ist (Marker passt).
+        Wird vor jedem put/get/delete geprueft; bei False -> SpeicherNichtVerfuegbar."""
+        ...
+
     def put(self, benutzer_id: str, daten: bytes) -> tuple[str, bool]:
         """Legt die Bytes ab und liefert (hash, neu_geschrieben). Existiert der
-        Block schon, wird nichts geschrieben (Dedup) und neu_geschrieben=False."""
+        Block schon, wird nichts geschrieben (Dedup) und neu_geschrieben=False.
+        Bei abgehaengtem Pool -> SpeicherNichtVerfuegbar (vor jedem Schreibversuch)."""
         ...
 
     def get(self, benutzer_id: str, blob_hash: str) -> bytes:

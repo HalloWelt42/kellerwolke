@@ -7,12 +7,14 @@ Strikte Trennung: hier entsteht ausschliesslich die REST-API. Die Oberflaeche
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from . import db
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
+from .ports import SpeicherNichtVerfuegbar
 from module.admin.api import router as admin_router
 from module.auth.api import router as auth_router
 from module.auth.dienst import AuthDienst
@@ -45,10 +47,11 @@ async def lebenszyklus(app: FastAPI):
     app.state.pool = pool
     app.state.auth = AuthDienst(pool)
     app.state.speicher = SpeicherDienst(pool, FilesystemBlobStore(EINSTELLUNGEN.objekt_pfad))
-    # Aktiven Pool-Pfad aus der DB ziehen (oder mit dem Standard aus .env seeden),
-    # damit ein verschobener Speicherort einen Neustart uebersteht.
-    aktiv = await app.state.speicher.aktiver_pfad_initialisieren(EINSTELLUNGEN.objekt_pfad)
-    app.state.speicher.blobstore.setze_wurzel(aktiv)
+    # Aktiven Pool-Pfad + Volume-Marker aus der DB ziehen (oder beim Erststart mit
+    # dem Standard aus .env seeden), BlobStore konfigurieren. So uebersteht ein
+    # verschobener Speicherort einen Neustart und ein fehlender Mount fuehrt zu
+    # "nicht verfuegbar" statt zum stillen Schreiben auf die Systemplatte.
+    await app.state.speicher.speicher_initialisieren(EINSTELLUNGEN.objekt_pfad)
     app.state.suche = SuchDienst(pool)
     app.state.vorgaenge = VorgangRegistry()
     await _admin_seed(app.state.auth)
@@ -70,6 +73,16 @@ def app_bauen() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(SpeicherNichtVerfuegbar)
+    async def _speicher_nicht_verfuegbar(request: Request, exc: SpeicherNichtVerfuegbar):
+        # Objekt-Pool gerade nicht erreichbar (Laufwerk abgehaengt): nichts geht
+        # verloren, der Aufrufer soll spaeter erneut versuchen.
+        return JSONResponse(
+            status_code=503,
+            headers={"Retry-After": "30"},
+            content={"detail": "Speicher nicht verfuegbar - bitte spaeter erneut versuchen"},
+        )
 
     @app.get("/api/health")
     async def health():

@@ -17,6 +17,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.config import EINSTELLUNGEN
+from app.ports import SpeicherNichtVerfuegbar
 
 BASIS = "/webdav"
 _METHODEN = ["OPTIONS", "GET", "HEAD", "PUT", "DELETE", "PROPFIND", "MKCOL", "MOVE", "COPY"]
@@ -239,18 +240,22 @@ async def webdav_endpoint(request: Request) -> Response:
         return _401()
     pfad = unquote(request.path_params.get("pfad", ""))
     m = request.method
-    if m == "PROPFIND":
-        return await _propfind(request, benutzer, pfad)
-    if m == "GET":
-        return await _get(request, benutzer, pfad, True)
-    if m == "HEAD":
-        return await _get(request, benutzer, pfad, False)
-    if m == "PUT":
-        return await _put(request, benutzer, pfad)
-    if m == "DELETE":
-        return await _delete(request, benutzer, pfad)
-    if m == "MKCOL":
-        return await _mkcol(request, benutzer, pfad)
-    if m == "MOVE":
-        return await _move(request, benutzer, pfad)
+    try:
+        if m == "PROPFIND":
+            return await _propfind(request, benutzer, pfad)
+        if m == "GET":
+            return await _get(request, benutzer, pfad, True)
+        if m == "HEAD":
+            return await _get(request, benutzer, pfad, False)
+        if m == "PUT":
+            return await _put(request, benutzer, pfad)
+        if m == "DELETE":
+            return await _delete(request, benutzer, pfad)
+        if m == "MKCOL":
+            return await _mkcol(request, benutzer, pfad)
+        if m == "MOVE":
+            return await _move(request, benutzer, pfad)
+    except SpeicherNichtVerfuegbar:
+        # Objekt-Pool abgehaengt: schlicht 503 + Retry-After, der Client wartet.
+        return Response(status_code=503, headers={"Retry-After": "30"})
     return Response(status_code=405)

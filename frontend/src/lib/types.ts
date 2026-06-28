@@ -45,6 +45,7 @@ export interface SpeicherStatus {
   gesamt?: number | null;
   frei?: number | null;
   ort?: string | null;
+  verfuegbar?: boolean;
 }
 
 export interface Verschiebung {

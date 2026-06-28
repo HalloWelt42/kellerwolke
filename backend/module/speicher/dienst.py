@@ -9,12 +9,14 @@ import asyncio
 import io
 import os
 import shutil
+import uuid
 import zipfile
 from pathlib import Path
 
 from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.config import EINSTELLUNGEN
+from app.ports import SpeicherNichtVerfuegbar
 
 
 class ArchivZuGross(Exception):
@@ -68,6 +70,7 @@ class SpeicherDienst:
         status["gesamt"] = gesamt
         status["frei"] = frei
         status["ort"] = str(getattr(self.blobstore, "wurzel", "")) or None
+        status["verfuegbar"] = self.blobstore.verfuegbar()
         return status
 
     # --- Favoriten ------------------------------------------------------------
@@ -154,17 +157,47 @@ class SpeicherDienst:
             row = await repo.speicherort_holen()
             return row["pfad"] if row else str(self.blobstore.wurzel)
 
-    async def aktiver_pfad_initialisieren(self, standard: str) -> str:
-        """Beim Start: Speicherort-Zeile anlegen, falls leer; aktiven Pfad
-        zurueckgeben (Quelle der Wahrheit fuer die Pool-Wurzel)."""
+    def verfuegbar(self) -> bool:
+        """Ist der Objekt-Pool gerade erreichbar (richtiges Laufwerk gemountet)?"""
+        return self.blobstore.verfuegbar()
+
+    async def speicher_initialisieren(self, standard: str) -> str:
+        """Beim Start: aktiven Pool-Pfad + Volume-Marker ermitteln, den BlobStore
+        konfigurieren und die Marker-Datei sicherstellen. Quelle der Wahrheit ist
+        die speicherort-Zeile in der DB. Liefert den aktiven Pfad zurueck.
+
+        - Erststart (keine Zeile): Pfad = Standard, frischer Marker, in DB ablegen.
+        - Bestandspool ohne Marker (Upgrade): Marker erzeugen und adoptieren.
+
+        Die Marker-DATEI wird NUR beim allerersten Setzen geschrieben (dann muss
+        das richtige Laufwerk gemountet sein - Betreiber-Verantwortung beim
+        Einrichten). Steht der Marker schon in der DB, wird die Datei nie
+        automatisch neu angelegt: fehlt sie beim Booten (Laufwerk noch nicht da),
+        bleibt verfuegbar() False und die App wartet auf den Mount, statt still
+        eine falsche Markierung auf der Systemplatte anzulegen."""
+        neu_markiert = False
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
                 row = await repo.speicherort_holen()
                 if not row:
-                    await repo.speicherort_setzen(standard)
-                    return standard
-                return row["pfad"]
+                    pfad, marker = standard, str(uuid.uuid4())
+                    neu_markiert = True
+                    await repo.speicherort_setzen(pfad, marker)
+                else:
+                    pfad = row["pfad"]
+                    marker = row.get("marker")
+                    if not marker:
+                        marker = str(uuid.uuid4())
+                        neu_markiert = True
+                        await repo.speicherort_setzen(pfad, marker)
+        self.blobstore.setze_wurzel(pfad, marker)
+        if neu_markiert and not self.blobstore.verfuegbar():
+            try:
+                self.blobstore.marker_schreiben(marker)
+            except OSError:
+                pass
+        return pfad
 
     async def datenablage_verschieben(self, ziel: str) -> None:
         """Verschiebt den Objekt-Pool auf einen anderen Pfad: kopieren, aktiven
@@ -204,6 +237,10 @@ class SpeicherDienst:
         """Loescht alle Knoten im Papierkorb endgueltig: Refcounts senken,
         Knoten samt Teilbaum (CASCADE) entfernen, verwaiste Bloecke physisch
         loeschen. Liefert die Zahl entfernter Wurzeln."""
+        # Vorab pruefen: ist der Pool nicht erreichbar, gar nicht erst die
+        # DB-Zeilen loeschen (sonst blieben verwaiste Bloecke auf der Platte).
+        if not self.blobstore.verfuegbar():
+            raise SpeicherNichtVerfuegbar("Papierkorb kann nicht geleert werden")
         verwaiste = []
         async with self.pool.connection() as conn:
             async with conn.transaction():
@@ -228,6 +265,8 @@ class SpeicherDienst:
         """Entfernt einen einzelnen Papierkorb-Knoten samt Teilbaum endgueltig.
         Nur erlaubt fuer eigene, bereits geloeschte Knoten. Gleiche GC-Logik wie
         beim Leeren, aber nur fuer diese eine Wurzel. Liefert True bei Erfolg."""
+        if not self.blobstore.verfuegbar():
+            raise SpeicherNichtVerfuegbar("Knoten kann nicht endgueltig geloescht werden")
         verwaiste = []
         async with self.pool.connection() as conn:
             async with conn.transaction():

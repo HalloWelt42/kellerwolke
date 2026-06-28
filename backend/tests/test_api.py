@@ -6,12 +6,12 @@ import asyncio
 import httpx
 import pytest
 
-from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.main import app_bauen
 from module.auth.dienst import AuthDienst
 from module.speicher.dienst import SpeicherDienst
 from module.suche.dienst import SuchDienst
 from module.vorgaenge.dienst import VorgangRegistry
+from tests.hilfen import markierter_blobstore
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ async def umgebung(pool, tmp_path):
     app = app_bauen()
     app.state.pool = pool
     app.state.auth = AuthDienst(pool)
-    app.state.speicher = SpeicherDienst(pool, FilesystemBlobStore(tmp_path))
+    app.state.speicher = SpeicherDienst(pool, markierter_blobstore(tmp_path))
     app.state.suche = SuchDienst(pool)
     app.state.vorgaenge = VorgangRegistry()
     await app.state.auth.benutzer_anlegen("chef", "geheim", rolle="admin")

@@ -44,6 +44,7 @@ async def speicher_status(benutzer=Depends(aktueller_benutzer), speicher=Depends
         gesamt=s.get("gesamt"),
         frei=s.get("frei"),
         ort=s.get("ort"),
+        verfuegbar=s.get("verfuegbar", True),
     )
 
 

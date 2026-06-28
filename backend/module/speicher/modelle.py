@@ -62,6 +62,7 @@ class SpeicherStatusAus(BaseModel):
     gesamt: int | None = None    # Gesamtgroesse des Datentraegers
     frei: int | None = None      # freier Platz auf dem Datentraeger
     ort: str | None = None       # aktueller Pfad des Objekt-Pools
+    verfuegbar: bool = True       # ist der Objekt-Pool gerade erreichbar?
 
 
 class VersionAus(BaseModel):

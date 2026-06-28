@@ -7,9 +7,9 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.config import EINSTELLUNGEN
 from module.speicher.dienst import SpeicherDienst
+from tests.hilfen import markierter_blobstore
 
 _RECOVERY = Path(__file__).resolve().parents[2] / "tools" / "recovery.py"
 _spec = importlib.util.spec_from_file_location("recovery", _RECOVERY)
@@ -30,7 +30,7 @@ async def _user(pool, name):
 
 async def test_recovery_baut_baum_auf(pool, tmp_path):
     objekte = tmp_path / "objects"
-    speicher = SpeicherDienst(pool, FilesystemBlobStore(objekte))
+    speicher = SpeicherDienst(pool, markierter_blobstore(objekte))
     benutzer = await _user(pool, "familie")
     ordner = await speicher.ordner_anlegen(benutzer, None, "Dok")
     await speicher.datei_hochladen(benutzer, None, "wurzel.txt", b"Wurzelinhalt")
@@ -48,7 +48,7 @@ async def test_recovery_baut_baum_auf(pool, tmp_path):
 
 async def test_recovery_meldet_fehlenden_block(pool, tmp_path):
     objekte = tmp_path / "objects"
-    speicher = SpeicherDienst(pool, FilesystemBlobStore(objekte))
+    speicher = SpeicherDienst(pool, markierter_blobstore(objekte))
     benutzer = await _user(pool, "x")
     await speicher.datei_hochladen(benutzer, None, "weg.txt", b"verschwindet")
     for p in objekte.rglob("*"):

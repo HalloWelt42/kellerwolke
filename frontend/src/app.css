@@ -1147,6 +1147,22 @@ select.feld {
   color: var(--gefahr);
   font-size: 0.86rem;
 }
+.speicher-warnung {
+  display: flex;
+  align-items: center;
+  gap: var(--a3);
+  margin: var(--a3) var(--a4) 0;
+  padding: var(--a3) var(--a4);
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.speicher-warnung i {
+  font-size: 1.2rem;
+  flex: none;
+}
 .meldung {
   color: var(--gut);
   font-size: 0.86rem;

@@ -152,6 +152,16 @@
     <Navigation />
 
     <section class="inhalt">
+      {#if zustand.speicher?.verfuegbar === false}
+        <div class="speicher-warnung" role="alert">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>
+            <strong>Speicher nicht verfügbar.</strong>
+            Das Laufwerk ist gerade nicht erreichbar - Hoch- und Herunterladen
+            pausieren, bis es wieder da ist. Es geht nichts verloren.
+          </span>
+        </div>
+      {/if}
       <Werkzeugleiste
         onNeuerOrdner={() => (neuerOrdnerOffen = true)}
         onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}

@@ -265,13 +265,16 @@ class PostgresMetadataRepository:
         )
 
     async def speicherort_holen(self):
-        return await self._eine("SELECT pfad FROM speicherort WHERE id = 1")
+        return await self._eine("SELECT pfad, marker FROM speicherort WHERE id = 1")
 
-    async def speicherort_setzen(self, pfad):
+    async def speicherort_setzen(self, pfad, marker=None):
+        # marker=None laesst einen bestehenden Marker unangetastet (COALESCE),
+        # damit reine Pfad-Updates ihn nicht versehentlich loeschen.
         await self.conn.execute(
-            "INSERT INTO speicherort (id, pfad) VALUES (1, %s) "
-            "ON CONFLICT (id) DO UPDATE SET pfad = EXCLUDED.pfad, geaendert_am = now()",
-            (pfad,),
+            "INSERT INTO speicherort (id, pfad, marker) VALUES (1, %s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET pfad = EXCLUDED.pfad, "
+            "marker = COALESCE(EXCLUDED.marker, speicherort.marker), geaendert_am = now()",
+            (pfad, marker),
         )
 
     async def papierkorb_wurzeln(self, besitzer_id):

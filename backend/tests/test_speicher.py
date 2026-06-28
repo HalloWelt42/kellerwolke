@@ -9,9 +9,9 @@ import hashlib
 
 import pytest
 
-from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from module.speicher.dienst import SpeicherDienst
+from tests.hilfen import markierter_blobstore
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ async def benutzer_id(pool):
 
 @pytest.fixture
 def dienst(pool, tmp_path):
-    return SpeicherDienst(pool, FilesystemBlobStore(tmp_path))
+    return SpeicherDienst(pool, markierter_blobstore(tmp_path))
 
 
 async def test_upload_und_download(dienst, benutzer_id):

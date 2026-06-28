@@ -123,6 +123,7 @@ export function setzeSortierung(key: "name" | "groesse" | "geaendert"): void {
 let letzteSeq = 0;
 let liveInit = false;
 let liveTimer: ReturnType<typeof setInterval> | null = null;
+let speicherTick = 0;
 
 function aktualisiereAnsicht(): void {
   if (zustand.bereich === "dateien") ladeOrdner();
@@ -160,6 +161,13 @@ async function liveTick(): Promise<void> {
   // laeuft - sonst spart man die Anfrage.
   if (zustand.vorgaengeOffen || zustand.vorgaenge.some((v) => v.status === "laeuft")) {
     await ladeVorgaenge();
+  }
+  // Speicher-Verfuegbarkeit ueberwachen: ist der Pool gerade abgehaengt, jeden
+  // Tick neu fragen (Banner verschwindet sofort beim Remount), sonst nur alle
+  // ~20 s als Herzschlag.
+  speicherTick += 1;
+  if (zustand.speicher?.verfuegbar === false || speicherTick % 5 === 0) {
+    await ladeSpeicher();
   }
 }
 

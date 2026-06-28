@@ -7,10 +7,10 @@ from io import BytesIO
 import pytest
 from psycopg.rows import dict_row
 
-from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from module.speicher.dienst import SpeicherDienst
 from module.suche.dienst import SuchDienst
 from module.suche.extraktion import text_extrahieren
+from tests.hilfen import markierter_blobstore
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def such(pool):
 
 @pytest.fixture
 def speicher(pool, tmp_path):
-    return SpeicherDienst(pool, FilesystemBlobStore(tmp_path))
+    return SpeicherDienst(pool, markierter_blobstore(tmp_path))
 
 
 async def _user(pool, name):
