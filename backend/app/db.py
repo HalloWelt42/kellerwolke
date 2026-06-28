@@ -98,10 +98,24 @@ def _anweisungen(text: str) -> list[str]:
     return anweisungen
 
 
-async def _schema_anwenden() -> None:
-    if not SCHEMA_DIR.exists():
+async def schema_aus_ordner_anwenden(conn, ordner: Path, search_path: str | None = None) -> None:
+    """Wendet alle nummerierten .sql-Dateien aus ordner idempotent auf conn an.
+
+    Mit search_path (z.B. "plugin_galerie, public") landen unqualifizierte
+    Objekte im gewuenschten Schema, waehrend Kern-Tabellen ueber public
+    auffindbar bleiben - so bekommt jedes Plugin sein eigenes Schema. Bei
+    gesetztem search_path muss conn in einer Transaktion stehen (SET LOCAL).
+    Der search_path-Wert ist Aufrufer-kontrolliert und MUSS validiert sein
+    (Plugin-IDs sind per Regex auf [a-z0-9_] beschraenkt)."""
+    if not ordner.exists():
         return
+    if search_path:
+        await conn.execute(f"SET LOCAL search_path = {search_path}")
+    for sql_datei in sorted(ordner.glob("*.sql")):
+        for anweisung in _anweisungen(sql_datei.read_text(encoding="utf-8")):
+            await conn.execute(anweisung)
+
+
+async def _schema_anwenden() -> None:
     async with pool().connection() as conn:
-        for sql_datei in sorted(SCHEMA_DIR.glob("*.sql")):
-            for anweisung in _anweisungen(sql_datei.read_text(encoding="utf-8")):
-                await conn.execute(anweisung)
+        await schema_aus_ordner_anwenden(conn, SCHEMA_DIR)
