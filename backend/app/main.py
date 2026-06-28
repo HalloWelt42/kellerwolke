@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from . import db
 from . import io_pool
+from . import plugins as plugin_lader
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
 from .ports import SpeicherNichtVerfuegbar
@@ -23,6 +24,7 @@ from module.speicher.api import router as datei_router
 from module.speicher.dienst import SpeicherDienst
 from module.suche.api import router as suche_router
 from module.suche.dienst import SuchDienst
+from module.plugins.api import router as plugins_router
 from module.sync.api import router as sync_router
 from module.vorgaenge.api import router as vorgaenge_router
 from module.vorgaenge.dienst import VorgangRegistry
@@ -56,9 +58,13 @@ async def lebenszyklus(app: FastAPI):
     app.state.suche = SuchDienst(pool)
     app.state.vorgaenge = VorgangRegistry()
     await _admin_seed(app.state.auth)
+    # Plugins entdecken + aktive einbinden (jedes isoliert; ein defektes Plugin
+    # deaktiviert nur sich selbst, der Kern startet weiter).
+    await plugin_lader.plugins_laden(app)
     try:
         yield
     finally:
+        await plugin_lader.plugins_stoppen(app)
         await app.state.vorgaenge.stoppen()
         io_pool.herunterfahren()
         await db.stoppen()
@@ -96,6 +102,7 @@ def app_bauen() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(sync_router)
     app.include_router(vorgaenge_router)
+    app.include_router(plugins_router)
     webdav_einbinden(app)
     return app
 
