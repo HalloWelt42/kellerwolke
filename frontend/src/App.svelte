@@ -25,6 +25,14 @@
   import Teilen from "./lib/Teilen.svelte";
   import Modal from "./lib/Modal.svelte";
   import Logo from "./lib/Logo.svelte";
+  import AppLeiste from "./lib/AppLeiste.svelte";
+  import {
+    aktiveApp,
+    appZustand,
+    ladeAktiveApps,
+    waehleApp,
+    DEFAULT_APP_ID,
+  } from "./plugins/registry.svelte";
   import type { Knoten } from "./lib/types";
 
   let verwaltungOffen = $state(false);
@@ -43,6 +51,7 @@
       initialGeladen = true;
       haupt.zeigeDateien();
       ladeVersion();
+      ladeAktiveApps();
       starteLiveAbgleich();
     }
     if (!auth.angemeldet) {
@@ -51,8 +60,20 @@
     }
   });
 
-  const istSplit = $derived(zustand.split && haupt.bereich === "dateien");
-  const mitDetail = $derived(haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit);
+  const aktuelleApp = $derived(aktiveApp());
+  const istDefaultApp = $derived(aktuelleApp.id === DEFAULT_APP_ID);
+  // Erlaubt die aktive App den aktuellen Bereich? Sonst zurueck auf Dateien.
+  $effect(() => {
+    const erlaubt = aktuelleApp.bereiche;
+    if (!istDefaultApp && erlaubt && !erlaubt.includes(haupt.bereich)) {
+      waehleApp(DEFAULT_APP_ID);
+    }
+  });
+
+  const istSplit = $derived(zustand.split && haupt.bereich === "dateien" && istDefaultApp);
+  const mitDetail = $derived(
+    istDefaultApp && haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit,
+  );
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
   const laufendeVorgaenge = $derived(zustand.vorgaenge.filter((v) => v.status === "laeuft").length);
 
@@ -152,25 +173,35 @@
           </span>
         </div>
       {/if}
-      <Werkzeugleiste
-        onNeuerOrdner={() => (neuerOrdnerOffen = true)}
-        onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
-      />
-      {#if istSplit}
-        <Splitscreen
-          onTeilen={(k) => (teilenKnoten = k)}
-          onEndgueltig={(k) => (endgueltigKnoten = k)}
+      <AppLeiste />
+      {#if istDefaultApp}
+        <Werkzeugleiste
+          onNeuerOrdner={() => (neuerOrdnerOffen = true)}
+          onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
         />
+        {#if istSplit}
+          <Splitscreen
+            onTeilen={(k) => (teilenKnoten = k)}
+            onEndgueltig={(k) => (endgueltigKnoten = k)}
+          />
+        {:else}
+          <Breadcrumb browser={haupt} />
+          {#if haupt.fehler}
+            <div class="fehlerstreifen">{haupt.fehler}</div>
+          {/if}
+          <Dateiliste
+            browser={haupt}
+            onTeilen={(k) => (teilenKnoten = k)}
+            onEndgueltig={(k) => (endgueltigKnoten = k)}
+          />
+        {/if}
       {:else}
+        {@const PluginAnsicht = aktuelleApp.ansicht}
         <Breadcrumb browser={haupt} />
         {#if haupt.fehler}
           <div class="fehlerstreifen">{haupt.fehler}</div>
         {/if}
-        <Dateiliste
-          browser={haupt}
-          onTeilen={(k) => (teilenKnoten = k)}
-          onEndgueltig={(k) => (endgueltigKnoten = k)}
-        />
+        <PluginAnsicht browser={haupt} />
       {/if}
     </section>
 

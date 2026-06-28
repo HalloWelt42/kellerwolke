@@ -77,6 +77,25 @@ export interface PoolAufraeumen {
   bytes: number;
 }
 
+// Aktive Ansichts-App (Plugin) fuer die App-Leiste.
+export interface App {
+  id: string;
+  name: string;
+  icon: string;
+  kategorie: string;
+}
+
+// Vollbild eines Plugins fuer das Admin-Panel.
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  kategorie: string;
+  aktiv: boolean;
+  defekt: string | null;
+  quelle: string;
+}
+
 export interface Version {
   id: string;
   groesse: number;

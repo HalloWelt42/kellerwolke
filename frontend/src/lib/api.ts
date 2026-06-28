@@ -1,10 +1,12 @@
 import type {
+  App,
   AuthStatus,
   Benutzer,
   ExternEintrag,
   Freigabe,
   Knoten,
   Konto,
+  PluginInfo,
   PoolAufraeumen,
   PoolPruefung,
   SpeicherStatus,
@@ -414,6 +416,27 @@ export function poolPruefung(tief = false): Promise<PoolPruefung> {
 
 export function poolAufraeumen(): Promise<PoolAufraeumen> {
   return hole<PoolAufraeumen>("/v1/admin/pool-aufraeumen", { method: "POST" });
+}
+
+// --- Plugins / Apps ---------------------------------------------------------
+
+export function aktiveApps(): Promise<App[]> {
+  return hole<App[]>("/v1/plugins");
+}
+
+export function pluginListe(): Promise<PluginInfo[]> {
+  return hole<PluginInfo[]>("/v1/admin/plugins");
+}
+
+export function pluginAktivSetzen(id: string, aktiv: boolean): Promise<void> {
+  return hole<void>(`/v1/admin/plugins/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ aktiv }),
+  });
+}
+
+export function pluginDeinstallieren(id: string, daten: "loeschen" | "behalten"): Promise<void> {
+  return hole<void>(`/v1/admin/plugins/${id}?daten=${daten}`, { method: "DELETE" });
 }
 
 export function externeQuelleAnlegen(
