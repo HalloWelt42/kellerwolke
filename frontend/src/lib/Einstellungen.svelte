@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as api from "./api";
+  import Logo from "./Logo.svelte";
   import type { Benutzer, SpeicherStatus } from "./types";
   import { groesseText } from "./format";
   import { auth } from "./auth.svelte";
@@ -173,7 +174,7 @@
 
 <div class="app">
   <header class="kopf">
-    <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+    <div class="marke"><Logo size={22} /> Kellerwolke</div>
     <nav class="breadcrumb" style="padding: 0;">
       <i class="fa-solid fa-gear"></i> <span class="aktuell">Einstellungen</span>
     </nav>

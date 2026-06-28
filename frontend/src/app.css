@@ -625,7 +625,8 @@ textarea {
 .zeile:hover .aus-box {
   border-color: var(--text-3);
 }
-.aus-box.an {
+.aus-box.an,
+.aus-box.teil {
   background: var(--akzent);
   border-color: var(--akzent);
   color: var(--akzent-text);

@@ -95,6 +95,14 @@
 
   // Auswahl/Marquee arbeiten auf der sortierten Reihenfolge.
   const geordnet = $derived(sortiert.map((k) => k.id));
+
+  // Kopf-Checkbox (Massenauswahl des aktuell Gefilterten/Angezeigten).
+  const alleGewaehlt = $derived(geordnet.length > 0 && geordnet.every((id) => auswahl.istGewaehlt(id)));
+  const einigeGewaehlt = $derived(geordnet.some((id) => auswahl.istGewaehlt(id)));
+  function kopfWaehlen() {
+    if (alleGewaehlt) auswahl.leeren();
+    else auswahl.alle(geordnet);
+  }
   const imPapierkorb = $derived(browser.bereich === "papierkorb");
   const externAnsicht = $derived(browser.bereich === "extern" && browser.externBrowse !== null);
   const modus = $derived<"dateien" | "papierkorb" | "suche">(
@@ -629,7 +637,26 @@
       ondrop={flaecheDrop}
     >
       <div class="listenkopf">
-        <span></span>
+        <span class="z-aus">
+          <span
+            class="aus-box"
+            class:an={alleGewaehlt}
+            class:teil={einigeGewaehlt && !alleGewaehlt}
+            role="checkbox"
+            aria-checked={alleGewaehlt ? "true" : einigeGewaehlt ? "mixed" : "false"}
+            tabindex="0"
+            title={alleGewaehlt ? "Auswahl aufheben" : "Alle angezeigten wählen"}
+            onclick={kopfWaehlen}
+            onkeydown={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                kopfWaehlen();
+              }
+            }}
+          >
+            <i class="fa-solid {alleGewaehlt ? 'fa-check' : 'fa-minus'}"></i>
+          </span>
+        </span>
         <button
           class="sortbar"
           class:aktiv={browser.sortKey === "name"}

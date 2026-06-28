@@ -24,6 +24,7 @@
   import Vorgaenge from "./lib/Vorgaenge.svelte";
   import Teilen from "./lib/Teilen.svelte";
   import Modal from "./lib/Modal.svelte";
+  import Logo from "./lib/Logo.svelte";
   import type { Knoten } from "./lib/types";
 
   let verwaltungOffen = $state(false);
@@ -82,7 +83,7 @@
 {:else}
   <div class="app" class:mit-detail={mitDetail} class:nav-aus={zustand.navAus}>
     <header class="kopf">
-      <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+      <div class="marke"><Logo size={22} /> Kellerwolke</div>
       <form class="kopf-suche" onsubmit={suchen}>
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="text" placeholder="In allen Dateien suchen ..." bind:value={haupt.suchbegriff} />

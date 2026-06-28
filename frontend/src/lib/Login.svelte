@@ -1,5 +1,6 @@
 <script lang="ts">
   import { anmelden } from "./auth.svelte";
+  import Logo from "./Logo.svelte";
 
   let kennung = $state("");
   let passwort = $state("");
@@ -22,7 +23,7 @@
 
 <div class="login-hg">
   <form class="login-karte" onsubmit={absenden}>
-    <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+    <div class="marke"><Logo size={22} /> Kellerwolke</div>
     <p class="unter">Die eigene Wolke im Keller</p>
     <label>
       Name oder Kürzel
