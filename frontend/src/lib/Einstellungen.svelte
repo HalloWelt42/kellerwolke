@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as api from "./api";
   import Logo from "./Logo.svelte";
+  import Modal from "./Modal.svelte";
   import type { Benutzer, SpeicherStatus } from "./types";
   import { groesseText } from "./format";
   import { auth } from "./auth.svelte";
@@ -10,7 +11,7 @@
   }
   let { schliessen }: Props = $props();
 
-  type Seite = "konten" | "extern" | "speicher";
+  type Seite = "konten" | "extern" | "speicher" | "apps";
   let seite = $state<Seite>("konten");
   let fehler = $state("");
 
@@ -170,6 +171,74 @@
       pruefeLaeuft = false;
     }
   }
+
+  // --- Apps (Plugins) -------------------------------------------------------
+  let plugins = $state<import("./types").PluginInfo[]>([]);
+  let pluginFehler = $state("");
+  let pluginMeldung = $state("");
+  let deinstallPlugin = $state<import("./types").PluginInfo | null>(null);
+  let deinstallDaten = $state(false);
+  let appsGeladen = $state(false);
+
+  async function ladePlugins() {
+    pluginFehler = "";
+    try {
+      plugins = await api.pluginListe();
+    } catch (f) {
+      pluginFehler = (f as Error).message;
+    }
+    appsGeladen = true;
+  }
+
+  // Beim Wechsel auf die Apps-Seite einmal laden.
+  $effect(() => {
+    if (seite === "apps" && !appsGeladen) ladePlugins();
+  });
+
+  async function pluginUmschalten(p: import("./types").PluginInfo) {
+    pluginMeldung = "";
+    try {
+      await api.pluginAktivSetzen(p.id, !p.aktiv);
+      await ladePlugins();
+      pluginMeldung = `"${p.name}" ${p.aktiv ? "deaktiviert" : "aktiviert"} - wirkt nach Neustart.`;
+    } catch (f) {
+      pluginFehler = (f as Error).message;
+    }
+  }
+
+  async function pluginDeinstallierenBestaetigen() {
+    const p = deinstallPlugin;
+    if (!p) return;
+    try {
+      await api.pluginDeinstallieren(p.id, deinstallDaten ? "loeschen" : "behalten");
+      await ladePlugins();
+      pluginMeldung = `"${p.name}" deinstalliert${deinstallDaten ? " (Daten gelöscht)" : ""} - Neustart erforderlich.`;
+    } catch (f) {
+      pluginFehler = (f as Error).message;
+    }
+    deinstallPlugin = null;
+    deinstallDaten = false;
+  }
+
+  let pluginUpload = $state(false);
+  async function aufPluginDatei(e: Event) {
+    const ziel = e.target as HTMLInputElement;
+    const datei = ziel.files?.[0];
+    ziel.value = "";
+    if (!datei) return;
+    pluginFehler = "";
+    pluginMeldung = "";
+    pluginUpload = true;
+    try {
+      const info = await api.pluginHochladen(datei);
+      await ladePlugins();
+      pluginMeldung = `"${info.name}" hochgeladen (inaktiv) - aktivieren und neu starten.`;
+    } catch (f) {
+      pluginFehler = (f as Error).message;
+    } finally {
+      pluginUpload = false;
+    }
+  }
 </script>
 
 <div class="app">
@@ -199,6 +268,9 @@
     </button>
     <button class="einst-eintrag" class:aktiv={seite === "extern"} onclick={() => (seite = "extern")}>
       <i class="fa-solid fa-folder-tree"></i> Externe Quellen
+    </button>
+    <button class="einst-eintrag" class:aktiv={seite === "apps"} onclick={() => (seite = "apps")}>
+      <i class="fa-solid fa-puzzle-piece"></i> Apps
     </button>
   </nav>
 
@@ -397,6 +469,265 @@
         {#if aufraeumMeldung}<div class="meldung">{aufraeumMeldung}</div>{/if}
         {#if pruefeFehler}<div class="fehler">{pruefeFehler}</div>{/if}
       </div>
+    {:else if seite === "apps"}
+      <h1>Apps</h1>
+      <p class="unter">
+        Apps erweitern Kellerwolke um neue Ansichten. Jede App bringt eigene Tabellen und Ordner
+        mit und lässt sich gefahrlos aktivieren, deaktivieren und entfernen.
+      </p>
+
+      <div class="karte">
+        <div class="karte-kopf">
+          <h2>Installierte Apps</h2>
+          <label class="knopf klein" class:laeuft={pluginUpload}>
+            <i class="fa-solid fa-upload"></i>
+            {pluginUpload ? "Wird hochgeladen ..." : "App hochladen (ZIP)"}
+            <input
+              type="file"
+              accept=".zip"
+              hidden
+              disabled={pluginUpload}
+              onchange={aufPluginDatei}
+            />
+          </label>
+        </div>
+
+        {#if !appsGeladen}
+          <p class="karte-unter">Lade Apps ...</p>
+        {:else if plugins.length === 0}
+          <p class="karte-unter">Noch keine Apps vorhanden. Lade eine App als ZIP-Archiv hoch.</p>
+        {:else}
+          <ul class="app-liste">
+            {#each plugins as p (p.id)}
+              <li class="app-zeile" class:defekt={!!p.defekt}>
+                <i class="app-icon {p.icon || 'fa-solid fa-puzzle-piece'}"></i>
+                <div class="app-text">
+                  <div class="app-name">
+                    {p.name}
+                    <span class="app-version">v{p.version}</span>
+                    {#if p.quelle === "upload"}<span class="app-marke">hochgeladen</span>{/if}
+                  </div>
+                  <div class="app-meta">
+                    {p.kategorie} · {p.id}
+                    {#if p.defekt}
+                      <span class="app-fehler"><i class="fa-solid fa-triangle-exclamation"></i> {p.defekt}</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="app-aktionen">
+                  <label class="schalter" title={p.aktiv ? "Aktiv" : "Inaktiv"}>
+                    <input
+                      type="checkbox"
+                      checked={p.aktiv}
+                      disabled={!!p.defekt}
+                      onchange={() => pluginUmschalten(p)}
+                    />
+                    <span class="schalter-spur"></span>
+                  </label>
+                  <button
+                    class="knopf klein gefahr"
+                    title="Deinstallieren"
+                    onclick={() => {
+                      deinstallPlugin = p;
+                      deinstallDaten = false;
+                    }}
+                  >
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        {#if pluginMeldung}<div class="meldung">{pluginMeldung}</div>{/if}
+        {#if pluginFehler}<div class="fehler">{pluginFehler}</div>{/if}
+      </div>
     {/if}
   </section>
 </div>
+
+{#if deinstallPlugin}
+  <Modal titel={`"${deinstallPlugin.name}" deinstallieren?`} schliessen={() => (deinstallPlugin = null)}>
+    <p>
+      Die App wird entfernt und steht nach dem Neustart nicht mehr zur Verfügung. Die App-Dateien
+      im Projekt bleiben erhalten und können erneut installiert werden.
+    </p>
+    <label class="daten-frage">
+      <input type="checkbox" bind:checked={deinstallDaten} />
+      <span>
+        Auch alle Daten dieser App löschen (eigene Tabellen). <em>Unwiderruflich.</em>
+      </span>
+    </label>
+    <div class="modal-knoepfe">
+      <button class="knopf" onclick={() => (deinstallPlugin = null)}>Abbrechen</button>
+      <button class="knopf gefahr" onclick={pluginDeinstallierenBestaetigen}>Deinstallieren</button>
+    </div>
+  </Modal>
+{/if}
+
+<style>
+  .karte-kopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--a3);
+    margin-bottom: var(--a3);
+  }
+  .karte-kopf h2 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+  .knopf.klein {
+    font-size: 0.85rem;
+    padding: var(--a1) var(--a3);
+  }
+  .knopf.klein input[type="file"] {
+    display: none;
+  }
+  .knopf.laeuft {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .app-liste {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--a2);
+  }
+  .app-zeile {
+    display: flex;
+    align-items: center;
+    gap: var(--a3);
+    padding: var(--a3);
+    border: 1px solid var(--rand);
+    border-radius: var(--r2);
+    background: var(--flaeche-2);
+  }
+  .app-zeile.defekt {
+    border-color: var(--gefahr);
+    background: var(--gefahr-weich);
+  }
+  .app-icon {
+    font-size: 1.3rem;
+    color: var(--akzent);
+    width: 1.6rem;
+    text-align: center;
+    flex: none;
+  }
+  .app-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .app-name {
+    display: flex;
+    align-items: center;
+    gap: var(--a2);
+    font-weight: 600;
+  }
+  .app-version {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-2);
+  }
+  .app-marke {
+    font-size: 0.72rem;
+    color: var(--akzent-text);
+    background: var(--akzent);
+    border-radius: var(--r1);
+    padding: 0 var(--a1);
+  }
+  .app-meta {
+    font-size: 0.82rem;
+    color: var(--text-2);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--a2);
+    align-items: center;
+  }
+  .app-fehler {
+    color: var(--gefahr);
+  }
+  .app-aktionen {
+    display: flex;
+    align-items: center;
+    gap: var(--a3);
+    flex: none;
+  }
+
+  /* Ein/Aus-Schalter (kein nativer Checkbox-Look). */
+  .schalter {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex: none;
+  }
+  .schalter input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+  }
+  .schalter-spur {
+    position: absolute;
+    inset: 0;
+    background: var(--rand-stark);
+    border-radius: 999px;
+    transition: background var(--schnell);
+  }
+  .schalter-spur::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform var(--schnell);
+  }
+  .schalter input:checked + .schalter-spur {
+    background: var(--akzent);
+  }
+  .schalter input:checked + .schalter-spur::after {
+    transform: translateX(18px);
+  }
+  .schalter input:disabled {
+    cursor: not-allowed;
+  }
+  .schalter input:disabled + .schalter-spur {
+    opacity: 0.5;
+  }
+
+  .daten-frage {
+    display: flex;
+    gap: var(--a2);
+    align-items: flex-start;
+    margin: var(--a3) 0;
+    font-size: 0.9rem;
+  }
+  .daten-frage em {
+    color: var(--gefahr);
+    font-style: normal;
+    font-weight: 600;
+  }
+  .modal-knoepfe {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--a2);
+    margin-top: var(--a3);
+  }
+  .knopf.gefahr {
+    color: var(--gefahr);
+  }
+  .knopf.gefahr:hover {
+    background: var(--gefahr-weich);
+    border-color: var(--gefahr);
+  }
+</style>

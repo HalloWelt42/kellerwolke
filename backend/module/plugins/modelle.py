@@ -17,6 +17,7 @@ class PluginAus(BaseModel):
     name: str
     version: str
     kategorie: str
+    icon: str = ""
     aktiv: bool
     defekt: str | None = None
     quelle: str

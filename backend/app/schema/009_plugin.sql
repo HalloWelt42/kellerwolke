@@ -8,9 +8,13 @@ CREATE TABLE IF NOT EXISTS plugin (
     name           text NOT NULL,
     version        text NOT NULL,
     kategorie      text NOT NULL DEFAULT 'ansicht-app',
+    icon           text NOT NULL DEFAULT '',  -- Font-Awesome-Klasse aus dem Manifest
     aktiv          boolean NOT NULL DEFAULT false,
     defekt         text,            -- Fehlertext, falls Laden/Migration scheiterte (sonst NULL)
     quelle         text NOT NULL DEFAULT 'repo',  -- repo | upload
     schema_version integer NOT NULL DEFAULT 0,
     entdeckt_am    timestamptz NOT NULL DEFAULT now()
 );
+
+-- Nachruesten fuer bereits bestehende Installationen (Spalte spaeter ergaenzt).
+ALTER TABLE plugin ADD COLUMN IF NOT EXISTS icon text NOT NULL DEFAULT '';

@@ -12,7 +12,10 @@ Lader ueber das Manifest. Aktiv/Inaktiv-Wechsel wirken beim naechsten Neustart
 """
 
 import importlib
+import io
+import shutil
 import traceback
+import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -23,6 +26,13 @@ from .config import version
 from .plugin_api import ID_MUSTER, Manifest, PluginBeschreibung, PluginKontext
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent / "plugins"
+# Frontend-Teil eines Plugins liegt parallel im Svelte-Quellbaum.
+FRONTEND_PLUGIN_DIR = (
+    Path(__file__).resolve().parent.parent.parent / "frontend" / "src" / "plugins"
+)
+# Grenzen gegen ZIP-Bomben und Unfug.
+MAX_ENTPACKT = 60 * 1024 * 1024  # 60 MB entpackt gesamt
+MAX_DATEIEN = 2000
 
 
 def _version_tupel(v: str) -> tuple[int, ...]:
@@ -65,16 +75,17 @@ async def _ein_plugin_laden(app: FastAPI, ordner: Path) -> None:
             row = await cur.fetchone()
         if row is None:
             await conn.execute(
-                "INSERT INTO plugin (id, name, version, kategorie, aktiv, quelle) "
-                "VALUES (%s, %s, %s, %s, false, 'repo')",
-                (manifest.id, manifest.name, manifest.version, manifest.kategorie),
+                "INSERT INTO plugin (id, name, version, kategorie, icon, aktiv, quelle) "
+                "VALUES (%s, %s, %s, %s, %s, false, 'repo')",
+                (manifest.id, manifest.name, manifest.version, manifest.kategorie, manifest.icon),
             )
             aktiv = False
         else:
             aktiv = row[0]
             await conn.execute(
-                "UPDATE plugin SET name=%s, version=%s, kategorie=%s, defekt=NULL WHERE id=%s",
-                (manifest.name, manifest.version, manifest.kategorie, manifest.id),
+                "UPDATE plugin SET name=%s, version=%s, kategorie=%s, icon=%s, defekt=NULL "
+                "WHERE id=%s",
+                (manifest.name, manifest.version, manifest.kategorie, manifest.icon, manifest.id),
             )
 
     eintrag = {"manifest": manifest, "pfad": ordner, "aktiv": aktiv, "beschreibung": None}
@@ -147,7 +158,8 @@ async def alle_aus_db() -> list[dict]:
     async with db.pool().connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "SELECT id, name, version, kategorie, aktiv, defekt, quelle FROM plugin ORDER BY name"
+                "SELECT id, name, version, kategorie, icon, aktiv, defekt, quelle "
+                "FROM plugin ORDER BY name"
             )
             spalten = [c.name for c in cur.description]
             return [dict(zip(spalten, r)) for r in await cur.fetchall()]
@@ -161,10 +173,127 @@ async def setze_aktiv(plugin_id: str, aktiv: bool) -> None:
 async def deinstalliere(plugin_id: str, daten_loeschen: bool) -> None:
     """Entfernt den Registry-Eintrag und - bei daten_loeschen - das gesamte
     Plugin-Schema in EINER Anweisung (DROP SCHEMA CASCADE). Der Ordner bleibt
-    bei Repo-Plugins unangetastet (versionierter Code)."""
+    bei Repo-Plugins unangetastet (versionierter Code). Hochgeladene Plugins
+    (quelle='upload') werden samt Ordnern entfernt."""
     if not ID_MUSTER.match(plugin_id):
         raise ValueError("Ungueltige Plugin-id")
     async with db.pool().connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT quelle FROM plugin WHERE id=%s", (plugin_id,))
+            row = await cur.fetchone()
+        quelle = row[0] if row else None
         if daten_loeschen:
             await conn.execute(f'DROP SCHEMA IF EXISTS "plugin_{plugin_id}" CASCADE')
         await conn.execute("DELETE FROM plugin WHERE id=%s", (plugin_id,))
+    # Nur hochgeladene Plugins loeschen ihre Dateien - Repo-Code bleibt heilig.
+    if quelle == "upload":
+        for wurzel in (PLUGIN_DIR, FRONTEND_PLUGIN_DIR):
+            ordner = wurzel / plugin_id
+            if ordner.is_dir():
+                shutil.rmtree(ordner, ignore_errors=True)
+
+
+# --- ZIP-Upload -------------------------------------------------------------
+
+def _manifest_eintrag(namen: list[str]) -> str | None:
+    """Sucht den aeussersten plugin.json-Eintrag (kuerzester Pfad)."""
+    treffer = [n for n in namen if n.split("/")[-1] == "plugin.json"]
+    return min(treffer, key=lambda n: (n.count("/"), len(n))) if treffer else None
+
+
+def _ziel_im_baum(wurzel: Path, rel: str) -> Path:
+    """Zip-Slip-Schutz: aufgeloester Zielpfad muss unter der Wurzel bleiben."""
+    basis = wurzel.resolve()
+    ziel = (basis / rel).resolve()
+    if ziel != basis and basis not in ziel.parents:
+        raise ValueError(f"Unsicherer Pfad im Archiv: {rel}")
+    return ziel
+
+
+async def installiere_aus_zip(daten: bytes) -> dict:
+    """Installiert ein Plugin aus einem ZIP-Archiv.
+
+    Erwartetes Layout (Praefix-tolerant, falls ein Wurzelordner mitgezippt wurde):
+      plugin.json            -> backend/plugins/<id>/plugin.json
+      backend/...            -> backend/plugins/<id>/...
+      frontend/...           -> frontend/src/plugins/<id>/...
+
+    Schreibt NUR in die beiden Plugin-Ordner, registriert das Plugin INAKTIV
+    (quelle='upload'). Aktivierung + Neustart bleiben bewusst ein Admin-Schritt;
+    der Frontend-Teil greift nach dem naechsten Build der Oberflaeche.
+    """
+    try:
+        archiv = zipfile.ZipFile(io.BytesIO(daten))
+    except zipfile.BadZipFile as e:
+        raise ValueError("Kein gueltiges ZIP-Archiv") from e
+
+    eintraege = [i for i in archiv.infolist() if not i.is_dir()]
+    if len(eintraege) > MAX_DATEIEN:
+        raise ValueError("Archiv enthaelt zu viele Dateien")
+    if sum(i.file_size for i in eintraege) > MAX_ENTPACKT:
+        raise ValueError("Archiv ist entpackt zu gross")
+
+    namen = [i.filename for i in eintraege]
+    manifest_name = _manifest_eintrag(namen)
+    if manifest_name is None:
+        raise ValueError("plugin.json fehlt im Archiv")
+    manifest = Manifest.model_validate_json(archiv.read(manifest_name).decode("utf-8"))
+    if not manifest.id_gueltig():
+        raise ValueError(f"Ungueltige Plugin-id '{manifest.id}'")
+    pid = manifest.id
+
+    backend_ziel = PLUGIN_DIR / pid
+    frontend_ziel = FRONTEND_PLUGIN_DIR / pid
+    if backend_ziel.exists() or frontend_ziel.exists():
+        raise FileExistsError(f"App '{pid}' ist bereits installiert")
+    async with db.pool().connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM plugin WHERE id=%s", (pid,))
+            if await cur.fetchone():
+                raise FileExistsError(f"App '{pid}' ist bereits registriert")
+
+    # Praefix = Verzeichnis, in dem plugin.json liegt (oft "" oder "<ordner>/").
+    praefix = manifest_name[: manifest_name.rfind("plugin.json")]
+    geschrieben: list[Path] = []
+    try:
+        for info in eintraege:
+            name = info.filename
+            if praefix and not name.startswith(praefix):
+                continue  # fremder Pfad neben dem Plugin-Ordner -> ignorieren
+            rel = name[len(praefix):]
+            if rel == "plugin.json":
+                ziel = _ziel_im_baum(backend_ziel, "plugin.json")
+            elif rel.startswith("backend/"):
+                ziel = _ziel_im_baum(backend_ziel, rel[len("backend/"):])
+            elif rel.startswith("frontend/"):
+                ziel = _ziel_im_baum(frontend_ziel, rel[len("frontend/"):])
+            else:
+                continue  # README o.ae. neben backend/frontend -> nicht uebernehmen
+            ziel.parent.mkdir(parents=True, exist_ok=True)
+            with archiv.open(info) as quelle, open(ziel, "wb") as ausgabe:
+                shutil.copyfileobj(quelle, ausgabe)
+            geschrieben.append(ziel)
+
+        async with db.pool().connection() as conn:
+            await conn.execute(
+                "INSERT INTO plugin (id, name, version, kategorie, icon, aktiv, quelle) "
+                "VALUES (%s, %s, %s, %s, %s, false, 'upload')",
+                (pid, manifest.name, manifest.version, manifest.kategorie, manifest.icon),
+            )
+    except Exception:
+        # Bei jedem Fehler sauber zuruecksetzen - keine halben Installationen.
+        for ordner in (backend_ziel, frontend_ziel):
+            if ordner.is_dir():
+                shutil.rmtree(ordner, ignore_errors=True)
+        raise
+
+    return {
+        "id": pid,
+        "name": manifest.name,
+        "version": manifest.version,
+        "kategorie": manifest.kategorie,
+        "icon": manifest.icon,
+        "aktiv": False,
+        "defekt": None,
+        "quelle": "upload",
+    }

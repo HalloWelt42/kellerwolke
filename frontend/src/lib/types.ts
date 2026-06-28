@@ -91,6 +91,7 @@ export interface PluginInfo {
   name: string;
   version: string;
   kategorie: string;
+  icon: string;
   aktiv: boolean;
   defekt: string | null;
   quelle: string;

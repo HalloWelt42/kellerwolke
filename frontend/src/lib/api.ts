@@ -439,6 +439,18 @@ export function pluginDeinstallieren(id: string, daten: "loeschen" | "behalten")
   return hole<void>(`/v1/admin/plugins/${id}?daten=${daten}`, { method: "DELETE" });
 }
 
+export async function pluginHochladen(datei: File): Promise<PluginInfo> {
+  const formular = new FormData();
+  formular.append("archiv", datei);
+  const antwort = await fetch("/api/v1/admin/plugins/upload", {
+    method: "POST",
+    headers: { "X-Kellerwolke-Sitzung": token() },
+    body: formular,
+  });
+  await pruefe(antwort);
+  return (await antwort.json()) as PluginInfo;
+}
+
 export function externeQuelleAnlegen(
   besitzerId: string,
   name: string,
