@@ -4,6 +4,8 @@
 // Reine Funktionen ohne Runes - leicht testbar, von jeder Browsing-Instanz
 // geteilt.
 
+import { eindeutigeId } from "./id";
+
 export type FilterModus = "woerter" | "satz" | "regex";
 
 export interface Filterregel {
@@ -20,7 +22,7 @@ export interface Filterzustand {
 }
 
 export function leereRegel(): Filterregel {
-  return { id: crypto.randomUUID(), text: "", modus: "woerter", caseSensitive: false, negiert: false };
+  return { id: eindeutigeId(), text: "", modus: "woerter", caseSensitive: false, negiert: false };
 }
 
 export function leererFilter(): Filterzustand {

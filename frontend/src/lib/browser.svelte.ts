@@ -1,6 +1,7 @@
 import * as api from "./api";
 import { erzeugeAuswahl, type Auswahl } from "./auswahl.svelte";
 import { leererFilter, type Filterzustand } from "./filter";
+import { eindeutigeId } from "./id";
 import type { ExternEintrag, Knoten, Version } from "./types";
 
 // Eine instanziierbare Browsing-Flaeche: haelt Pfad, Liste, Auswahl, Filter,
@@ -21,7 +22,7 @@ export interface Pfadteil {
 }
 
 export class Browser {
-  readonly id = crypto.randomUUID();
+  readonly id = eindeutigeId();
   readonly auswahl: Auswahl = erzeugeAuswahl();
 
   bereich = $state<Bereich>("dateien");
