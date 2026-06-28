@@ -1,0 +1,11 @@
+{
+  "id": "galerie",
+  "name": "Bildergalerie",
+  "version": "1.0.0",
+  "kategorie": "ansicht-app",
+  "icon": "fa-solid fa-images",
+  "backend_entry": "api:register",
+  "frontend_entry": "plugin.ts",
+  "kern_min": "0.42.0",
+  "daten_loeschen_bei_deinstall": "fragen"
+}
