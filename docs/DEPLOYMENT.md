@@ -37,6 +37,13 @@ Wird über Umgebungsvariablen gesetzt (oder eine `.env` neben `compose.pi.yml`):
 - Ports pro Installation eindeutig wählen, damit nichts mit anderen Diensten
   kollidiert.
 
+## Autostart nach Neustart
+
+Für den Dauerbetrieb richtet `./tools/systemd-einrichten.sh` einen systemd-Dienst
+ein, der die App nach einem Neustart automatisch wieder hochfährt. Wie sich die
+Anwendung verhält, wenn ein Laufwerk fehlt oder der Strom mitten in einem Vorgang
+ausfällt, beschreibt [RESILIENZ.md](RESILIENZ.md).
+
 ## Wiederherstellung ohne die App
 
 Auch ohne laufende App lassen sich alle Dateien zurückgewinnen:

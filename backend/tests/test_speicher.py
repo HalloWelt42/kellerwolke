@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.ports import SpeicherNichtVerfuegbar
 from module.speicher.dienst import SpeicherDienst
@@ -253,3 +254,30 @@ async def test_datenablage_verschieben_quelle_weg_scheitert(pool, benutzer_id, t
 
     assert dienst.verschiebung["status"] == "fehler"
     assert not ziel.exists()  # nichts kopiert
+
+
+# --- Boot-Robustheit: App wartet auf den Mount, statt abzustuerzen -----------
+
+async def test_boot_ohne_mount_kein_absturz(pool, tmp_path):
+    pfad = tmp_path / "pool"
+    bs = markierter_blobstore(pfad)  # legt Marker an, merkt sich die UUID
+    marker = bs.marker
+    # DB-Zeile wie aus einem frueheren Lauf (Pfad + Marker bekannt).
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            repo = PostgresMetadataRepository(conn)
+            await repo.speicherort_setzen(str(pfad), marker)
+    # Mount fehlt beim Boot: Marker-Datei ist weg.
+    (pfad / ".kellerwolke_pool").unlink()
+
+    # Frischer Dienst bootet -> kein Absturz, aber Pool nicht erreichbar.
+    dienst = SpeicherDienst(pool, FilesystemBlobStore(str(pfad)))
+    aktiv = await dienst.speicher_initialisieren(str(pfad))
+    assert os.path.abspath(aktiv) == os.path.abspath(str(pfad))
+    assert await dienst.speicher_erreichbar() is False
+    # Es wurde KEINE falsche Markierung auf der (leeren) Systemplatte angelegt.
+    assert not (pfad / ".kellerwolke_pool").exists()
+
+    # Laufwerk kommt zurueck -> heilt sich selbst, ohne Eingriff.
+    (pfad / ".kellerwolke_pool").write_text(marker)
+    assert await dienst.speicher_erreichbar() is True

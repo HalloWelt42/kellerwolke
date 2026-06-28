@@ -6,6 +6,9 @@ name: ${COMPOSE_PROJECT_NAME:-kellerwolke}
 services:
   db:
     image: postgres:16-alpine
+    # Nach einem Neustart (Pi laeuft 24/7) automatisch wieder hochkommen; nur
+    # ein ausdrueckliches Stoppen haelt den Container unten.
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${KELLERWOLKE_DB_NAME:-kellerwolke}
       POSTGRES_USER: ${KELLERWOLKE_DB_USER:-kellerwolke}

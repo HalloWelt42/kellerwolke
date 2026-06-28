@@ -62,9 +62,21 @@ Quelle wird zuletzt gelöscht - stürzt der Vorgang mittendrin ab, liegen alle
 Blöcke noch an der Quelle, es geht nichts verloren. Die alte Quelle bleibt durch
 ihren alten Marker als "falsches Laufwerk" erkennbar.
 
+## Boot-Robustheit und Autostart
+
+Fehlt das Laufwerk beim Hochfahren noch (es wird oft erst nach dem Dienst
+gemountet), stürzt nichts ab: Der Dienst startet sauber, meldet den Pool als
+nicht verfügbar und wartet. Es wird in diesem Fall keine Marker-Datei angelegt -
+so entsteht nie eine falsche Markierung auf der Systemplatte. Sobald das
+Laufwerk da ist, ist der Pool von selbst wieder verfügbar.
+
+Damit die Anwendung nach einem Neustart von allein wieder hochkommt, richtet
+`tools/systemd-einrichten.sh` auf dem Zielgerät einen systemd-Dienst ein, der
+`./start.sh` als einzige Startlogik nutzt (Datenbank, Backend, Frontend). Die
+Datenbank im Docker-Container hat zusätzlich `restart: unless-stopped`. Auf dem
+Entwickler-Mac entfällt der systemd-Schritt; dort wird mit `./start.sh`
+gearbeitet.
+
 ## Nächste Schritte
 
-Aufbauend auf den bisherigen Schichten sind weitere geplant:
-
-- Boot-Robustheit (Dienst wartet auf den Mount) und Dienst-Autostart.
 - Konsistenz-Prüfung und Reparatur (verwaiste Blöcke nach Stromausfall).
