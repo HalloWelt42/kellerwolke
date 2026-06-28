@@ -34,6 +34,13 @@ def _zahl(schluessel, standard):
         return standard
 
 
+def _bool(schluessel, standard=False):
+    wert = os.environ.get(schluessel)
+    if wert is None or wert == "":
+        return standard
+    return wert.strip().lower() in ("1", "true", "ja", "yes", "on")
+
+
 @dataclass(frozen=True)
 class Einstellungen:
     bind: str = _text("KELLERWOLKE_BIND", "127.0.0.1")
@@ -61,6 +68,11 @@ class Einstellungen:
     io_threads: int = _zahl("KELLERWOLKE_IO_THREADS", 8)
     io_timeout: int = _zahl("KELLERWOLKE_IO_TIMEOUT", 60)
     io_min_durchsatz: int = _zahl("KELLERWOLKE_IO_MIN_DURCHSATZ", 1_000_000)
+    # Muss der Objekt-Pool auf einer EIGENEN Platte liegen (Pi mit externem
+    # Laufwerk)? Dann wird er beim Erststart NICHT eingerichtet, solange sein
+    # Pfad noch auf der Systemplatte liegt (Mount fehlt) - schuetzt davor, den
+    # Pool still auf die Root-Platte zu saeen. Auf dem Entwickler-Mac aus.
+    pool_muss_extern: bool = _bool("KELLERWOLKE_POOL_MUSS_EXTERN", False)
 
     @property
     def dsn(self) -> str:

@@ -70,6 +70,15 @@ nicht verfügbar und wartet. Es wird in diesem Fall keine Marker-Datei angelegt 
 so entsteht nie eine falsche Markierung auf der Systemplatte. Sobald das
 Laufwerk da ist, ist der Pool von selbst wieder verfügbar.
 
+Das gilt auch für den allerersten Start: Ist `KELLERWOLKE_POOL_MUSS_EXTERN`
+gesetzt (für ein Gerät, dessen Pool auf einer eigenen Platte liegen muss), wird
+der Pool gar nicht erst eingerichtet, solange sein Pfad noch auf der Systemplatte
+liegt (Mount fehlt) - sonst würde der leere Mountpoint auf der Root-Platte als
+Pool gesät. Stattdessen wartet die App auf den Mount und richtet beim nächsten
+Start ein. Eingerichtet wird zudem in der richtigen Reihenfolge: erst die
+Marker-Datei auf der Platte, dann der Eintrag in der Datenbank - so steht dort
+nie ein Marker ohne zugehörige Datei. Auf dem Entwickler-Mac ist die Option aus.
+
 Damit die Anwendung nach einem Neustart von allein wieder hochkommt, richtet
 `tools/systemd-einrichten.sh` auf dem Zielgerät einen systemd-Dienst ein, der
 `./start.sh` als einzige Startlogik nutzt (Datenbank, Backend, Frontend). Die

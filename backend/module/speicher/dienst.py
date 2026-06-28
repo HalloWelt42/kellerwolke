@@ -69,6 +69,27 @@ def _ist_hash(wert) -> bool:
     )
 
 
+def _auf_systemplatte(pfad) -> bool:
+    """True, wenn pfad (oder sein naechster vorhandener Elternordner) auf
+    DERSELBEN Geraete-Nummer wie '/' liegt - also NICHT auf einer eigenen,
+    gemounteten Platte. Nur als Erst-Einrichtungs-Schutz gedacht (K12): ein
+    fehlender Mount laesst den Pool-Pfad auf die Systemplatte zeigen."""
+    try:
+        root_dev = os.stat("/").st_dev
+    except OSError:
+        return False
+    p = os.path.abspath(pfad)
+    while p and not os.path.exists(p):
+        eltern = os.path.dirname(p)
+        if eltern == p:
+            break
+        p = eltern
+    try:
+        return os.stat(p).st_dev == root_dev
+    except OSError:
+        return False
+
+
 def _pool_pruefen_fs(wurzel, soll, tief):
     """Vergleicht den physischen Pool mit dem Soll-Zustand (Liste von
     {besitzer_id, hash, groesse} aus der DB). Laeuft im Thread, weil er ueber die
@@ -143,11 +164,17 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             status = await repo.speicher_status(besitzer_id)
-        gesamt, frei = self._datentraeger()
+        verfuegbar = await self.speicher_erreichbar()
+        # Bei abgehaengtem Pool NICHT den freien Platz der Systemplatte zeigen
+        # (das wuerde falsche Sicherheit vorgaukeln) - dann keine Zahlen.
+        if verfuegbar:
+            gesamt, frei = self._datentraeger()
+        else:
+            gesamt, frei = None, None
         status["gesamt"] = gesamt
         status["frei"] = frei
         status["ort"] = str(getattr(self.blobstore, "wurzel", "")) or None
-        status["verfuegbar"] = await self.speicher_erreichbar()
+        status["verfuegbar"] = verfuegbar
         return status
 
     # --- Favoriten ------------------------------------------------------------
@@ -307,41 +334,52 @@ class SpeicherDienst:
             return False
 
     async def speicher_initialisieren(self, standard: str) -> str:
-        """Beim Start: aktiven Pool-Pfad + Volume-Marker ermitteln, den BlobStore
-        konfigurieren und die Marker-Datei sicherstellen. Quelle der Wahrheit ist
-        die speicherort-Zeile in der DB. Liefert den aktiven Pfad zurueck.
+        """Beim Start: aktiven Pool-Pfad + Volume-Marker ermitteln und den
+        BlobStore konfigurieren. Quelle der Wahrheit ist die speicherort-Zeile.
 
-        - Erststart (keine Zeile): Pfad = Standard, frischer Marker, in DB ablegen.
-        - Bestandspool ohne Marker (Upgrade): Marker erzeugen und adoptieren.
+        - Bereits eingerichtet (Zeile mit Marker): nur konfigurieren. Ob der Pool
+          erreichbar ist, entscheidet danach die Marker-Datei (verfuegbar()).
+        - Erst-Einrichtung/Adoption (keine Zeile oder ohne Marker): frischen
+          Marker erzeugen, ERST die Marker-Datei schreiben, dann in der DB
+          festschreiben - so steht in der DB nie ein Marker ohne zugehoerige Datei.
 
-        Die Marker-DATEI wird NUR beim allerersten Setzen geschrieben (dann muss
-        das richtige Laufwerk gemountet sein - Betreiber-Verantwortung beim
-        Einrichten). Steht der Marker schon in der DB, wird die Datei nie
-        automatisch neu angelegt: fehlt sie beim Booten (Laufwerk noch nicht da),
-        bleibt verfuegbar() False und die App wartet auf den Mount, statt still
-        eine falsche Markierung auf der Systemplatte anzulegen."""
-        neu_markiert = False
+        K12-Schutz: Ist KELLERWOLKE_POOL_MUSS_EXTERN gesetzt und liegt der Pfad
+        beim Erststart noch auf der Systemplatte (Mount fehlt), wird gar nicht
+        eingerichtet - sonst saet man den Pool still auf die Root-Platte. Der Pool
+        bleibt nicht verfuegbar, bis die Platte da ist; beim naechsten Start wird
+        erneut versucht."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            row = await repo.speicherort_holen()
+
+        if row and row.get("marker"):
+            self.blobstore.setze_wurzel(row["pfad"], row["marker"])
+            return row["pfad"]
+
+        pfad = row["pfad"] if row else standard
+
+        if EINSTELLUNGEN.pool_muss_extern and _auf_systemplatte(pfad):
+            self.blobstore.setze_wurzel(pfad, None)
+            print(
+                f"[kellerwolke] Pool-Pfad {pfad} liegt auf der Systemplatte und "
+                "KELLERWOLKE_POOL_MUSS_EXTERN ist gesetzt - Einrichtung verschoben, "
+                "warte auf den Mount.",
+                flush=True,
+            )
+            return pfad
+
+        marker = str(uuid.uuid4())
+        self.blobstore.setze_wurzel(pfad, marker)
+        try:
+            self.blobstore.marker_schreiben(marker)
+        except OSError:
+            # Platte doch nicht beschreibbar/da -> nicht in der DB festschreiben,
+            # beim naechsten Start erneut versuchen.
+            return pfad
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
-                row = await repo.speicherort_holen()
-                if not row:
-                    pfad, marker = standard, str(uuid.uuid4())
-                    neu_markiert = True
-                    await repo.speicherort_setzen(pfad, marker)
-                else:
-                    pfad = row["pfad"]
-                    marker = row.get("marker")
-                    if not marker:
-                        marker = str(uuid.uuid4())
-                        neu_markiert = True
-                        await repo.speicherort_setzen(pfad, marker)
-        self.blobstore.setze_wurzel(pfad, marker)
-        if neu_markiert and not self.blobstore.verfuegbar():
-            try:
-                self.blobstore.marker_schreiben(marker)
-            except OSError:
-                pass
+                await repo.speicherort_setzen(pfad, marker)
         return pfad
 
     async def datenablage_verschieben(self, ziel: str) -> None:

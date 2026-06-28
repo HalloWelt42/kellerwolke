@@ -283,6 +283,53 @@ async def test_boot_ohne_mount_kein_absturz(pool, tmp_path):
     assert await dienst.speicher_erreichbar() is True
 
 
+async def test_erststart_seedet_marker(pool, tmp_path):
+    pfad = tmp_path / "pool"
+    dienst = SpeicherDienst(pool, FilesystemBlobStore(str(pfad)))
+    aktiv = await dienst.speicher_initialisieren(str(pfad))
+    assert os.path.abspath(aktiv) == os.path.abspath(str(pfad))
+    assert (pfad / ".kellerwolke_pool").exists()  # Marker-Datei geschrieben
+    assert await dienst.speicher_erreichbar() is True
+    async with pool.connection() as conn:
+        repo = PostgresMetadataRepository(conn)
+        row = await repo.speicherort_holen()
+        assert row and row["marker"]  # ERST nach der Datei in der DB festgeschrieben
+
+
+async def test_k12_kein_seeding_auf_systemplatte(pool, tmp_path, monkeypatch):
+    # K12: Pool MUSS extern liegen, der Pfad liegt aber (Mount fehlt) auf der
+    # Systemplatte -> NICHT einrichten, sonst saet man den Pool auf die Root-Platte.
+    from types import SimpleNamespace
+
+    from module.speicher import dienst as dmod
+
+    monkeypatch.setattr(dmod, "EINSTELLUNGEN", SimpleNamespace(
+        pool_muss_extern=True,
+        io_timeout=dmod.EINSTELLUNGEN.io_timeout,
+        io_min_durchsatz=dmod.EINSTELLUNGEN.io_min_durchsatz,
+    ))
+    pfad = tmp_path / "pool"  # tmp liegt auf der Systemplatte
+    dienst = SpeicherDienst(pool, FilesystemBlobStore(str(pfad)))
+
+    await dienst.speicher_initialisieren(str(pfad))
+
+    assert not (pfad / ".kellerwolke_pool").exists()  # keine falsche Markierung
+    assert await dienst.speicher_erreichbar() is False  # bleibt nicht verfuegbar
+    async with pool.connection() as conn:
+        repo = PostgresMetadataRepository(conn)
+        assert await repo.speicherort_holen() is None  # nichts in der DB festgeschrieben
+
+
+async def test_status_versteckt_root_platz_bei_ausfall(dienst, benutzer_id):
+    s1 = await dienst.speicher_status(benutzer_id)
+    assert s1["verfuegbar"] and s1["gesamt"] is not None
+    # Mount "weg": Marker-Datei entfernen.
+    (Path(dienst.blobstore.wurzel) / ".kellerwolke_pool").unlink()
+    s2 = await dienst.speicher_status(benutzer_id)
+    assert s2["verfuegbar"] is False
+    assert s2["gesamt"] is None and s2["frei"] is None  # keine Root-Zahlen vorgaukeln
+
+
 # --- Konsistenz / Reparatur -------------------------------------------------
 
 async def test_pool_aufraeumen_entfernt_nur_verwaiste(dienst, benutzer_id):
