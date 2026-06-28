@@ -132,6 +132,43 @@
       verschiebeFehler = (f as Error).message;
     }
   }
+
+  // Konsistenz / Reparatur (Vorschau, dann auf Wunsch aufraeumen)
+  let pruefung = $state<import("./types").PoolPruefung | null>(null);
+  let pruefeTief = $state(false);
+  let pruefeLaeuft = $state(false);
+  let pruefeFehler = $state("");
+  let aufraeumMeldung = $state("");
+
+  async function poolPruefen() {
+    pruefeLaeuft = true;
+    pruefeFehler = "";
+    aufraeumMeldung = "";
+    try {
+      pruefung = await api.poolPruefung(pruefeTief);
+    } catch (f) {
+      pruefeFehler = (f as Error).message;
+    } finally {
+      pruefeLaeuft = false;
+    }
+  }
+
+  async function poolAufraeumen() {
+    pruefeLaeuft = true;
+    pruefeFehler = "";
+    try {
+      const erg = await api.poolAufraeumen();
+      // Erst neu prüfen (das setzt die Meldung zurück), dann die Erfolgsmeldung
+      // setzen - sonst würde der Re-Scan sie sofort wieder löschen.
+      await poolPruefen();
+      await ladeStatus();
+      aufraeumMeldung = `${erg.entfernt} verwaiste Blöcke entfernt, ${groesseText(erg.bytes)} frei.`;
+    } catch (f) {
+      pruefeFehler = (f as Error).message;
+    } finally {
+      pruefeLaeuft = false;
+    }
+  }
 </script>
 
 <div class="app">
@@ -311,6 +348,53 @@
           <div class="meldung">Datenablage verschoben.</div>
         {/if}
         {#if verschiebeFehler}<div class="fehler">{verschiebeFehler}</div>{/if}
+      </div>
+
+      <div class="karte">
+        <h2><i class="fa-solid fa-shield-halved"></i> Konsistenz prüfen</h2>
+        <p class="karte-unter">
+          Gleicht den Objektspeicher mit der Datenbank ab. Verwaiste Blöcke (etwa
+          Reste eines Stromausfalls) belegen nur Platz und lassen sich gefahrlos
+          entfernen. Fehlende Blöcke werden gemeldet.
+        </p>
+        <div class="einst-reihe">
+          <label class="pruef-tief">
+            <input type="checkbox" bind:checked={pruefeTief} disabled={pruefeLaeuft} />
+            Inhalte gegen Prüfsumme prüfen (langsamer)
+          </label>
+          <button class="knopf" onclick={poolPruefen} disabled={pruefeLaeuft}>
+            <i class="fa-solid fa-magnifying-glass-chart"></i> Prüfen
+          </button>
+        </div>
+        {#if pruefeLaeuft}<p class="karte-unter">Prüfe ...</p>{/if}
+        {#if pruefung}
+          <ul class="pruef-bericht">
+            <li>{pruefung.geprueft} Blöcke geprüft</li>
+            <li class:warnung={pruefung.verwaist > 0}>
+              {pruefung.verwaist} verwaiste Blöcke ({groesseText(pruefung.verwaist_bytes)} frei)
+            </li>
+            <li class:fehler={pruefung.fehlend > 0}>{pruefung.fehlend} fehlende Blöcke</li>
+            {#if pruefeTief}
+              <li class:fehler={pruefung.beschaedigt > 0}>
+                {pruefung.beschaedigt} beschädigte Blöcke
+              </li>
+            {/if}
+          </ul>
+          {#if pruefung.verwaist > 0}
+            <button class="knopf primaer" onclick={poolAufraeumen} disabled={pruefeLaeuft}>
+              <i class="fa-solid fa-broom"></i>
+              {pruefung.verwaist} verwaiste Blöcke entfernen ({groesseText(pruefung.verwaist_bytes)})
+            </button>
+          {/if}
+          {#if pruefung.fehlend > 0}
+            <div class="fehler">
+              Achtung: {pruefung.fehlend} der Datenbank bekannte Blöcke fehlen auf der
+              Platte. Betroffene Dateien lassen sich nicht mehr vollständig laden.
+            </div>
+          {/if}
+        {/if}
+        {#if aufraeumMeldung}<div class="meldung">{aufraeumMeldung}</div>{/if}
+        {#if pruefeFehler}<div class="fehler">{pruefeFehler}</div>{/if}
       </div>
     {/if}
   </section>

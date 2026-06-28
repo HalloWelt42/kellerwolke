@@ -86,6 +86,7 @@ class FilesystemBlobStore:
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp, ziel)
+            self._verzeichnis_fsync(ziel.parent)
         except BaseException:
             try:
                 os.unlink(tmp)
@@ -93,6 +94,20 @@ class FilesystemBlobStore:
                 pass
             raise
         return blob_hash, True
+
+    @staticmethod
+    def _verzeichnis_fsync(ordner: Path) -> None:
+        """Macht den Verzeichnis-Eintrag nach dem Rename dauerhaft (Crash-
+        Sicherheit). Auf Dateisystemen ohne Verzeichnis-fsync (z.B. exFAT)
+        bestmoeglich - Fehler werden ignoriert."""
+        try:
+            dfd = os.open(str(ordner), os.O_DIRECTORY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+        except OSError:
+            pass
 
     def get(self, benutzer_id: str, blob_hash: str) -> bytes:
         self._sichern()

@@ -1163,6 +1163,24 @@ select.feld {
   font-size: 1.2rem;
   flex: none;
 }
+.pruef-bericht {
+  list-style: none;
+  margin: var(--a3) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--a1);
+  font-size: 0.9rem;
+}
+.pruef-bericht li.warnung {
+  color: var(--warn);
+}
+.pruef-tief {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  font-size: 0.86rem;
+}
 .meldung {
   color: var(--gut);
   font-size: 0.86rem;

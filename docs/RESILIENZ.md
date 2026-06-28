@@ -77,6 +77,30 @@ Datenbank im Docker-Container hat zusätzlich `restart: unless-stopped`. Auf dem
 Entwickler-Mac entfällt der systemd-Schritt; dort wird mit `./start.sh`
 gearbeitet.
 
-## Nächste Schritte
+## Durabilität beim Schreiben
 
-- Konsistenz-Prüfung und Reparatur (verwaiste Blöcke nach Stromausfall).
+Ein Block wird inhaltsadressiert und atomar geschrieben: erst in eine temporäre
+Datei mit `fsync`, dann per `os.replace` an seinen endgültigen Platz, und
+anschließend wird auch das Verzeichnis `fsync`-t. So hinterlässt ein Absturz nie
+einen halben Block, und der Verzeichnis-Eintrag ist dauerhaft. Auf
+Dateisystemen ohne Verzeichnis-`fsync` (etwa exFAT) geschieht das bestmöglich;
+weil der Dateiname der Inhalts-Hash ist, fällt eine Beschädigung ohnehin bei der
+Prüfung auf.
+
+## Konsistenz und Reparatur
+
+Nach einem Stromausfall mitten in einem Vorgang kann der Pool von der Datenbank
+abweichen. Ein Abgleich (Verwaltung -> Speicherorte -> Konsistenz prüfen) findet:
+
+- **Verwaiste Blöcke** - auf der Platte, aber in keiner Datei mehr referenziert
+  (Reste abgebrochener Uploads oder einer unterbrochenen Papierkorb-Leerung).
+  Sie belegen nur Platz und lassen sich gefahrlos entfernen; vor dem Löschen
+  wird jeder Block noch einmal gegen die Datenbank geprüft, damit ein gerade neu
+  hochgeladener nie erwischt wird.
+- **Fehlende Blöcke** - der Datenbank bekannt, aber physisch weg (echter
+  Verlust). Werden gemeldet, nicht automatisch verändert.
+- **Beschädigte Blöcke** (optionale, langsamere Tiefenprüfung) - Inhalt passt
+  nicht zum Hash (Bitfäule).
+
+Erst wird geprüft und das Ergebnis angezeigt, dann entscheidet ein Admin über das
+Aufräumen - nie automatisch.

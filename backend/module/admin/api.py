@@ -9,7 +9,10 @@ from app.abhaengig import aktueller_admin, hole_auth, hole_speicher
 from module.admin.modelle import (
     BenutzerAnlegen,
     BenutzerUpdate,
+    BlobRef,
     ExternQuelleEingabe,
+    PoolAufraeumenAus,
+    PoolPruefungAus,
     SpeicherortAus,
     VerschiebenEingabe,
     VerschiebungAus,
@@ -38,6 +41,30 @@ async def verschieben(eingabe: VerschiebenEingabe, admin=Depends(aktueller_admin
     # Im Hintergrund anstossen; der Fortschritt wird per GET abgefragt.
     asyncio.create_task(speicher.datenablage_verschieben(eingabe.ziel))
     return VerschiebungAus(status="laeuft", ziel=eingabe.ziel)
+
+
+@router.get("/pool-pruefung", response_model=PoolPruefungAus)
+async def pool_pruefung(tief: bool = False, admin=Depends(aktueller_admin),
+                        speicher=Depends(hole_speicher)):
+    r = await speicher.pool_pruefen(tief=tief)
+    grenze = 100  # Listen begrenzen, der Bericht soll handlich bleiben
+    def refs(eintraege):
+        return [BlobRef(besitzer_id=str(b["besitzer_id"]), hash=b["hash"],
+                        groesse=b["groesse"]) for b in eintraege[:grenze]]
+    return PoolPruefungAus(
+        verwaist=len(r["verwaist"]),
+        verwaist_bytes=sum(o["groesse"] for o in r["verwaist"]),
+        fehlend=len(r["fehlend"]),
+        fehlend_liste=refs(r["fehlend"]),
+        beschaedigt=len(r["beschaedigt"]),
+        beschaedigt_liste=refs(r["beschaedigt"]),
+        geprueft=r["geprueft"],
+    )
+
+
+@router.post("/pool-aufraeumen", response_model=PoolAufraeumenAus)
+async def pool_aufraeumen(admin=Depends(aktueller_admin), speicher=Depends(hole_speicher)):
+    return PoolAufraeumenAus(**await speicher.pool_aufraeumen())
 
 
 @router.post("/externe-quelle", response_model=KnotenAus, status_code=201)

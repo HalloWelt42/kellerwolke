@@ -56,6 +56,27 @@ export interface Verschiebung {
   fehler: string | null;
 }
 
+export interface BlobRef {
+  besitzer_id: string;
+  hash: string;
+  groesse: number;
+}
+
+export interface PoolPruefung {
+  verwaist: number;
+  verwaist_bytes: number;
+  fehlend: number;
+  fehlend_liste: BlobRef[];
+  beschaedigt: number;
+  beschaedigt_liste: BlobRef[];
+  geprueft: number;
+}
+
+export interface PoolAufraeumen {
+  entfernt: number;
+  bytes: number;
+}
+
 export interface Version {
   id: string;
   groesse: number;

@@ -384,6 +384,11 @@ class PostgresMetadataRepository:
             (besitzer_id, blob_hash),
         )
 
+    async def alle_blobs(self):
+        """Soll-Zustand des Pools: jeder Block, den die DB kennt (fuer den
+        Konsistenzabgleich mit den physisch vorhandenen Dateien)."""
+        return await self._alle("SELECT besitzer_id, hash, groesse FROM blob")
+
     # --- Journal (Sync-Vorbereitung) ------------------------------------------
 
     async def journal_anhaengen(self, besitzer_id, knoten_id, typ, version_id=None):

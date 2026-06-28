@@ -281,3 +281,60 @@ async def test_boot_ohne_mount_kein_absturz(pool, tmp_path):
     # Laufwerk kommt zurueck -> heilt sich selbst, ohne Eingriff.
     (pfad / ".kellerwolke_pool").write_text(marker)
     assert await dienst.speicher_erreichbar() is True
+
+
+# --- Konsistenz / Reparatur -------------------------------------------------
+
+async def test_pool_aufraeumen_entfernt_nur_verwaiste(dienst, benutzer_id):
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "echt.txt", b"inhalt")
+    # Verwaisten Block direkt in den Pool legen (kein DB-Eintrag).
+    wurzel = Path(dienst.blobstore.wurzel)
+    fake = "ab" + "0" * 62
+    ordner = wurzel / str(benutzer_id) / fake[:2]
+    ordner.mkdir(parents=True, exist_ok=True)
+    (ordner / fake).write_bytes(b"muell")
+
+    bericht = await dienst.pool_pruefen()
+    assert [o["name"] for o in bericht["verwaist"]] == [fake]
+    assert bericht["fehlend"] == []
+
+    erg = await dienst.pool_aufraeumen()
+    assert erg["entfernt"] == 1
+    # Echter Block unangetastet, verwaister weg.
+    assert await dienst.datei_lesen(benutzer_id, knoten["id"]) == b"inhalt"
+    assert (await dienst.pool_pruefen())["verwaist"] == []
+
+
+async def test_pool_aufraeumen_entfernt_temp_reste(dienst, benutzer_id):
+    # Rest eines abgebrochenen Schreibvorgangs: Name ist kein 64-stelliger Hash.
+    # Darf trotzdem entfernt werden, ohne die uuid-/Hash-Pruefung zu sprengen.
+    await dienst.datei_hochladen(benutzer_id, None, "echt.txt", b"inhalt")
+    wurzel = Path(dienst.blobstore.wurzel)
+    ordner = wurzel / str(benutzer_id) / "zz"
+    ordner.mkdir(parents=True, exist_ok=True)
+    (ordner / "tmpABCDEF").write_bytes(b"abgebrochener upload")
+
+    erg = await dienst.pool_aufraeumen()
+    assert erg["entfernt"] == 1
+    assert not (ordner / "tmpABCDEF").exists()
+
+
+async def test_pool_pruefen_meldet_fehlende_bloecke(dienst, benutzer_id):
+    await dienst.datei_hochladen(benutzer_id, None, "weg.txt", b"verschwindet")
+    wurzel = Path(dienst.blobstore.wurzel)
+    for p in (wurzel / str(benutzer_id)).rglob("*"):
+        if p.is_file():
+            p.unlink()  # DB kennt den Block noch, Platte nicht mehr
+    bericht = await dienst.pool_pruefen()
+    assert bericht["fehlend"] and bericht["verwaist"] == []
+
+
+async def test_pool_pruefen_tief_findet_beschaedigte(dienst, benutzer_id):
+    await dienst.datei_hochladen(benutzer_id, None, "k.txt", b"original")
+    wurzel = Path(dienst.blobstore.wurzel)
+    blob = next(p for p in (wurzel / str(benutzer_id)).rglob("*") if p.is_file())
+    blob.write_bytes(b"verfaelscht")  # Name bleibt der Hash, Inhalt nicht
+
+    assert (await dienst.pool_pruefen(tief=False))["beschaedigt"] == []
+    bericht = await dienst.pool_pruefen(tief=True)
+    assert [b["hash"] for b in bericht["beschaedigt"]] == [blob.name]

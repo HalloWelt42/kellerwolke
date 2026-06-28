@@ -5,6 +5,8 @@ import type {
   Freigabe,
   Knoten,
   Konto,
+  PoolAufraeumen,
+  PoolPruefung,
   SpeicherStatus,
   Verschiebung,
   Version,
@@ -404,6 +406,14 @@ export function datenablageVerschieben(ziel: string): Promise<Verschiebung> {
 
 export function verschiebungStand(): Promise<Verschiebung> {
   return hole<Verschiebung>("/v1/admin/speicherort/verschieben");
+}
+
+export function poolPruefung(tief = false): Promise<PoolPruefung> {
+  return hole<PoolPruefung>(`/v1/admin/pool-pruefung?tief=${tief ? "true" : "false"}`);
+}
+
+export function poolAufraeumen(): Promise<PoolAufraeumen> {
+  return hole<PoolAufraeumen>("/v1/admin/pool-aufraeumen", { method: "POST" });
 }
 
 export function externeQuelleAnlegen(

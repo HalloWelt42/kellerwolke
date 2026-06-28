@@ -42,3 +42,24 @@ class VerschiebungAus(BaseModel):
     gesamt: int = 0
     ziel: str | None = None
     fehler: str | None = None
+
+
+class BlobRef(BaseModel):
+    besitzer_id: str
+    hash: str
+    groesse: int
+
+
+class PoolPruefungAus(BaseModel):
+    verwaist: int           # auf der Platte, nicht in der DB (Platz zurueck)
+    verwaist_bytes: int     # davon zurueckgewinnbarer Platz
+    fehlend: int            # in der DB, nicht auf der Platte (echter Verlust)
+    fehlend_liste: list[BlobRef]
+    beschaedigt: int        # nur bei tief: Inhalt passt nicht zum Hash
+    beschaedigt_liste: list[BlobRef]
+    geprueft: int           # Anzahl gepruefter Pool-Dateien
+
+
+class PoolAufraeumenAus(BaseModel):
+    entfernt: int
+    bytes: int

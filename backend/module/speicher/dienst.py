@@ -6,6 +6,7 @@ Dienst, damit ETags und Journal immer konsistent bleiben.
 """
 
 import asyncio
+import hashlib
 import io
 import os
 import shutil
@@ -52,6 +53,67 @@ def _ist_unterpfad(a, b) -> bool:
     a = os.path.abspath(a)
     b = os.path.abspath(b)
     return a == b or a.startswith(b + os.sep)
+
+
+def _ist_uuid(wert) -> bool:
+    try:
+        uuid.UUID(str(wert))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
+def _ist_hash(wert) -> bool:
+    return isinstance(wert, str) and len(wert) == 64 and all(
+        c in "0123456789abcdef" for c in wert
+    )
+
+
+def _pool_pruefen_fs(wurzel, soll, tief):
+    """Vergleicht den physischen Pool mit dem Soll-Zustand (Liste von
+    {besitzer_id, hash, groesse} aus der DB). Laeuft im Thread, weil er ueber die
+    ganze Platte geht. Liefert:
+      verwaist    - auf der Platte, aber nicht in der DB (Rest abgebrochener
+                    Vorgaenge/temp-Dateien); Platz kann zurueck.
+      fehlend     - in der DB, aber nicht auf der Platte (echter Verlust).
+      beschaedigt - nur bei tief: Inhalt passt nicht zum Hash (Bitfaeule).
+    Layout: <wurzel>/<benutzer_id>/<hh>/<hash>. Die Marker-Datei am Wurzel liegt
+    nicht in einem Benutzerordner und wird so automatisch uebersprungen."""
+    wurzel_p = Path(wurzel)
+    soll_map = {(str(b["besitzer_id"]), b["hash"]): int(b["groesse"]) for b in soll}
+    gesehen = set()
+    verwaist = []
+    beschaedigt = []
+    geprueft = 0
+    for benutzer_dir in (wurzel_p.iterdir() if wurzel_p.is_dir() else []):
+        if not benutzer_dir.is_dir():
+            continue
+        benutzer = benutzer_dir.name
+        for datei in benutzer_dir.rglob("*"):
+            if not datei.is_file():
+                continue
+            geprueft += 1
+            schluessel = (benutzer, datei.name)
+            if schluessel in soll_map:
+                gesehen.add(schluessel)
+                if tief and hashlib.sha256(datei.read_bytes()).hexdigest() != datei.name:
+                    beschaedigt.append(
+                        {"besitzer_id": benutzer, "hash": datei.name, "groesse": soll_map[schluessel]}
+                    )
+            else:
+                try:
+                    g = datei.stat().st_size
+                except OSError:
+                    g = 0
+                verwaist.append(
+                    {"pfad": str(datei), "groesse": g, "besitzer_id": benutzer, "name": datei.name}
+                )
+    fehlend = [
+        {"besitzer_id": b, "hash": h, "groesse": g}
+        for (b, h), g in soll_map.items()
+        if (b, h) not in gesehen
+    ]
+    return {"verwaist": verwaist, "fehlend": fehlend, "beschaedigt": beschaedigt, "geprueft": geprueft}
 
 
 class SpeicherDienst:
@@ -163,6 +225,48 @@ class SpeicherDienst:
             eigentuemer = str(knoten["besitzer_id"])
         bloecke = [await self.blob_get(eigentuemer, c["blob_hash"], c.get("groesse", 0)) for c in teile]
         return (knoten, b"".join(bloecke))
+
+    # --- Konsistenz / Reparatur ----------------------------------------------
+
+    async def pool_pruefen(self, tief: bool = False) -> dict:
+        """Gleicht den physischen Pool mit der DB ab (nur lesend). Liefert
+        verwaiste (Platz zurueckgewinnbar), fehlende (echter Verlust) und bei
+        tief beschaedigte Bloecke. Laeuft ueber die Platte -> im Thread, der
+        Event-Loop bleibt frei."""
+        if not await self.speicher_erreichbar():
+            raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Pruefung abgebrochen")
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            soll = await repo.alle_blobs()
+        wurzel = str(getattr(self.blobstore, "wurzel", ""))
+        return await asyncio.to_thread(_pool_pruefen_fs, wurzel, soll, tief)
+
+    async def pool_aufraeumen(self) -> dict:
+        """Entfernt verwaiste Bloecke und gibt den Platz zurueck. Re-scannt und
+        prueft jeden Kandidaten unmittelbar vor dem Loeschen erneut gegen die DB,
+        damit ein zwischenzeitlich (durch einen gleichzeitigen Upload) wieder
+        referenzierter Block nie geloescht wird."""
+        if not await self.speicher_erreichbar():
+            raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Aufraeumen abgebrochen")
+        bericht = await self.pool_pruefen()
+        entfernt, bytes_frei = 0, 0
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            for o in bericht["verwaist"]:
+                # Nur ein plausibler Block (UUID-Ordner + 64-stelliger Hash)
+                # koennte ueberhaupt in der DB stehen; temp-Reste oder fremde
+                # Dateien sind sicher verwaist. So bricht ein Nicht-UUID-Name
+                # auch nie die uuid-Abfrage.
+                if _ist_uuid(o["besitzer_id"]) and _ist_hash(o["name"]):
+                    if await repo.blob_holen(o["besitzer_id"], o["name"]):
+                        continue  # inzwischen wieder referenziert -> behalten
+                try:
+                    await asyncio.to_thread(os.unlink, o["pfad"])
+                    entfernt += 1
+                    bytes_frei += o["groesse"]
+                except FileNotFoundError:
+                    pass
+        return {"entfernt": entfernt, "bytes": bytes_frei}
 
     # --- Speicherort (Datenablage) -------------------------------------------
 
