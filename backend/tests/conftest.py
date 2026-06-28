@@ -13,7 +13,8 @@ from app import db as dbmod
 from app.config import EINSTELLUNGEN
 
 TEST_DB = "kellerwolke_test"
-TABELLEN = "benutzer, sitzung, knoten, version, blob, chunk, aenderung, freigabe, such_index"
+TABELLEN = ("benutzer, sitzung, knoten, version, blob, chunk, aenderung, freigabe, "
+            "such_index, speicherort")
 
 
 def _dsn(dbname: str) -> str:

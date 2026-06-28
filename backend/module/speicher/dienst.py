@@ -14,6 +14,7 @@ import zipfile
 from pathlib import Path
 
 from app.adapters.externe_quelle import DateibaumQuelle
+from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.config import EINSTELLUNGEN
 from app.io_pool import im_thread
@@ -38,6 +39,19 @@ def _kopiere_pool(quelle, ziel, fortschritt):
             ziel_datei.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(p, ziel_datei)
         fortschritt(i, gesamt)
+
+
+def _pool_groesse(pfad) -> int:
+    """Summe der Dateigroessen unter pfad (Bytes) - fuer die Platzpruefung."""
+    return sum(p.stat().st_size for p in Path(pfad).rglob("*") if p.is_file())
+
+
+def _ist_unterpfad(a, b) -> bool:
+    """True, wenn a gleich b ist oder a innerhalb von b liegt (verhindert ein
+    Verschieben in sich selbst)."""
+    a = os.path.abspath(a)
+    b = os.path.abspath(b)
+    return a == b or a.startswith(b + os.sep)
 
 
 class SpeicherDienst:
@@ -227,9 +241,16 @@ class SpeicherDienst:
         return pfad
 
     async def datenablage_verschieben(self, ziel: str) -> None:
-        """Verschiebt den Objekt-Pool auf einen anderen Pfad: kopieren, aktiven
-        Pfad umstellen, Rest (waehrend des Kopierens Hinzugekommenes) nachziehen,
-        Quelle loeschen. Fortschritt steht in self.verschiebung."""
+        """Verschiebt den Objekt-Pool gehaertet auf einen anderen Pfad: validieren,
+        kopieren, frischen Marker am Ziel setzen, aktiven Pfad + Marker atomar
+        umstellen, Rest nachziehen, Quelle ERST DANN loeschen. Fortschritt steht
+        in self.verschiebung.
+
+        Sicherheit: Die Quelle wird erst nach dem vollstaendigen Kopieren
+        entfernt - bei einem Absturz mittendrin gehen keine Bloecke verloren
+        (sie liegen noch an der Quelle, die DB zeigt im Zweifel noch dorthin).
+        Das Ziel bekommt einen frischen Volume-Marker mit eigener Identitaet, die
+        Quelle bleibt mit ihrem alten Marker als 'falsches Laufwerk' erkennbar."""
         quelle = os.path.abspath(await self.aktiver_pfad())
         ziel = os.path.abspath(os.path.expanduser(ziel))
         self.verschiebung = {"status": "laeuft", "kopiert": 0, "gesamt": 0, "ziel": ziel,
@@ -243,16 +264,32 @@ class SpeicherDienst:
             if ziel == quelle:
                 self.verschiebung["status"] = "fertig"
                 return
+            # Validierung: Quelle erreichbar, Ziel sinnvoll, genug Platz.
+            if not await self.speicher_erreichbar():
+                raise SpeicherNichtVerfuegbar("Quelle nicht erreichbar - Verschiebung abgebrochen")
+            if _ist_unterpfad(ziel, quelle) or _ist_unterpfad(quelle, ziel):
+                raise ValueError("Ziel darf nicht im Quellordner liegen (oder umgekehrt)")
             os.makedirs(ziel, exist_ok=True)
-            # 1. Bestand kopieren
+            if not os.access(ziel, os.W_OK):
+                raise ValueError("Ziel ist nicht beschreibbar")
+            groesse = await asyncio.to_thread(_pool_groesse, quelle)
+            frei = await asyncio.to_thread(lambda: shutil.disk_usage(ziel).free)
+            if frei < groesse:
+                raise ValueError(f"Zu wenig Platz am Ziel ({groesse} benoetigt, {frei} frei)")
+
+            # 1. Bestand kopieren (Quelle bleibt waehrenddessen aktiv).
             await asyncio.to_thread(_kopiere_pool, quelle, ziel, fort)
-            # 2. Aktiven Pfad umstellen (neue Uploads landen ab jetzt im Ziel)
+            # 2. Frischen Marker am Ziel anlegen (eigene Laufwerk-Identitaet).
+            neuer_marker = str(uuid.uuid4())
+            await asyncio.to_thread(FilesystemBlobStore(ziel).marker_schreiben, neuer_marker)
+            # 3. Aktiven Pfad + Marker atomar umstellen (neue Uploads -> Ziel).
             async with self.pool.connection() as conn:
                 async with conn.transaction():
                     repo = PostgresMetadataRepository(conn)
-                    await repo.speicherort_setzen(ziel)
-            self.blobstore.setze_wurzel(ziel)
-            # 3. Waehrend des Kopierens Hinzugekommenes nachziehen, dann Quelle weg
+                    await repo.speicherort_setzen(ziel, neuer_marker)
+            self.blobstore.setze_wurzel(ziel, neuer_marker)
+            # 4. Waehrend des Kopierens an der Quelle Hinzugekommenes nachziehen
+            #    (ueberspringt den schon frischen Marker), dann Quelle entfernen.
             await asyncio.to_thread(_kopiere_pool, quelle, ziel, fort)
             await asyncio.to_thread(shutil.rmtree, quelle, True)
             self.verschiebung["status"] = "fertig"

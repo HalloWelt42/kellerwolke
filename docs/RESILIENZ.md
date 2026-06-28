@@ -51,10 +51,20 @@ Threads eine hängende Platte maximal binden kann. Einstellbar über
 `KELLERWOLKE_IO_THREADS`, `KELLERWOLKE_IO_TIMEOUT` und
 `KELLERWOLKE_IO_MIN_DURCHSATZ`.
 
+## Datenablage verschieben
+
+Den Objekt-Pool auf ein anderes Laufwerk zu verschieben ist gehärtet: Erst wird
+geprüft, dass die Quelle erreichbar ist, das Ziel beschreibbar ist und nicht im
+Quellordner liegt (oder umgekehrt) und genug Platz frei ist. Dann wird kopiert,
+das Ziel bekommt einen frischen Volume-Marker mit eigener Identität, und erst
+danach werden aktiver Pfad und Marker in der Datenbank atomar umgestellt. Die
+Quelle wird zuletzt gelöscht - stürzt der Vorgang mittendrin ab, liegen alle
+Blöcke noch an der Quelle, es geht nichts verloren. Die alte Quelle bleibt durch
+ihren alten Marker als "falsches Laufwerk" erkennbar.
+
 ## Nächste Schritte
 
-Aufbauend auf Marker und nicht-blockierender I/O sind weitere Schichten geplant:
+Aufbauend auf den bisherigen Schichten sind weitere geplant:
 
-- Härtung der Datenablage-Verschiebung (Ziel prüfen, frischer Marker).
 - Boot-Robustheit (Dienst wartet auf den Mount) und Dienst-Autostart.
 - Konsistenz-Prüfung und Reparatur (verwaiste Blöcke nach Stromausfall).

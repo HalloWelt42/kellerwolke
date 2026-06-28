@@ -6,10 +6,13 @@ Aenderungs-Journal als Sync-Vorbereitung.
 """
 
 import hashlib
+import os
+from pathlib import Path
 
 import pytest
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
+from app.ports import SpeicherNichtVerfuegbar
 from module.speicher.dienst import SpeicherDienst
 from tests.hilfen import markierter_blobstore
 
@@ -200,3 +203,53 @@ async def test_journal_zaehlt_monoton(dienst, benutzer_id):
     seqs = [e["seq"] for e in eintraege]
     assert seqs == sorted(seqs)
     assert all(e["typ"] == "erstellt" for e in eintraege)
+
+
+# --- Datenablage verschieben (gehaertet) ------------------------------------
+
+async def test_datenablage_verschieben(pool, benutzer_id, tmp_path):
+    quelle = tmp_path / "pool_a"
+    ziel = tmp_path / "pool_b"
+    dienst = SpeicherDienst(pool, markierter_blobstore(quelle))
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "um.txt", b"umzug")
+    alt_marker = dienst.blobstore.marker
+
+    await dienst.datenablage_verschieben(str(ziel))
+
+    assert dienst.verschiebung["status"] == "fertig", dienst.verschiebung
+    # Aktiver Pfad zeigt aufs Ziel, mit FRISCHEM Marker (eigene Identitaet).
+    assert os.path.abspath(await dienst.aktiver_pfad()) == os.path.abspath(str(ziel))
+    assert dienst.blobstore.marker and dienst.blobstore.marker != alt_marker
+    assert (ziel / ".kellerwolke_pool").read_text().strip() == dienst.blobstore.marker
+    # Quelle ist erst nach vollstaendigem Kopieren entfernt.
+    assert not quelle.exists()
+    # Bestand weiter lesbar, neuer Upload landet im Ziel.
+    assert await dienst.datei_lesen(benutzer_id, knoten["id"]) == b"umzug"
+    k2 = await dienst.datei_hochladen(benutzer_id, None, "danach.txt", b"frisch")
+    assert await dienst.datei_lesen(benutzer_id, k2["id"]) == b"frisch"
+
+
+async def test_datenablage_verschieben_in_unterordner_scheitert(pool, benutzer_id, tmp_path):
+    quelle = tmp_path / "pool_a"
+    dienst = SpeicherDienst(pool, markierter_blobstore(quelle))
+    await dienst.datei_hochladen(benutzer_id, None, "x.txt", b"x")
+
+    await dienst.datenablage_verschieben(str(quelle / "unter"))
+
+    assert dienst.verschiebung["status"] == "fehler"
+    assert "Quellordner" in dienst.verschiebung["fehler"]
+    assert quelle.exists()  # nichts angetastet
+
+
+async def test_datenablage_verschieben_quelle_weg_scheitert(pool, benutzer_id, tmp_path):
+    quelle = tmp_path / "pool_a"
+    ziel = tmp_path / "pool_b"
+    dienst = SpeicherDienst(pool, markierter_blobstore(quelle))
+    await dienst.datei_hochladen(benutzer_id, None, "x.txt", b"x")
+    # Mount "verschwindet": Marker-Datei weg -> Quelle nicht erreichbar.
+    (quelle / ".kellerwolke_pool").unlink()
+
+    await dienst.datenablage_verschieben(str(ziel))
+
+    assert dienst.verschiebung["status"] == "fehler"
+    assert not ziel.exists()  # nichts kopiert
