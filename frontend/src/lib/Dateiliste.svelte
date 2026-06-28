@@ -540,7 +540,7 @@
   </div>
 {:else}
   <!-- Standard: eigene Dateien / Suche / Favoriten / Papierkorb -->
-  <Filterleiste filter={browser.filter} />
+  <Filterleiste {browser} />
   {#if sortiert.length === 0}
     <div
       class="liste"

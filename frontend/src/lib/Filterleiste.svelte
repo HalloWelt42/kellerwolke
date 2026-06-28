@@ -1,23 +1,27 @@
 <script lang="ts">
-  import { leereRegel, regelGueltig, type Filterzustand } from "./filter";
+  import { leereRegel, regelGueltig } from "./filter";
+  import type { Browser } from "./browser.svelte";
 
   // Multipler Filter: mehrere Regeln (Wort/Satz/Regex, Gross-/Kleinschreibung,
-  // Negation), verknuepft per UND/ODER. Arbeitet direkt auf dem uebergebenen
-  // Filter-Objekt der jeweiligen Browsing-Instanz (Einzelansicht oder Pane).
+  // Negation), verknuepft per UND/ODER. Arbeitet auf dem Filter der uebergebenen
+  // Browsing-Instanz. Wir bekommen den ganzen Browser (nicht nur filter), damit
+  // die Mutation auf der instanzeigenen, nicht-fremden State laeuft - sonst
+  // warnt Svelte 5 ueber Mutation eines Props.
   interface Props {
-    filter: Filterzustand;
+    browser: Browser;
   }
-  let { filter }: Props = $props();
+  let { browser }: Props = $props();
+  const filter = $derived(browser.filter);
 
   function hinzu() {
-    filter.regeln = [...filter.regeln, leereRegel()];
+    browser.filter.regeln = [...browser.filter.regeln, leereRegel()];
   }
   function entferne(i: number) {
-    filter.regeln = filter.regeln.filter((_, j) => j !== i);
-    if (filter.regeln.length === 0) filter.regeln = [leereRegel()];
+    browser.filter.regeln = browser.filter.regeln.filter((_, j) => j !== i);
+    if (browser.filter.regeln.length === 0) browser.filter.regeln = [leereRegel()];
   }
   function leeren() {
-    filter.regeln = [leereRegel()];
+    browser.filter.regeln = [leereRegel()];
   }
   const mehrere = $derived(filter.regeln.length > 1);
 </script>
@@ -79,7 +83,7 @@
         title={filter.verknuepfung === "und"
           ? "Alle Regeln müssen passen (UND) - umschalten auf ODER"
           : "Eine Regel genügt (ODER) - umschalten auf UND"}
-        onclick={() => (filter.verknuepfung = filter.verknuepfung === "und" ? "oder" : "und")}
+        onclick={() => (browser.filter.verknuepfung = filter.verknuepfung === "und" ? "oder" : "und")}
       >
         {filter.verknuepfung === "und" ? "UND" : "ODER"}
       </button>
