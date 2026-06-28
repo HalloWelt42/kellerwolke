@@ -54,6 +54,36 @@ async def test_dedup_ueber_refcount(dienst, benutzer_id, pool):
     assert len(kinder) == 2
 
 
+async def test_dateien_nach_endung_baumweit(dienst, benutzer_id):
+    # Baum: /Bilder/Urlaub/strand.jpg, /Bilder/logo.png, /notiz.txt, /wurzel.JPG
+    bilder = await dienst.ordner_anlegen(benutzer_id, None, "Bilder")
+    urlaub = await dienst.ordner_anlegen(benutzer_id, bilder["id"], "Urlaub")
+    await dienst.datei_hochladen(benutzer_id, urlaub["id"], "strand.jpg", b"a")
+    await dienst.datei_hochladen(benutzer_id, bilder["id"], "logo.png", b"b")
+    await dienst.datei_hochladen(benutzer_id, None, "notiz.txt", b"c")
+    await dienst.datei_hochladen(benutzer_id, None, "wurzel.JPG", b"d")  # Grossschreibung
+
+    treffer = await dienst.dateien_nach_endung(benutzer_id, ["%.jpg", "%.png"])
+    nach_name = {t["name"]: t for t in treffer}
+    # notiz.txt faellt raus, JPG wird case-insensitiv erkannt.
+    assert set(nach_name) == {"strand.jpg", "logo.png", "wurzel.JPG"}
+    # Voller Ordnerpfad je Datei (Ahnenkette ohne die Datei selbst).
+    assert [p["name"] for p in nach_name["strand.jpg"]["pfad"]] == ["Bilder", "Urlaub"]
+    assert [p["name"] for p in nach_name["logo.png"]["pfad"]] == ["Bilder"]
+    assert nach_name["wurzel.JPG"]["pfad"] == []  # Wurzelebene
+
+
+async def test_dateien_nach_endung_isolation(dienst, benutzer_id, pool):
+    # Bilder eines anderen Nutzers duerfen NIE in der Trefferliste auftauchen.
+    async with pool.connection() as conn:
+        repo = PostgresMetadataRepository(conn)
+        fremd = (await repo.benutzer_anlegen("fremd"))["id"]
+    await dienst.datei_hochladen(fremd, None, "geheim.jpg", b"x")
+    await dienst.datei_hochladen(benutzer_id, None, "meins.jpg", b"y")
+    treffer = await dienst.dateien_nach_endung(benutzer_id, ["%.jpg"])
+    assert {t["name"] for t in treffer} == {"meins.jpg"}
+
+
 async def test_identischer_reupload_ist_noop(dienst, benutzer_id):
     k1 = await dienst.datei_hochladen(benutzer_id, None, "id.txt", b"gleich")
     k2 = await dienst.datei_hochladen(benutzer_id, None, "id.txt", b"gleich")

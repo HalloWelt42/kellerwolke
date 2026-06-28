@@ -220,6 +220,25 @@ export class Browser {
     this.ladeOrdner();
   };
 
+  // Direkt zu einem Ordner ueber die VOLLE Ahnenkette springen (z.B. aus einer
+  // baumweiten Ansicht wie der Galerie) und optional eine Datei darin markieren
+  // und ihr Detail anzeigen. `teile` ist die Ordnerkette OHNE Wurzel/Datei.
+  oeffnePfad = async (teile: Pfadteil[], markiereId?: string): Promise<void> => {
+    this.bereich = "dateien";
+    this.externBrowse = null;
+    this.pfad = [{ id: null, name: "Meine Dateien" }, ...teile];
+    this.auswahl.leeren();
+    this.detailSchliessen();
+    await this.ladeOrdner();
+    if (markiereId) {
+      const k = this.eintraege.find((e) => e.id === markiereId);
+      if (k) {
+        this.auswahl.ersetze([markiereId]);
+        this.zeigeDetail(k);
+      }
+    }
+  };
+
   breadcrumbGehe = (index: number): void => {
     this.pfad = this.pfad.slice(0, index + 1);
     this.auswahl.leeren();

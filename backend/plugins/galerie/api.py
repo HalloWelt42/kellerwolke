@@ -37,6 +37,12 @@ def register(kontext: PluginKontext) -> PluginBeschreibung:
         return Response(content=daten, media_type=typ,
                         headers={"Cache-Control": "private, max-age=86400"})
 
+    @router.get("/alle")
+    async def alle(request: Request):
+        # Zentrale Ansicht: alle Bilder des Nutzers ueber alle Ordner, mit Pfad.
+        benutzer = await benutzer_aus_token(request)
+        return await dienst.alle_bilder(benutzer["id"])
+
     @router.get("/inline/{knoten_id}")
     async def inline(knoten_id: str, request: Request):
         benutzer = await benutzer_aus_token(request)

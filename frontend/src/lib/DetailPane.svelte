@@ -2,6 +2,7 @@
   import { haupt } from "./zustand.svelte";
   import { symbol, groesseText, datum, typLabel } from "./format";
   import type { Knoten } from "./types";
+  import { vorschauFuer, vollansichtFuer } from "../plugins/registry.svelte";
 
   interface Props {
     k: Knoten;
@@ -10,6 +11,15 @@
   let { k, onTeilen }: Props = $props();
 
   const sym = $derived(symbol(k));
+  // Datei-Faehigkeiten aktiver Plugins (z.B. Bild-Vorschau/Vollbild der Galerie).
+  const vorschau = $derived(k.typ === "datei" ? vorschauFuer(k) : null);
+  const vollF = $derived(k.typ === "datei" ? vollansichtFuer(k) : null);
+  let vollOffen = $state(false);
+  // Bei Dateiwechsel die Vollansicht schliessen.
+  $effect(() => {
+    void k.id;
+    vollOffen = false;
+  });
   const pfadText = $derived(
     "/" + haupt.pfad.slice(1).map((t) => t.name).join("/") || "/",
   );
@@ -26,9 +36,30 @@
     </button>
   </div>
 
-  <div class="detail-vorschau" class:ordner={k.typ !== "datei"}>
-    <i class="fa-solid {sym.icon}"></i>
+  <div class="detail-vorschau" class:ordner={k.typ !== "datei"} class:bild={!!vorschau}>
+    {#if vorschau?.vorschau}
+      {@const Vorschau = vorschau.vorschau}
+      {#if vollF}
+        <button class="vorschau-flaeche" title="Vollansicht" onclick={() => (vollOffen = true)}>
+          <Vorschau knoten={k} browser={haupt} />
+        </button>
+      {:else}
+        <Vorschau knoten={k} browser={haupt} />
+      {/if}
+    {:else}
+      <i class="fa-solid {sym.icon}"></i>
+    {/if}
   </div>
+
+  {#if vollF?.vollansicht}
+    {@const Voll = vollF.vollansicht}
+    <button class="knopf still detail-vollknopf" onclick={() => (vollOffen = true)}>
+      <i class="fa-solid fa-expand"></i> Vollansicht
+    </button>
+    {#if vollOffen}
+      <Voll knoten={k} browser={haupt} schliessen={() => (vollOffen = false)} />
+    {/if}
+  {/if}
 
   <div class="detail-name">{k.name}</div>
 
@@ -78,3 +109,25 @@
     </div>
   {/if}
 </aside>
+
+<style>
+  /* Vorschau-Box auf Bild umstellen: Plugin-Vorschau fuellt den Rahmen. */
+  .detail-vorschau.bild {
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+  .vorschau-flaeche {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: zoom-in;
+    display: block;
+  }
+  .detail-vollknopf {
+    margin: calc(var(--a4) * -1 + var(--a2)) var(--a4) 0;
+    align-self: flex-start;
+  }
+</style>

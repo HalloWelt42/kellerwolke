@@ -632,6 +632,13 @@ class SpeicherDienst:
             repo = PostgresMetadataRepository(conn)
             return await repo.kinder(besitzer_id, parent_id)
 
+    async def dateien_nach_endung(self, besitzer_id, endungen):
+        """Alle Dateien des Nutzers im ganzen Baum mit vollem Pfad, gefiltert auf
+        Namens-Endungen (z.B. ['%.jpg', '%.png']). Fuer baumweite Ansichten."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            return await repo.alle_dateien(besitzer_id, endungen)
+
     async def knoten_des_nutzers(self, besitzer_id, knoten_id):
         """Liefert den Knoten nur, wenn er dem Nutzer gehoert - sonst None."""
         async with self.pool.connection() as conn:

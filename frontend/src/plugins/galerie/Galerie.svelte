@@ -3,12 +3,21 @@
   import type { Browser } from "../../lib/browser.svelte";
   import type { Knoten } from "../../lib/types";
   import { groesseText, symbol } from "../../lib/format";
-  import { istBild, thumbUrl, inlineUrl } from "./bilder";
+  import { istBild, thumbUrl, inlineUrl, ladeAlleBilder, type GBild } from "./bilder";
+  import { waehleApp } from "../appzustand.svelte";
 
   interface Props {
     browser: Browser;
   }
   let { browser }: Props = $props();
+
+  // Einheitliches Anzeige-Bild: aus dem aktuellen Ordner ODER baumweit (mit Pfad).
+  type GBildAnzeige = {
+    id: string;
+    name: string;
+    groesse: number | null;
+    pfad: { id: string; name: string }[] | null; // null = aktueller Ordner
+  };
 
   // Bilder, deren Thumbnail/Vollbild der Server nicht darstellen kann (z.B.
   // beschaedigt) - dann ein Platzhalter statt kaputtem Bild-Symbol.
@@ -20,12 +29,55 @@
   let autoplay = $state(false);
   let intervall = $state(4);
 
-  const ordner = $derived(browser.eintraege.filter((k) => k.typ === "ordner" || k.typ === "extern"));
-  const bilder = $derived(browser.eintraege.filter((k) => k.typ === "datei" && istBild(k.name)));
+  // Quelle: "alle" = alle Bilder aller Ordner (zentral), "ordner" = aktueller Ordner.
+  let quelle = $state<"alle" | "ordner">("alle");
+  let alleBilder = $state<GBild[]>([]);
+  let alleGeladen = $state(false);
+  let ladeFehler = $state("");
+
+  async function ladeAlle() {
+    ladeFehler = "";
+    try {
+      alleBilder = await ladeAlleBilder();
+    } catch (e) {
+      ladeFehler = (e as Error).message;
+    }
+    alleGeladen = true;
+  }
+  // Beim Wechsel auf "alle" (und beim ersten Anzeigen) einmal laden.
+  $effect(() => {
+    if (quelle === "alle" && !alleGeladen) ladeAlle();
+  });
+
+  const ordner = $derived(
+    quelle === "ordner"
+      ? browser.eintraege.filter((k) => k.typ === "ordner" || k.typ === "extern")
+      : [],
+  );
+  const bilder = $derived<GBildAnzeige[]>(
+    quelle === "alle"
+      ? alleBilder.map((b) => ({ id: b.id, name: b.name, groesse: b.groesse, pfad: b.pfad }))
+      : browser.eintraege
+          .filter((k) => k.typ === "datei" && istBild(k.name))
+          .map((k) => ({ id: k.id, name: k.name, groesse: k.groesse ?? null, pfad: null })),
+  );
   const thumbKante = $derived(modus === "kachel_klein" ? 200 : modus === "liste" ? 96 : 400);
+  // Aktuell offenes Bild (oder null) - in Closures ist vollIndex sonst number|null.
+  const aktuellesBild = $derived(vollIndex === null ? null : (bilder[vollIndex] ?? null));
 
   function oeffne(k: Knoten) {
     browser.oeffnen(k);
+  }
+  function pfadText(p: { id: string; name: string }[] | null): string {
+    return !p || p.length === 0 ? "Meine Dateien" : p.map((t) => t.name).join(" / ");
+  }
+  // Zum Ordner der Datei springen: zurueck in die Dateien-App, vollen Zweig oeffnen
+  // und die Datei markieren.
+  function zumOrdner(b: GBildAnzeige | null) {
+    if (!b || !b.pfad) return;
+    schliesse();
+    browser.oeffnePfad(b.pfad, b.id);
+    waehleApp("dateien");
   }
   function zeigeVoll(i: number) {
     vollIndex = i;
@@ -67,6 +119,19 @@
 
 <div class="galerie-werkzeuge">
   <div class="modi">
+    <button class="g-knopf" class:aktiv={quelle === "alle"} title="Alle Bilder aller Ordner" onclick={() => (quelle = "alle")}>
+      <i class="fa-solid fa-layer-group"></i> Alle Bilder
+    </button>
+    <button class="g-knopf" class:aktiv={quelle === "ordner"} title="Nur dieser Ordner" onclick={() => (quelle = "ordner")}>
+      <i class="fa-solid fa-folder"></i> Dieser Ordner
+    </button>
+  </div>
+  {#if quelle === "alle"}
+    <button class="g-knopf" title="Neu laden" aria-label="Neu laden" onclick={() => (alleGeladen = false)}>
+      <i class="fa-solid fa-rotate"></i>
+    </button>
+  {/if}
+  <div class="modi">
     <button class="g-knopf" class:aktiv={modus === "kachel_gross"} title="Große Kacheln" onclick={() => (modus = "kachel_gross")}>
       <i class="fa-solid fa-table-cells-large"></i>
     </button>
@@ -85,11 +150,16 @@
   {/if}
 </div>
 
-{#if browser.laden}
+{#if (quelle === "alle" && !alleGeladen) || (quelle === "ordner" && browser.laden)}
   <div class="g-leer"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+{:else if quelle === "alle" && ladeFehler}
+  <div class="g-leer">
+    <i class="fa-solid fa-triangle-exclamation"></i><span>{ladeFehler}</span>
+  </div>
 {:else if ordner.length === 0 && bilder.length === 0}
   <div class="g-leer">
-    <i class="fa-regular fa-image"></i><span>Hier sind keine Bilder</span>
+    <i class="fa-regular fa-image"></i>
+    <span>{quelle === "alle" ? "Noch keine Bilder vorhanden" : "Hier sind keine Bilder"}</span>
   </div>
 {:else if modus === "liste"}
   <div class="g-liste">
@@ -107,7 +177,11 @@
           <img src={thumbUrl(k.id, 96)} alt={k.name} loading="lazy" onerror={() => kaputt.add(k.id)} />
         {/if}
         <span class="titel">{k.name}</span>
-        <span class="meta">{k.groesse != null ? groesseText(k.groesse) : ""}</span>
+        {#if quelle === "alle"}
+          <span class="meta pfad"><i class="fa-solid fa-folder"></i> {pfadText(k.pfad)}</span>
+        {:else}
+          <span class="meta">{k.groesse != null ? groesseText(k.groesse) : ""}</span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -131,19 +205,19 @@
   </div>
 {/if}
 
-{#if vollIndex !== null && bilder[vollIndex]}
+{#if aktuellesBild}
   <div class="g-voll" role="presentation" onclick={schliesse}>
     <img
       class="g-voll-bild"
-      src={inlineUrl(bilder[vollIndex].id)}
-      alt={bilder[vollIndex].name}
+      src={inlineUrl(aktuellesBild.id)}
+      alt={aktuellesBild.name}
       role="presentation"
       onclick={(e) => e.stopPropagation()}
     />
     <div class="g-voll-leiste" role="presentation" onclick={(e) => e.stopPropagation()}>
       <button class="vk" title="Zurück" aria-label="Zurück" onclick={zurueck}><i class="fa-solid fa-chevron-left"></i></button>
-      <span class="name">{bilder[vollIndex].name}</span>
-      <span class="zaehler">{vollIndex + 1} / {bilder.length}</span>
+      <span class="name">{aktuellesBild.name}</span>
+      <span class="zaehler">{(vollIndex ?? 0) + 1} / {bilder.length}</span>
       <button class="vk" class:aktiv={autoplay} title={autoplay ? "Pause" : "Diashow"} aria-label="Diashow" onclick={() => (autoplay = !autoplay)}>
         <i class="fa-solid {autoplay ? 'fa-pause' : 'fa-play'}"></i>
       </button>
@@ -151,6 +225,11 @@
         <input type="number" min="1" max="60" bind:value={intervall} /> s
       </label>
       <button class="vk" title="Weiter" aria-label="Weiter" onclick={weiter}><i class="fa-solid fa-chevron-right"></i></button>
+      {#if aktuellesBild.pfad}
+        <button class="vk" title="Zum Ordner: {pfadText(aktuellesBild.pfad)}" aria-label="Zum Ordner" onclick={() => zumOrdner(aktuellesBild)}>
+          <i class="fa-solid fa-folder-open"></i>
+        </button>
+      {/if}
       <button class="vk" title="Schließen" aria-label="Schließen" onclick={schliesse}><i class="fa-solid fa-xmark"></i></button>
     </div>
   </div>
@@ -313,6 +392,18 @@
   .g-zeile .meta {
     color: var(--text-3);
     font-size: 0.82rem;
+  }
+  .g-zeile .meta.pfad {
+    color: var(--akzent);
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: none;
+  }
+  .g-zeile .meta.pfad i {
+    opacity: 0.7;
+    margin-right: 2px;
   }
   .g-voll {
     position: fixed;

@@ -110,6 +110,31 @@ class PostgresMetadataRepository:
             (besitzer_id, parent_id),
         )
 
+    async def alle_dateien(self, besitzer_id, endungen):
+        """Alle (nicht geloeschten) Datei-Knoten des Nutzers im GANZEN Baum, je
+        Treffer mit vollem Ordnerpfad (Ahnenkette als jsonb-Liste {id,name}),
+        optional gefiltert auf Namens-Endungen (LIKE-Muster, klein geschrieben).
+        Generische Primitive - z.B. fuer eine zentrale Bild-/Medienansicht.
+        Die Rekursion steigt vom Wurzelknoten ab und reicht den Pfad mit."""
+        return await self._alle(
+            "WITH RECURSIVE baum AS ("
+            "  SELECT id, parent_id, name, typ, aktuelle_version_id, geaendert_am, "
+            "         '[]'::jsonb AS pfad "
+            "  FROM knoten "
+            "  WHERE besitzer_id=%s AND parent_id IS NULL AND NOT geloescht "
+            "  UNION ALL "
+            "  SELECT k.id, k.parent_id, k.name, k.typ, k.aktuelle_version_id, k.geaendert_am, "
+            "         b.pfad || jsonb_build_object('id', b.id::text, 'name', b.name) "
+            "  FROM knoten k JOIN baum b ON k.parent_id = b.id "
+            "  WHERE k.besitzer_id=%s AND NOT k.geloescht"
+            ") "
+            "SELECT baum.id, baum.name, baum.pfad, baum.geaendert_am, v.groesse "
+            "FROM baum LEFT JOIN version v ON v.id = baum.aktuelle_version_id "
+            "WHERE baum.typ='datei' AND lower(baum.name) LIKE ANY(%s) "
+            "ORDER BY lower(baum.name)",
+            (besitzer_id, besitzer_id, list(endungen)),
+        )
+
     async def favoriten(self, besitzer_id):
         return await self._alle(
             "SELECT k.*, v.groesse, true AS favorit, "

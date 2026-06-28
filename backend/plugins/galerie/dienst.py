@@ -102,3 +102,18 @@ class GalerieDienst:
         knoten = await self._bild_knoten(benutzer_id, knoten_id)
         daten = await self.kontext.speicher.datei_lesen(benutzer_id, knoten_id)
         return await asyncio.to_thread(_inline_bytes, daten, knoten["name"])
+
+    async def alle_bilder(self, benutzer_id) -> list[dict]:
+        """Alle Bilder des Nutzers im ganzen Baum mit Pfad (fuer die zentrale
+        Galerieansicht). Greift ueber die generische SpeicherDienst-Primitive."""
+        muster = [f"%{endung}" for endung in sorted(BILD_ENDUNGEN)]
+        zeilen = await self.kontext.speicher.dateien_nach_endung(benutzer_id, muster)
+        return [
+            {
+                "id": str(z["id"]),
+                "name": z["name"],
+                "groesse": z.get("groesse"),
+                "pfad": z["pfad"],  # [{id, name}, ...] - Ordnerkette ohne die Datei
+            }
+            for z in zeilen
+        ]
