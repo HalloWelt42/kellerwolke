@@ -1,32 +1,8 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import {
-    zustand,
-    istSchreibbar,
-    oeffnen,
-    zeigeDetail,
-    herunterladen,
-    zipHerunterladen,
-    hochladen,
-    umbenennen,
-    verschiebe,
-    loeschen,
-    wiederherstellen,
-    externGehe,
-    externRunter,
-    uploadStoppen,
-    favoritUmschalten,
-    geteiltOeffnen,
-    setzeSortierung,
-    aktuellerOrdner,
-  } from "./zustand.svelte";
-  import { auswahl } from "./auswahl.svelte";
-
-  interface Props {
-    onTeilen?: (k: Knoten) => void;
-    onEndgueltig?: (k: Knoten) => void;
-  }
-  let { onTeilen, onEndgueltig }: Props = $props();
+  import { hochladen } from "./zustand.svelte";
+  import type { Browser } from "./browser.svelte";
+  import { passt, filterAktiv, leererFilter } from "./filter";
   import { groesseText, datum, symbolFuerName, zeitText, symbol } from "./format";
   import type { Knoten } from "./types";
   import Dateizeile from "./Dateizeile.svelte";
@@ -35,20 +11,36 @@
   import Auswahlleiste from "./Auswahlleiste.svelte";
   import Kontextmenue from "./Kontextmenue.svelte";
   import type { MenuEintrag } from "./Kontextmenue.svelte";
+  import Filterleiste from "./Filterleiste.svelte";
+
+  // Eine wiederverwendbare Browsing-Flaeche: rendert genau einen Browser (die
+  // Einzelansicht ODER eine Splitscreen-Pane). Alle Interaktionen - Klick,
+  // Auswahl, Marquee, Filter, Scroll, Kontextmenue, Drag/Drop - leben hier
+  // EINMAL und gelten in jeder Ansicht identisch.
+  interface Props {
+    browser: Browser;
+    aktiv?: boolean; // hat den Tastatur-Fokus (in Split nur die fokussierte Pane)
+    mitDetail?: boolean; // Einfachklick auf eine Datei zeigt das Detail-Pane (nur Einzelansicht)
+    onTeilen?: (k: Knoten) => void;
+    onEndgueltig?: (k: Knoten) => void;
+    onAktiv?: () => void;
+  }
+  let { browser, aktiv = true, mitDetail = true, onTeilen, onEndgueltig, onAktiv }: Props = $props();
+
+  const auswahl = $derived(browser.auswahl);
 
   // --- Filtern, Sortieren, Lazy-Load -----------------------------------------
   const gefiltert = $derived.by(() => {
-    const f = zustand.filter.trim().toLowerCase();
-    if (!f) return zustand.eintraege;
-    return zustand.eintraege.filter((k) => k.name.toLowerCase().includes(f));
+    if (!filterAktiv(browser.filter)) return browser.eintraege;
+    return browser.eintraege.filter((k) => passt(k.name, browser.filter));
   });
 
   function typrang(k: Knoten): number {
     return k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2;
   }
   const sortiert = $derived.by(() => {
-    const key = zustand.sortKey;
-    const dir = zustand.sortRichtung === "auf" ? 1 : -1;
+    const key = browser.sortKey;
+    const dir = browser.sortRichtung === "auf" ? 1 : -1;
     return [...gefiltert].sort((a, b) => {
       // Ordner/Externe immer vor Dateien, unabhaengig von der Richtung.
       if (typrang(a) !== typrang(b)) return typrang(a) - typrang(b);
@@ -66,36 +58,47 @@
   const angezeigt = $derived(sortiert.slice(0, sichtbar));
   const mehrVorhanden = $derived(sichtbar < sortiert.length);
 
-  // Lazy-Load nur bis zur aktuellen Sichtbarkeitsgrenze rendern; bei
-  // Standort-/Filter-/Sortierwechsel von vorne beginnen (nicht bei Live-Poll).
+  // Schluessel, der sich aendert, wenn Standort, Sortierung oder Filter wechseln
+  // (fuer das Zuruecksetzen der Lazy-Grenze; nicht bei Live-Poll).
   const standort = $derived(
-    `${zustand.bereich}:${aktuellerOrdner() ?? ""}:${zustand.geteiltPfad.length}`,
+    `${browser.bereich}:${browser.aktuellerOrdner ?? ""}:${browser.geteiltPfad.length}`,
   );
+  const filterKey = $derived(
+    browser.filter.regeln.map((r) => `${r.text}|${r.modus}|${r.caseSensitive}|${r.negiert}`).join("&") +
+      ":" +
+      browser.filter.verknuepfung,
+  );
+  let letzterStandort = "";
   $effect(() => {
-    standort;
-    zustand.filter = "";
+    // Beim Standortwechsel den Filter dieser Pane leeren (eigener Filter je Pane).
+    if (standort !== letzterStandort) {
+      letzterStandort = standort;
+      browser.filter = leererFilter();
+    }
   });
   $effect(() => {
     void standort;
-    void zustand.filter;
-    void zustand.sortKey;
-    void zustand.sortRichtung;
+    void filterKey;
+    void browser.sortKey;
+    void browser.sortRichtung;
     sichtbar = SCHRITT;
   });
 
   function aufListenScroll() {
-    if (!containerEl || !mehrVorhanden) return;
+    if (!containerEl) return;
+    browser.scrollTop = containerEl.scrollTop;
+    if (!mehrVorhanden) return;
     if (containerEl.scrollTop + containerEl.clientHeight >= containerEl.scrollHeight - 300) {
       sichtbar += SCHRITT;
     }
   }
 
-  // Auswahl/Marquee arbeiten auf der angezeigten Reihenfolge.
+  // Auswahl/Marquee arbeiten auf der sortierten Reihenfolge.
   const geordnet = $derived(sortiert.map((k) => k.id));
-  const imPapierkorb = $derived(zustand.bereich === "papierkorb");
-  const externAnsicht = $derived(zustand.bereich === "extern" && zustand.externBrowse !== null);
+  const imPapierkorb = $derived(browser.bereich === "papierkorb");
+  const externAnsicht = $derived(browser.bereich === "extern" && browser.externBrowse !== null);
   const modus = $derived<"dateien" | "papierkorb" | "suche">(
-    zustand.bereich === "papierkorb" ? "papierkorb" : zustand.bereich === "suche" ? "suche" : "dateien",
+    browser.bereich === "papierkorb" ? "papierkorb" : browser.bereich === "suche" ? "suche" : "dateien",
   );
 
   let umbenennenId = $state<string | null>(null);
@@ -109,8 +112,12 @@
   // --- Auswahl-Klicks ---------------------------------------------------------
 
   function rowClick(e: MouseEvent, k: Knoten) {
+    if (unterdrueckeKlick) {
+      unterdrueckeKlick = false;
+      return;
+    }
     if (verschiebeModus) {
-      if (k.typ === "ordner") verschiebe([...auswahl.ids], k.id);
+      if (k.typ === "ordner") browser.verschiebe([...auswahl.ids], k.id);
       verschiebeModus = false;
       return;
     }
@@ -123,17 +130,17 @@
       auswahl.bereich(k.id, geordnet);
       return;
     }
-    // Ansicht (Einfachklick): Ordner/Extern oeffnen, Datei zeigt das Detail.
-    // Kein Download, keine Auswahl - die bleibt der Checkbox vorbehalten.
     if (imPapierkorb) {
       auswahl.waehleEinzeln(k.id);
       return;
     }
+    // Einfachklick: Ordner/Extern oeffnen; Datei MARKIEREN (nie herunterladen),
+    // in der Einzelansicht zusaetzlich das Detail-Pane zeigen.
     if (k.typ === "ordner" || k.typ === "extern") {
-      oeffnen(k);
+      browser.oeffnen(k);
     } else {
-      auswahl.leeren();
-      zeigeDetail(k);
+      auswahl.waehleEinzeln(k.id);
+      if (mitDetail) browser.zeigeDetail(k);
     }
   }
 
@@ -141,11 +148,11 @@
     auswahl.umschalten(k.id);
   }
 
-  // Doppelklick auf eine Datei laedt sie herunter (das bewusste "ganz oeffnen").
+  // Doppelklick auf eine Datei laedt sie herunter (das bewusste "ganz holen").
   // Bei Ordnern passiert nichts - der Einfachklick navigiert bereits hinein.
   function rowDblClick(k: Knoten) {
     if (verschiebeModus) return;
-    if (k.typ === "datei") herunterladen(k);
+    if (k.typ === "datei") browser.herunterladen(k);
   }
 
   // --- Inline-Umbenennen ------------------------------------------------------
@@ -157,7 +164,7 @@
   function umbenennenFertig(k: Knoten, name: string) {
     if (umbenennenId !== k.id) return;
     umbenennenId = null;
-    umbenennen(k, name);
+    browser.umbenennen(k, name);
   }
   function umbenennenAbbruch() {
     umbenennenId = null;
@@ -166,18 +173,17 @@
   // --- Zeilen-Aktionen --------------------------------------------------------
 
   function rowAktion(k: Knoten, art: RowAktion) {
-    if (art === "herunterladen") herunterladen(k);
+    if (art === "herunterladen") browser.herunterladen(k);
     else if (art === "umbenennen") umbenennenStart(k);
-    else if (art === "loeschen") loeschen([k.id]);
-    else if (art === "wiederherstellen") wiederherstellen([k.id]);
+    else if (art === "loeschen") browser.loeschen([k.id]);
+    else if (art === "wiederherstellen") browser.wiederherstellen([k.id]);
     else if (art === "endgueltig") onEndgueltig?.(k);
-    else if (art === "favorit") favoritUmschalten(k);
+    else if (art === "favorit") browser.favoritUmschalten(k);
   }
 
   // --- Drag-and-drop (verschieben) -------------------------------------------
 
   function dragStart(e: DragEvent, k: Knoten) {
-    // Nicht ziehen, wenn der Griff die Checkbox, ein Knopf oder das Feld ist.
     const ziel = e.target as HTMLElement;
     if (ziel?.closest?.(".aus-box, button, input, .umbenennen-feld")) {
       e.preventDefault();
@@ -198,10 +204,8 @@
     el.style.position = "absolute";
     el.style.top = "-1000px";
     el.style.left = "-1000px";
-    const text =
-      ids.length === 1 ? k.name : `${ids.length} Objekte verschieben`;
-    el.innerHTML =
-      `<span class="zahl-badge">${ids.length}</span><span>${text.replace(/</g, "")}</span>`;
+    const text = ids.length === 1 ? k.name : `${ids.length} Objekte verschieben`;
+    el.innerHTML = `<span class="zahl-badge">${ids.length}</span><span>${text.replace(/</g, "")}</span>`;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 0);
     return el;
@@ -227,7 +231,7 @@
     const ids = gezogenIds.filter((id) => id !== k.id);
     ziehZielId = null;
     gezogenIds = [];
-    if (ids.length) verschiebe(ids, k.id);
+    if (ids.length) browser.verschiebe(ids, k.id);
   }
 
   // --- Externer Datei-Upload per Drop -----------------------------------------
@@ -236,7 +240,7 @@
     return Array.from(e.dataTransfer?.types ?? []).includes("Files");
   }
   function flaecheDragOver(e: DragEvent) {
-    if (!istSchreibbar() || !hatDateien(e)) return;
+    if (!browser.istSchreibbar || !hatDateien(e)) return;
     e.preventDefault();
     externDrop = true;
   }
@@ -244,23 +248,24 @@
     if (e.target === e.currentTarget) externDrop = false;
   }
   function flaecheDrop(e: DragEvent) {
-    if (!istSchreibbar() || !hatDateien(e)) return;
+    if (!browser.istSchreibbar || !hatDateien(e)) return;
     e.preventDefault();
     externDrop = false;
-    hochladen(e.dataTransfer?.files ?? null);
+    hochladen(e.dataTransfer?.files ?? null, browser);
   }
 
   // --- Marquee (Maus-Rechteck) -----------------------------------------------
+  // Startet auf leerer Flaeche UND ueber unmarkierten Zeilen (markierte Zeilen
+  // sind ziehbar = Verschieben). So laesst sich auch bei voll gefuellter Liste
+  // immer ein Auswahl-Rechteck aufziehen.
 
   let marquee = $state<{ l: number; t: number; w: number; h: number } | null>(null);
   let mqStart: { x: number; y: number } | null = null;
   let mqBasis: string[] = [];
   let mqAktiv = false;
+  let mqAufZeile = false;
+  let unterdrueckeKlick = false;
 
-  // Marquee rechnet durchgaengig im Inhaltsraum des Containers (Client-Koordinate
-  // minus Container-Rand plus Scroll). So stimmen Anzeige und Treffer auch bei
-  // gescrolltem Container ueberein. Treffer werden ueber data-id zugeordnet,
-  // nicht ueber den Schleifenindex.
   function inhaltspunkt(e: MouseEvent): { x: number; y: number } {
     const rect = containerEl!.getBoundingClientRect();
     return {
@@ -270,9 +275,16 @@
   }
 
   function flaecheMouseDown(e: MouseEvent) {
+    onAktiv?.();
     if (e.button !== 0 || !containerEl) return;
     const ziel = e.target as HTMLElement;
-    if (ziel.closest(".zeile, .kachel, .listenkopf, button, input, .auswahlleiste")) return;
+    // Interaktive Bedienelemente nie als Marquee-Start werten.
+    if (ziel.closest("button, input, select, a, .aus-box, .umbenennen-feld, .listenkopf, .filterleiste"))
+      return;
+    const zeileEl = ziel.closest<HTMLElement>(".zeile, .kachel");
+    // Eine bereits markierte Zeile ist ziehbar (Verschieben) - kein Marquee.
+    if (zeileEl?.dataset.id && auswahl.istGewaehlt(zeileEl.dataset.id)) return;
+    mqAufZeile = !!zeileEl;
     mqStart = inhaltspunkt(e);
     mqBasis = e.metaKey || e.ctrlKey || e.shiftKey ? [...auswahl.ids] : [];
     mqAktiv = false;
@@ -285,6 +297,7 @@
     const p = inhaltspunkt(e);
     if (!mqAktiv && Math.abs(p.x - mqStart.x) + Math.abs(p.y - mqStart.y) < 5) return;
     mqAktiv = true;
+    unterdrueckeKlick = true;
     const l = Math.min(mqStart.x, p.x);
     const t = Math.min(mqStart.y, p.y);
     const r = Math.max(mqStart.x, p.x);
@@ -308,17 +321,14 @@
   function flaecheMouseUp() {
     window.removeEventListener("mousemove", flaecheMouseMove);
     window.removeEventListener("mouseup", flaecheMouseUp);
-    if (!mqAktiv && mqStart) {
-      // Klick auf leere Flaeche hebt die Auswahl auf.
-      auswahl.leeren();
-    }
+    // Klick (ohne Ziehen) auf LEERE Flaeche hebt die Auswahl auf; ein Klick auf
+    // eine Zeile bleibt dem rowClick ueberlassen.
+    if (!mqAktiv && mqStart && !mqAufZeile) auswahl.leeren();
     mqStart = null;
     mqAktiv = false;
     marquee = null;
   }
 
-  // Falls die Komponente waehrend eines laufenden Marquee verschwindet, die
-  // fensterweiten Listener sicher abraeumen (kein Leck).
   onDestroy(() => {
     window.removeEventListener("mousemove", flaecheMouseMove);
     window.removeEventListener("mouseup", flaecheMouseUp);
@@ -328,6 +338,7 @@
 
   function kontextOeffnen(e: MouseEvent, k: Knoten) {
     e.preventDefault();
+    onAktiv?.();
     if (!auswahl.istGewaehlt(k.id)) auswahl.waehleEinzeln(k.id);
     const mehrere = auswahl.anzahl > 1;
     const eintraege: MenuEintrag[] = [];
@@ -335,28 +346,30 @@
       eintraege.push({
         label: "Wiederherstellen",
         icon: "fa-rotate-left",
-        fn: () => wiederherstellen([...auswahl.ids]),
+        fn: () => browser.wiederherstellen([...auswahl.ids]),
+      });
+      eintraege.push({
+        label: "Endgültig löschen",
+        icon: "fa-trash",
+        gefahr: true,
+        fn: () => onEndgueltig?.(k),
       });
     } else {
       if (!mehrere) {
-        eintraege.push({ label: "Öffnen", icon: "fa-arrow-up-right-from-square", fn: () => oeffnen(k) });
+        eintraege.push({ label: "Öffnen", icon: "fa-arrow-up-right-from-square", fn: () => browser.oeffnen(k) });
       }
       if (!mehrere && k.typ === "datei") {
-        eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => herunterladen(k) });
+        eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => browser.herunterladen(k) });
       } else if (!mehrere && k.typ === "ordner") {
         eintraege.push({
           label: "Als ZIP herunterladen",
           icon: "fa-file-zipper",
-          fn: () => zipHerunterladen([k.id], `${k.name}.zip`),
+          fn: () => browser.zipHerunterladen([k.id], `${k.name}.zip`),
         });
       } else if (mehrere) {
-        eintraege.push({
-          label: "Herunterladen",
-          icon: "fa-download",
-          fn: () => stapelHerunterladen(),
-        });
+        eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => stapelHerunterladen() });
       }
-      if (istSchreibbar()) {
+      if (browser.istSchreibbar) {
         if (!mehrere) {
           eintraege.push({ label: "Umbenennen", icon: "fa-pen", fn: () => umbenennenStart(k) });
           eintraege.push({ label: "Teilen", icon: "fa-share-nodes", fn: () => onTeilen?.(k) });
@@ -371,7 +384,7 @@
           label: "In den Papierkorb",
           icon: "fa-trash",
           gefahr: true,
-          fn: () => loeschen([...auswahl.ids]),
+          fn: () => browser.loeschen([...auswahl.ids]),
         });
       }
     }
@@ -384,24 +397,22 @@
     const ids = [...auswahl.ids];
     if (ids.length === 0) return;
     const knoten = ids
-      .map((id) => zustand.eintraege.find((e) => e.id === id))
+      .map((id) => browser.eintraege.find((e) => e.id === id))
       .filter((k): k is Knoten => !!k);
-    // Einzelne Datei direkt, alles andere (mehrere oder Ordner) als ZIP.
     if (knoten.length === 1 && knoten[0].typ === "datei") {
-      await herunterladen(knoten[0]);
+      await browser.herunterladen(knoten[0]);
       return;
     }
     const name =
-      knoten.length === 1 && knoten[0].typ === "ordner"
-        ? `${knoten[0].name}.zip`
-        : "kellerwolke.zip";
-    await zipHerunterladen(ids, name);
+      knoten.length === 1 && knoten[0].typ === "ordner" ? `${knoten[0].name}.zip` : "kellerwolke.zip";
+    await browser.zipHerunterladen(ids, name);
   }
 
   // --- Tastatur ---------------------------------------------------------------
 
   function fenstertaste(e: KeyboardEvent) {
-    const imFeld = (e.target as HTMLElement)?.closest?.("input, textarea");
+    if (!aktiv) return; // nur die fokussierte Ansicht/Pane reagiert
+    const imFeld = (e.target as HTMLElement)?.closest?.("input, textarea, select");
     if (imFeld) return;
     if (e.key === "Escape") {
       if (kontext) kontext = null;
@@ -426,7 +437,7 @@
   </div>
 {/if}
 
-{#if zustand.laden}
+{#if browser.laden}
   <div class="liste" bind:this={containerEl}>
     <div class="listenkopf">
       <span></span><span>Name</span><span>Größe</span>
@@ -444,7 +455,7 @@
 {:else if externAnsicht}
   <!-- Externe Quelle -->
   <div class="liste" bind:this={containerEl}>
-    {#if zustand.externEintraege.length === 0}
+    {#if browser.externEintraege.length === 0}
       <div class="leer">
         <i class="fa-regular fa-folder-open"></i><span>Dieser Ordner ist leer</span>
       </div>
@@ -453,8 +464,8 @@
         <span></span><span>Name</span><span>Größe</span>
         <span class="sp-geaendert">Geändert</span><span></span>
       </div>
-      {#each zustand.externEintraege as e (e.name)}
-        <div class="zeile" role="row" tabindex="-1" ondblclick={() => externGehe(e)}>
+      {#each browser.externEintraege as e (e.name)}
+        <div class="zeile" role="row" tabindex="-1" ondblclick={() => browser.externGehe(e)}>
           <span class="z-aus"></span>
           <span class="z-name">
             <i
@@ -467,7 +478,7 @@
           <span class="z-meta z-geaendert"></span>
           <span class="z-akt">
             {#if !e.ist_ordner}
-              <button class="icon-knopf" title="Herunterladen" onclick={() => externRunter(e)}>
+              <button class="icon-knopf" title="Herunterladen" onclick={() => browser.externRunter(e)}>
                 <i class="fa-solid fa-download"></i>
               </button>
             {/if}
@@ -476,10 +487,10 @@
       {/each}
     {/if}
   </div>
-{:else if zustand.bereich === "geteilt"}
+{:else if browser.bereich === "geteilt"}
   <!-- Mit mir geteilt (read-only) -->
   <div class="liste" bind:this={containerEl}>
-    {#if zustand.eintraege.length === 0}
+    {#if browser.eintraege.length === 0}
       <div class="leer">
         <i class="fa-regular fa-share-from-square"></i><span>Nichts mit dir geteilt</span>
       </div>
@@ -488,14 +499,14 @@
         <span></span><span>Name</span><span>Größe</span>
         <span class="sp-geaendert">Geändert</span><span></span>
       </div>
-      {#each zustand.eintraege as k (k.id)}
+      {#each browser.eintraege as k (k.id)}
         {@const sym = symbol(k)}
-        <div class="zeile" role="row" tabindex="-1" onclick={() => geteiltOeffnen(k)}>
+        <div class="zeile" role="row" tabindex="-1" onclick={() => browser.geteiltOeffnen(k)}>
           <span class="z-aus"></span>
           <span class="z-name">
             <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
             <span class="titel">{k.name}</span>
-            {#if zustand.geteiltPfad.length === 0 && k.besitzer_name}
+            {#if browser.geteiltPfad.length === 0 && k.besitzer_name}
               <span class="von">von {k.besitzer_name}</span>
             {/if}
           </span>
@@ -516,7 +527,7 @@
                 title="Herunterladen"
                 onclick={(e) => {
                   e.stopPropagation();
-                  geteiltOeffnen(k);
+                  browser.geteiltOeffnen(k);
                 }}
               >
                 <i class="fa-solid fa-download"></i>
@@ -527,209 +538,187 @@
       {/each}
     {/if}
   </div>
-{:else if sortiert.length === 0}
-  <div
-    class="liste"
-    bind:this={containerEl}
-    role="presentation"
-    ondragover={flaecheDragOver}
-    ondragleave={flaecheDragLeave}
-    ondrop={flaecheDrop}
-  >
-    <div class="leer">
-      <i class="fa-regular {zustand.filter ? 'fa-circle-xmark' : 'fa-folder-open'}"></i>
-      <span>
-        {#if zustand.filter}Kein Treffer für "{zustand.filter}"
-        {:else if zustand.bereich === "papierkorb"}Der Papierkorb ist leer
-        {:else if zustand.bereich === "suche"}Nichts gefunden
-        {:else if zustand.bereich === "extern"}Keine externen Quellen
-        {:else if zustand.bereich === "favoriten"}Noch keine Favoriten - markiere Dateien mit dem Stern
-        {:else}Dieser Ordner ist leer - Dateien hierher ziehen oder hochladen{/if}
-      </span>
-    </div>
-    {#if externDrop}
-      <div class="drop-overlay">
-        <i class="fa-solid fa-cloud-arrow-up"></i><span>Dateien hier ablegen zum Hochladen</span>
-      </div>
-    {/if}
-  </div>
-{:else if zustand.ansicht === "grid"}
-  <div
-    class="grid"
-    bind:this={containerEl}
-    role="presentation"
-    onmousedown={flaecheMouseDown}
-    onscroll={aufListenScroll}
-    ondragover={flaecheDragOver}
-    ondragleave={flaecheDragLeave}
-    ondrop={flaecheDrop}
-  >
-    {#each angezeigt as k (k.id)}
-      <Kachel
-        {k}
-        gewaehlt={auswahl.istGewaehlt(k.id)}
-        gezogen={gezogenIds.includes(k.id)}
-        schreibbar={istSchreibbar()}
-        umbenennenAktiv={umbenennenId === k.id}
-        zielordner={ziehZielId === k.id}
-        onClick={(e) => rowClick(e, k)}
-        onDblClick={() => rowDblClick(k)}
-        onBox={() => boxClick(k)}
-        onKontext={(e) => kontextOeffnen(e, k)}
-        onDragStart={(e) => dragStart(e, k)}
-        onDragEnd={dragEnd}
-        onUmbenennenFertig={(name) => umbenennenFertig(k, name)}
-        onUmbenennenAbbruch={umbenennenAbbruch}
-        onOrdnerDragOver={(e) => ordnerDragOver(e, k)}
-        onOrdnerDragLeave={() => ordnerDragLeave(k)}
-        onOrdnerDrop={(e) => ordnerDrop(e, k)}
-      />
-    {/each}
-    {#if mehrVorhanden}
-      <button class="mehr-laden" style="grid-column: 1 / -1;" onclick={() => (sichtbar += SCHRITT)}>
-        <i class="fa-solid fa-chevron-down"></i>
-        {sortiert.length - sichtbar} weitere von {sortiert.length} anzeigen
-      </button>
-    {/if}
-    {#if marquee}
-      <div
-        class="marquee"
-        style="left:{marquee.l}px; top:{marquee.t}px; width:{marquee.w}px; height:{marquee.h}px;"
-      ></div>
-    {/if}
-    {#if externDrop}
-      <div class="drop-overlay">
-        <i class="fa-solid fa-cloud-arrow-up"></i><span>Dateien hier ablegen zum Hochladen</span>
-      </div>
-    {/if}
-  </div>
 {:else}
-  <div
-    class="liste"
-    bind:this={containerEl}
-    role="presentation"
-    onmousedown={flaecheMouseDown}
-    onscroll={aufListenScroll}
-    ondragover={flaecheDragOver}
-    ondragleave={flaecheDragLeave}
-    ondrop={flaecheDrop}
-  >
-    <div class="listenkopf">
-      <span></span>
-      <button
-        class="sortbar"
-        class:aktiv={zustand.sortKey === "name"}
-        title="Nach Name sortieren"
-        onclick={() => setzeSortierung("name")}
-      >
-        Name
-        {#if zustand.sortKey === "name"}
-          <i
-            class="fa-solid {zustand.sortRichtung === 'auf'
-              ? 'fa-arrow-up-short-wide'
-              : 'fa-arrow-down-short-wide'}"
-          ></i>
-        {/if}
-      </button>
-      <button
-        class="sortbar"
-        class:aktiv={zustand.sortKey === "groesse"}
-        title="Nach Größe sortieren"
-        onclick={() => setzeSortierung("groesse")}
-      >
-        Größe
-        {#if zustand.sortKey === "groesse"}
-          <i
-            class="fa-solid {zustand.sortRichtung === 'auf'
-              ? 'fa-arrow-up-short-wide'
-              : 'fa-arrow-down-short-wide'}"
-          ></i>
-        {/if}
-      </button>
-      <button
-        class="sortbar sp-geaendert"
-        class:aktiv={zustand.sortKey === "geaendert"}
-        title="Nach Datum sortieren"
-        onclick={() => setzeSortierung("geaendert")}
-      >
-        {imPapierkorb ? "Gelöscht" : "Geändert"}
-        {#if zustand.sortKey === "geaendert"}
-          <i
-            class="fa-solid {zustand.sortRichtung === 'auf'
-              ? 'fa-arrow-up-short-wide'
-              : 'fa-arrow-down-short-wide'}"
-          ></i>
-        {/if}
-      </button>
-      <span></span>
-    </div>
-    {#each angezeigt as k (k.id)}
-      <Dateizeile
-        {k}
-        gewaehlt={auswahl.istGewaehlt(k.id)}
-        gezogen={gezogenIds.includes(k.id)}
-        schreibbar={istSchreibbar()}
-        {imPapierkorb}
-        umbenennenAktiv={umbenennenId === k.id}
-        zielordner={ziehZielId === k.id}
-        onClick={(e) => rowClick(e, k)}
-        onDblClick={() => rowDblClick(k)}
-        onBox={() => boxClick(k)}
-        onKontext={(e) => kontextOeffnen(e, k)}
-        onDragStart={(e) => dragStart(e, k)}
-        onDragEnd={dragEnd}
-        onAktion={(art) => rowAktion(k, art)}
-        onUmbenennenFertig={(name) => umbenennenFertig(k, name)}
-        onUmbenennenAbbruch={umbenennenAbbruch}
-        onOrdnerDragOver={(e) => ordnerDragOver(e, k)}
-        onOrdnerDragLeave={() => ordnerDragLeave(k)}
-        onOrdnerDrop={(e) => ordnerDrop(e, k)}
-      />
-    {/each}
-    {#if mehrVorhanden}
-      <button class="mehr-laden" onclick={() => (sichtbar += SCHRITT)}>
-        <i class="fa-solid fa-chevron-down"></i>
-        {sortiert.length - sichtbar} weitere von {sortiert.length} anzeigen
-      </button>
-    {/if}
-    {#if marquee}
-      <div
-        class="marquee"
-        style="left:{marquee.l}px; top:{marquee.t}px; width:{marquee.w}px; height:{marquee.h}px;"
-      ></div>
-    {/if}
-    {#if externDrop}
-      <div class="drop-overlay">
-        <i class="fa-solid fa-cloud-arrow-up"></i><span>Dateien hier ablegen zum Hochladen</span>
+  <!-- Standard: eigene Dateien / Suche / Favoriten / Papierkorb -->
+  <Filterleiste filter={browser.filter} />
+  {#if sortiert.length === 0}
+    <div
+      class="liste"
+      bind:this={containerEl}
+      role="presentation"
+      onmousedown={flaecheMouseDown}
+      ondragover={flaecheDragOver}
+      ondragleave={flaecheDragLeave}
+      ondrop={flaecheDrop}
+    >
+      <div class="leer">
+        <i class="fa-regular {filterAktiv(browser.filter) ? 'fa-circle-xmark' : 'fa-folder-open'}"></i>
+        <span>
+          {#if filterAktiv(browser.filter)}Kein Treffer für den Filter
+          {:else if browser.bereich === "papierkorb"}Der Papierkorb ist leer
+          {:else if browser.bereich === "suche"}Nichts gefunden
+          {:else if browser.bereich === "favoriten"}Noch keine Favoriten - markiere Dateien mit dem Stern
+          {:else}Dieser Ordner ist leer - Dateien hierher ziehen oder hochladen{/if}
+        </span>
       </div>
-    {/if}
-  </div>
-{/if}
-
-{#if zustand.uploads.length > 0}
-  <div class="schwebe-karte">
-    <div class="schwebe-kopf">
-      <h4>
-        {zustand.uploads.length}
-        {zustand.uploads.length === 1 ? "Datei wird" : "Dateien werden"} hochgeladen
-      </h4>
-      <button class="icon-knopf" title="Abbrechen" aria-label="Abbrechen" onclick={uploadStoppen}>
-        <i class="fa-solid fa-xmark"></i>
-      </button>
+      {#if externDrop}
+        <div class="drop-overlay">
+          <i class="fa-solid fa-cloud-arrow-up"></i><span>Dateien hier ablegen zum Hochladen</span>
+        </div>
+      {/if}
     </div>
-    {#each zustand.uploads as u (u.name)}
-      <div class="fz">
-        <div class="fz-kopf">
-          <span class="fz-name">{u.name}</span><span class="pct">{u.prozent} %</span>
+  {:else if browser.ansicht === "grid"}
+    <div
+      class="grid"
+      bind:this={containerEl}
+      role="presentation"
+      onmousedown={flaecheMouseDown}
+      onscroll={aufListenScroll}
+      ondragover={flaecheDragOver}
+      ondragleave={flaecheDragLeave}
+      ondrop={flaecheDrop}
+    >
+      {#each angezeigt as k (k.id)}
+        <Kachel
+          {k}
+          gewaehlt={auswahl.istGewaehlt(k.id)}
+          gezogen={gezogenIds.includes(k.id)}
+          schreibbar={browser.istSchreibbar}
+          umbenennenAktiv={umbenennenId === k.id}
+          zielordner={ziehZielId === k.id}
+          onClick={(e) => rowClick(e, k)}
+          onDblClick={() => rowDblClick(k)}
+          onBox={() => boxClick(k)}
+          onKontext={(e) => kontextOeffnen(e, k)}
+          onDragStart={(e) => dragStart(e, k)}
+          onDragEnd={dragEnd}
+          onUmbenennenFertig={(name) => umbenennenFertig(k, name)}
+          onUmbenennenAbbruch={umbenennenAbbruch}
+          onOrdnerDragOver={(e) => ordnerDragOver(e, k)}
+          onOrdnerDragLeave={() => ordnerDragLeave(k)}
+          onOrdnerDrop={(e) => ordnerDrop(e, k)}
+        />
+      {/each}
+      {#if mehrVorhanden}
+        <button class="mehr-laden" style="grid-column: 1 / -1;" onclick={() => (sichtbar += SCHRITT)}>
+          <i class="fa-solid fa-chevron-down"></i>
+          {sortiert.length - sichtbar} weitere von {sortiert.length} anzeigen
+        </button>
+      {/if}
+      {#if marquee}
+        <div
+          class="marquee"
+          style="left:{marquee.l}px; top:{marquee.t}px; width:{marquee.w}px; height:{marquee.h}px;"
+        ></div>
+      {/if}
+      {#if externDrop}
+        <div class="drop-overlay">
+          <i class="fa-solid fa-cloud-arrow-up"></i><span>Dateien hier ablegen zum Hochladen</span>
         </div>
-        <div class="fortschritt"><span style="width: {u.prozent}%"></span></div>
-        <div class="fz-kopf fz-tempo">
-          <span>{u.tempo > 0 ? `${groesseText(u.tempo)}/s` : `${groesseText(u.gesamt)}`}</span>
-          <span>{u.prozent >= 100 ? "fertig" : zeitText(u.restzeit)}</span>
-        </div>
+      {/if}
+    </div>
+  {:else}
+    <div
+      class="liste"
+      bind:this={containerEl}
+      role="presentation"
+      onmousedown={flaecheMouseDown}
+      onscroll={aufListenScroll}
+      ondragover={flaecheDragOver}
+      ondragleave={flaecheDragLeave}
+      ondrop={flaecheDrop}
+    >
+      <div class="listenkopf">
+        <span></span>
+        <button
+          class="sortbar"
+          class:aktiv={browser.sortKey === "name"}
+          title="Nach Name sortieren"
+          onclick={() => browser.setzeSortierung("name")}
+        >
+          Name
+          {#if browser.sortKey === "name"}
+            <i
+              class="fa-solid {browser.sortRichtung === 'auf'
+                ? 'fa-arrow-up-short-wide'
+                : 'fa-arrow-down-short-wide'}"
+            ></i>
+          {/if}
+        </button>
+        <button
+          class="sortbar"
+          class:aktiv={browser.sortKey === "groesse"}
+          title="Nach Größe sortieren"
+          onclick={() => browser.setzeSortierung("groesse")}
+        >
+          Größe
+          {#if browser.sortKey === "groesse"}
+            <i
+              class="fa-solid {browser.sortRichtung === 'auf'
+                ? 'fa-arrow-up-short-wide'
+                : 'fa-arrow-down-short-wide'}"
+            ></i>
+          {/if}
+        </button>
+        <button
+          class="sortbar sp-geaendert"
+          class:aktiv={browser.sortKey === "geaendert"}
+          title="Nach Datum sortieren"
+          onclick={() => browser.setzeSortierung("geaendert")}
+        >
+          {imPapierkorb ? "Gelöscht" : "Geändert"}
+          {#if browser.sortKey === "geaendert"}
+            <i
+              class="fa-solid {browser.sortRichtung === 'auf'
+                ? 'fa-arrow-up-short-wide'
+                : 'fa-arrow-down-short-wide'}"
+            ></i>
+          {/if}
+        </button>
+        <span></span>
       </div>
-    {/each}
-  </div>
+      {#each angezeigt as k (k.id)}
+        <Dateizeile
+          {k}
+          gewaehlt={auswahl.istGewaehlt(k.id)}
+          gezogen={gezogenIds.includes(k.id)}
+          schreibbar={browser.istSchreibbar}
+          {imPapierkorb}
+          umbenennenAktiv={umbenennenId === k.id}
+          zielordner={ziehZielId === k.id}
+          onClick={(e) => rowClick(e, k)}
+          onDblClick={() => rowDblClick(k)}
+          onBox={() => boxClick(k)}
+          onKontext={(e) => kontextOeffnen(e, k)}
+          onDragStart={(e) => dragStart(e, k)}
+          onDragEnd={dragEnd}
+          onAktion={(art) => rowAktion(k, art)}
+          onUmbenennenFertig={(name) => umbenennenFertig(k, name)}
+          onUmbenennenAbbruch={umbenennenAbbruch}
+          onOrdnerDragOver={(e) => ordnerDragOver(e, k)}
+          onOrdnerDragLeave={() => ordnerDragLeave(k)}
+          onOrdnerDrop={(e) => ordnerDrop(e, k)}
+        />
+      {/each}
+      {#if mehrVorhanden}
+        <button class="mehr-laden" onclick={() => (sichtbar += SCHRITT)}>
+          <i class="fa-solid fa-chevron-down"></i>
+          {sortiert.length - sichtbar} weitere von {sortiert.length} anzeigen
+        </button>
+      {/if}
+      {#if marquee}
+        <div
+          class="marquee"
+          style="left:{marquee.l}px; top:{marquee.t}px; width:{marquee.w}px; height:{marquee.h}px;"
+        ></div>
+      {/if}
+      {#if externDrop}
+        <div class="drop-overlay">
+          <i class="fa-solid fa-cloud-arrow-up"></i><span>Dateien hier ablegen zum Hochladen</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 {/if}
 
 {#if auswahl.anzahl > 1 && !externAnsicht}
@@ -738,8 +727,8 @@
     {modus}
     onHerunterladen={stapelHerunterladen}
     onVerschieben={() => (verschiebeModus = true)}
-    onLoeschen={() => loeschen([...auswahl.ids])}
-    onWiederherstellen={() => wiederherstellen([...auswahl.ids])}
+    onLoeschen={() => browser.loeschen([...auswahl.ids])}
+    onWiederherstellen={() => browser.wiederherstellen([...auswahl.ids])}
     onAbbrechen={() => auswahl.leeren()}
   />
 {/if}

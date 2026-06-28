@@ -1,14 +1,14 @@
 <script lang="ts">
-  import {
-    zustand,
-    breadcrumbGehe,
-    externBreadcrumb,
-    geteiltBreadcrumb,
-    verschiebe,
-  } from "./zustand.svelte";
+  import type { Browser } from "./browser.svelte";
 
-  // Breadcrumb-Ebenen sind Ablageziele: zieht man eine Auswahl auf eine
-  // uebergeordnete Ebene, wandert sie dorthin (Verschieben nach oben).
+  // Breadcrumb einer Browsing-Instanz (Einzelansicht oder Pane). Ebenen sind
+  // Ablageziele: zieht man eine Auswahl auf eine uebergeordnete Ebene, wandert
+  // sie dorthin (Verschieben nach oben).
+  interface Props {
+    browser: Browser;
+  }
+  let { browser }: Props = $props();
+
   let zielIndex = $state<number | null>(null);
 
   function ueber(e: DragEvent, i: number) {
@@ -25,15 +25,15 @@
     zielIndex = null;
     const roh = e.dataTransfer?.getData("text/kellerwolke");
     const ids = (roh ?? "").split(",").filter(Boolean);
-    if (ids.length) verschiebe(ids, zielId);
+    if (ids.length) browser.verschiebe(ids, zielId);
   }
 </script>
 
-{#if zustand.bereich === "dateien"}
+{#if browser.bereich === "dateien"}
   <nav class="breadcrumb">
-    {#each zustand.pfad as teil, i (i)}
+    {#each browser.pfad as teil, i (i)}
       {#if i > 0}<i class="fa-solid fa-chevron-right"></i>{/if}
-      {#if i === zustand.pfad.length - 1}
+      {#if i === browser.pfad.length - 1}
         <span class="aktuell">{teil.name}</span>
       {:else}
         <a
@@ -41,61 +41,61 @@
           ondragover={(e) => ueber(e, i)}
           ondragleave={() => raus(i)}
           ondrop={(e) => fallen(e, teil.id)}
-          onclick={() => breadcrumbGehe(i)}>{teil.name}</a
+          onclick={() => browser.breadcrumbGehe(i)}>{teil.name}</a
         >
       {/if}
     {/each}
   </nav>
-{:else if zustand.bereich === "extern" && zustand.externBrowse}
+{:else if browser.bereich === "extern" && browser.externBrowse}
   <nav class="breadcrumb">
-    <a onclick={() => externBreadcrumb(-1)}>Externe Quellen</a>
+    <a onclick={() => browser.externBreadcrumb(-1)}>Externe Quellen</a>
     <i class="fa-solid fa-chevron-right"></i>
-    {#if zustand.externBrowse.unterpfad.length === 0}
-      <span class="aktuell">{zustand.externBrowse.name}</span>
+    {#if browser.externBrowse.unterpfad.length === 0}
+      <span class="aktuell">{browser.externBrowse.name}</span>
     {:else}
-      <a onclick={() => externBreadcrumb(0)}>{zustand.externBrowse.name}</a>
+      <a onclick={() => browser.externBreadcrumb(0)}>{browser.externBrowse.name}</a>
     {/if}
-    {#each zustand.externBrowse.unterpfad as teil, i (i)}
+    {#each browser.externBrowse.unterpfad as teil, i (i)}
       <i class="fa-solid fa-chevron-right"></i>
-      {#if i === zustand.externBrowse.unterpfad.length - 1}
+      {#if i === browser.externBrowse.unterpfad.length - 1}
         <span class="aktuell">{teil}</span>
       {:else}
-        <a onclick={() => externBreadcrumb(i + 1)}>{teil}</a>
+        <a onclick={() => browser.externBreadcrumb(i + 1)}>{teil}</a>
       {/if}
     {/each}
   </nav>
-{:else if zustand.bereich === "extern"}
+{:else if browser.bereich === "extern"}
   <nav class="breadcrumb">
     <span class="aktuell">Externe Quellen</span>
   </nav>
-{:else if zustand.bereich === "favoriten"}
+{:else if browser.bereich === "favoriten"}
   <nav class="breadcrumb">
     <i class="fa-solid fa-star"></i> <span class="aktuell">Favoriten</span>
   </nav>
-{:else if zustand.bereich === "geteilt"}
+{:else if browser.bereich === "geteilt"}
   <nav class="breadcrumb">
-    {#if zustand.geteiltPfad.length === 0}
+    {#if browser.geteiltPfad.length === 0}
       <i class="fa-solid fa-share-nodes"></i> <span class="aktuell">Geteilt</span>
     {:else}
-      <a onclick={() => geteiltBreadcrumb(-1)}>Geteilt</a>
-      {#each zustand.geteiltPfad as teil, i (i)}
+      <a onclick={() => browser.geteiltBreadcrumb(-1)}>Geteilt</a>
+      {#each browser.geteiltPfad as teil, i (i)}
         <i class="fa-solid fa-chevron-right"></i>
-        {#if i === zustand.geteiltPfad.length - 1}
+        {#if i === browser.geteiltPfad.length - 1}
           <span class="aktuell">{teil.name}</span>
         {:else}
-          <a onclick={() => geteiltBreadcrumb(i)}>{teil.name}</a>
+          <a onclick={() => browser.geteiltBreadcrumb(i)}>{teil.name}</a>
         {/if}
       {/each}
     {/if}
   </nav>
-{:else if zustand.bereich === "papierkorb"}
+{:else if browser.bereich === "papierkorb"}
   <nav class="breadcrumb">
     <i class="fa-solid fa-trash"></i> <span class="aktuell">Papierkorb</span>
   </nav>
-{:else if zustand.bereich === "suche"}
+{:else if browser.bereich === "suche"}
   <nav class="breadcrumb">
     <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="aktuell">Suchergebnisse für "{zustand.suchbegriff}"</span>
+    <span class="aktuell">Suchergebnisse für "{browser.suchbegriff}"</span>
   </nav>
 {/if}
 

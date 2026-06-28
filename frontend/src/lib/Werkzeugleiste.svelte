@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { zustand, istSchreibbar, hochladen, ladeExtern, navUmschalten } from "./zustand.svelte";
+  import { zustand, haupt, hochladen, navUmschalten } from "./zustand.svelte";
 
   interface Props {
     onNeuerOrdner: () => void;
@@ -7,13 +7,14 @@
   }
   let { onNeuerOrdner, onPapierkorbLeeren }: Props = $props();
 
-  // Im Splitscreen liegen Anlegen/Hochladen/Filter je Bereich (Pane), daher
-  // entfaellt die globale Werkzeugleiste dafuer.
-  const istSplit = $derived(zustand.ansicht === "split" && zustand.bereich === "dateien");
+  // Globale Werkzeugleiste fuer die Einzelansicht (haupt). Der Filter sitzt
+  // jetzt je Ansicht/Pane in der Dateiliste; im Splitscreen liegen Anlegen/
+  // Hochladen je Pane.
+  const istSplit = $derived(zustand.split && haupt.bereich === "dateien");
 
   function aufDateiwahl(e: Event) {
     const ziel = e.target as HTMLInputElement;
-    hochladen(ziel.files);
+    hochladen(ziel.files, haupt);
     ziel.value = "";
   }
 </script>
@@ -31,8 +32,8 @@
   {/if}
 
   {#if istSplit}
-    <!-- Anlegen/Hochladen sitzen im Splitscreen je Bereich (Pane) -->
-  {:else if istSchreibbar()}
+    <!-- Anlegen/Hochladen sitzen im Splitscreen je Pane -->
+  {:else if haupt.istSchreibbar}
     <button class="knopf primaer" onclick={onNeuerOrdner}>
       <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
     </button>
@@ -40,7 +41,7 @@
       <i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen
       <input type="file" multiple onchange={aufDateiwahl} hidden />
     </label>
-  {:else if zustand.bereich === "extern" && zustand.externBrowse}
+  {:else if haupt.bereich === "extern" && haupt.externBrowse}
     <button class="knopf primaer" onclick={onNeuerOrdner}>
       <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
     </button>
@@ -48,10 +49,10 @@
       <i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen
       <input type="file" multiple onchange={aufDateiwahl} hidden />
     </label>
-    <button class="knopf" onclick={ladeExtern}>
+    <button class="knopf" onclick={() => haupt.ladeExtern()}>
       <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
     </button>
-  {:else if zustand.bereich === "papierkorb" && zustand.eintraege.length > 0}
+  {:else if haupt.bereich === "papierkorb" && haupt.eintraege.length > 0}
     <button class="knopf" onclick={onPapierkorbLeeren}>
       <i class="fa-solid fa-trash-can"></i> Papierkorb leeren
     </button>
@@ -59,37 +60,31 @@
 
   <span class="luecke"></span>
 
-  {#if zustand.bereich !== "extern" && zustand.bereich !== "geteilt" && !istSplit}
-    <div class="werkzeug-filter">
-      <i class="fa-solid fa-filter"></i>
-      <input type="text" placeholder="In dieser Ansicht filtern ..." bind:value={zustand.filter} />
-      {#if zustand.filter}
-        <button class="icon-knopf" title="Filter löschen" aria-label="Filter löschen" onclick={() => (zustand.filter = "")} style="width: 24px; height: 24px;">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      {/if}
-    </div>
-  {/if}
-
   <div class="ansicht-umschalter">
     <button
-      class:aktiv={zustand.ansicht === "liste"}
+      class:aktiv={!zustand.split && haupt.ansicht === "liste"}
       title="Liste"
-      onclick={() => (zustand.ansicht = "liste")}
+      onclick={() => {
+        zustand.split = false;
+        haupt.ansicht = "liste";
+      }}
     >
       <i class="fa-solid fa-list"></i>
     </button>
     <button
-      class:aktiv={zustand.ansicht === "grid"}
+      class:aktiv={!zustand.split && haupt.ansicht === "grid"}
       title="Kacheln"
-      onclick={() => (zustand.ansicht = "grid")}
+      onclick={() => {
+        zustand.split = false;
+        haupt.ansicht = "grid";
+      }}
     >
       <i class="fa-solid fa-table-cells-large"></i>
     </button>
     <button
-      class:aktiv={zustand.ansicht === "split"}
+      class:aktiv={zustand.split}
       title="Splitscreen"
-      onclick={() => (zustand.ansicht = "split")}
+      onclick={() => (zustand.split = true)}
     >
       <i class="fa-solid fa-table-columns"></i>
     </button>

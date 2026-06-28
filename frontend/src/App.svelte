@@ -4,17 +4,15 @@
   import { thema, themaUmschalten } from "./lib/thema.svelte";
   import {
     zustand,
-    starteSuche,
-    zeigeDateien,
-    ordnerAnlegen,
+    haupt,
     leerePapierkorb,
-    endgueltigLoeschen,
     ladeVersion,
     starteLiveAbgleich,
     stoppeLiveAbgleich,
     vorgaengeUmschalten,
+    uploadStoppen,
   } from "./lib/zustand.svelte";
-  import { auswahl } from "./lib/auswahl.svelte";
+  import { groesseText, zeitText } from "./lib/format";
   import Login from "./lib/Login.svelte";
   import Navigation from "./lib/Navigation.svelte";
   import Werkzeugleiste from "./lib/Werkzeugleiste.svelte";
@@ -42,7 +40,7 @@
   $effect(() => {
     if (auth.angemeldet && !initialGeladen) {
       initialGeladen = true;
-      zeigeDateien();
+      haupt.zeigeDateien();
       ladeVersion();
       starteLiveAbgleich();
     }
@@ -52,22 +50,20 @@
     }
   });
 
-  const istSplit = $derived(zustand.ansicht === "split" && zustand.bereich === "dateien");
-  const mitDetail = $derived(zustand.detail !== null && auswahl.anzahl <= 1 && !istSplit);
+  const istSplit = $derived(zustand.split && haupt.bereich === "dateien");
+  const mitDetail = $derived(haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit);
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
-  const laufendeVorgaenge = $derived(
-    zustand.vorgaenge.filter((v) => v.status === "laeuft").length,
-  );
+  const laufendeVorgaenge = $derived(zustand.vorgaenge.filter((v) => v.status === "laeuft").length);
 
   function suchen(e: Event) {
     e.preventDefault();
-    starteSuche();
+    haupt.starteSuche(haupt.suchbegriff);
   }
 
   function ordnerAnlegenBestaetigen() {
     const name = ordnerName.trim();
     if (!name) return;
-    ordnerAnlegen(name);
+    haupt.ordnerAnlegen(name);
     ordnerName = "";
     neuerOrdnerOffen = false;
   }
@@ -89,21 +85,14 @@
       <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
       <form class="kopf-suche" onsubmit={suchen}>
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input
-          type="text"
-          placeholder="In allen Dateien suchen ..."
-          bind:value={zustand.suchbegriff}
-        />
-        {#if zustand.bereich === "suche"}
+        <input type="text" placeholder="In allen Dateien suchen ..." bind:value={haupt.suchbegriff} />
+        {#if haupt.bereich === "suche"}
           <button
             type="button"
             class="icon-knopf"
             title="Suche schließen"
             aria-label="Suche schließen"
-            onclick={() => {
-              zustand.suchbegriff = "";
-              zeigeDateien();
-            }}
+            onclick={() => haupt.zeigeDateien()}
           >
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -167,23 +156,53 @@
         onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
       />
       {#if istSplit}
-        <Splitscreen />
+        <Splitscreen
+          onTeilen={(k) => (teilenKnoten = k)}
+          onEndgueltig={(k) => (endgueltigKnoten = k)}
+        />
       {:else}
-        <Breadcrumb />
-        {#if zustand.fehler}
-          <div class="fehlerstreifen">{zustand.fehler}</div>
+        <Breadcrumb browser={haupt} />
+        {#if haupt.fehler}
+          <div class="fehlerstreifen">{haupt.fehler}</div>
         {/if}
         <Dateiliste
+          browser={haupt}
           onTeilen={(k) => (teilenKnoten = k)}
           onEndgueltig={(k) => (endgueltigKnoten = k)}
         />
       {/if}
     </section>
 
-    {#if mitDetail && zustand.detail}
-      <DetailPane k={zustand.detail} onTeilen={(k) => (teilenKnoten = k)} />
+    {#if mitDetail && haupt.detail}
+      <DetailPane k={haupt.detail} onTeilen={(k) => (teilenKnoten = k)} />
     {/if}
   </div>
+
+  {#if zustand.uploads.length > 0}
+    <div class="schwebe-karte">
+      <div class="schwebe-kopf">
+        <h4>
+          {zustand.uploads.length}
+          {zustand.uploads.length === 1 ? "Datei wird" : "Dateien werden"} hochgeladen
+        </h4>
+        <button class="icon-knopf" title="Abbrechen" aria-label="Abbrechen" onclick={uploadStoppen}>
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      {#each zustand.uploads as u (u.name)}
+        <div class="fz">
+          <div class="fz-kopf">
+            <span class="fz-name">{u.name}</span><span class="pct">{u.prozent} %</span>
+          </div>
+          <div class="fortschritt"><span style="width: {u.prozent}%"></span></div>
+          <div class="fz-kopf fz-tempo">
+            <span>{u.tempo > 0 ? `${groesseText(u.tempo)}/s` : `${groesseText(u.gesamt)}`}</span>
+            <span>{u.prozent >= 100 ? "fertig" : zeitText(u.restzeit)}</span>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   {#if zustand.vorgaengeOffen}
     <Vorgaenge />
@@ -220,7 +239,7 @@
         <button
           class="knopf primaer"
           onclick={() => {
-            if (endgueltigKnoten) endgueltigLoeschen([endgueltigKnoten.id]);
+            if (endgueltigKnoten) haupt.endgueltigLoeschen([endgueltigKnoten.id]);
             endgueltigKnoten = null;
           }}
         >
@@ -250,7 +269,6 @@
       </div>
     </Modal>
   {/if}
-
 {/if}
 
 <style>

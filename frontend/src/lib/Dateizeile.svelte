@@ -98,7 +98,7 @@
   data-id={k.id}
   role="row"
   tabindex="-1"
-  draggable={schreibbar && !umbenennenAktiv}
+  draggable={gewaehlt && schreibbar && !umbenennenAktiv}
   ondragstart={(e) => onDragStart(e)}
   ondragend={onDragEnd}
   ondragover={istOrdnerZiel ? onOrdnerDragOver : undefined}

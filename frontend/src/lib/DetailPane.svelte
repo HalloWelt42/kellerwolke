@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { zustand, schliesseDetail, herunterladen, istSchreibbar } from "./zustand.svelte";
+  import { haupt } from "./zustand.svelte";
   import { symbol, groesseText, datum, typLabel } from "./format";
   import type { Knoten } from "./types";
 
@@ -11,17 +11,17 @@
 
   const sym = $derived(symbol(k));
   const pfadText = $derived(
-    "/" + zustand.pfad.slice(1).map((t) => t.name).join("/") || "/",
+    "/" + haupt.pfad.slice(1).map((t) => t.name).join("/") || "/",
   );
   const groesse = $derived(
-    k.groesse ?? (zustand.detailVersionen.length ? zustand.detailVersionen[0].groesse : null),
+    k.groesse ?? (haupt.detailVersionen.length ? haupt.detailVersionen[0].groesse : null),
   );
 </script>
 
 <aside class="detail">
   <div class="detail-kopf">
     <h2>Details</h2>
-    <button class="icon-knopf" aria-label="Schliessen" onclick={schliesseDetail}>
+    <button class="icon-knopf" aria-label="Schliessen" onclick={() => haupt.schliesseDetail()}>
       <i class="fa-solid fa-xmark"></i>
     </button>
   </div>
@@ -48,11 +48,11 @@
   {#if k.typ === "datei"}
     <div class="detail-block">
       <h3>Versionen</h3>
-      {#if zustand.detailVersionen.length === 0}
+      {#if haupt.detailVersionen.length === 0}
         <p class="fehler" style="color: var(--text-3);">Keine Versionsdaten.</p>
       {:else}
         <ul class="versionsliste">
-          {#each zustand.detailVersionen as v, i (v.id)}
+          {#each haupt.detailVersionen as v, i (v.id)}
             <li>
               <i class="fa-solid fa-clock-rotate-left"></i>
               <span class="v-datum">{datum(v.erstellt_am)}</span>
@@ -66,10 +66,10 @@
 
     <div class="detail-block" style="margin-top: auto;">
       <div style="display: flex; gap: var(--a2);">
-        <button class="knopf primaer" style="flex: 1;" onclick={() => herunterladen(k)}>
+        <button class="knopf primaer" style="flex: 1;" onclick={() => haupt.herunterladen(k)}>
           <i class="fa-solid fa-download"></i> Herunterladen
         </button>
-        {#if istSchreibbar()}
+        {#if haupt.istSchreibbar}
           <button class="knopf" style="flex: 1;" onclick={() => onTeilen?.(k)}>
             <i class="fa-solid fa-share-nodes"></i> Teilen
           </button>

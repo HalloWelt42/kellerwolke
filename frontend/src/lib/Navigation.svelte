@@ -1,17 +1,8 @@
 <script lang="ts">
-  import {
-    zustand,
-    zeigeDateien,
-    zeigePapierkorb,
-    zeigeExterneQuellen,
-    zeigeFavoriten,
-    zeigeGeteilt,
-    navUmschalten,
-  } from "./zustand.svelte";
+  import { zustand, haupt, navUmschalten } from "./zustand.svelte";
   import Speicheranzeige from "./Speicheranzeige.svelte";
 
-  // Linke Zone: Bereiche. Favoriten und Geteilt sind noch nicht hinterlegt und
-  // daher als "bald" gekennzeichnet (kein vorgetaeuschter Inhalt).
+  // Linke Zone: Bereiche. Steuert die Einzelansicht (haupt).
 </script>
 
 <nav class="nav">
@@ -27,31 +18,23 @@
     </button>
   </div>
 
-  <button class="nav-eintrag" class:aktiv={zustand.bereich === "dateien"} onclick={zeigeDateien}>
+  <button class="nav-eintrag" class:aktiv={haupt.bereich === "dateien"} onclick={() => haupt.zeigeDateien()}>
     <i class="fa-solid fa-folder"></i> Meine Dateien
   </button>
 
-  <button class="nav-eintrag" class:aktiv={zustand.bereich === "favoriten"} onclick={zeigeFavoriten}>
+  <button class="nav-eintrag" class:aktiv={haupt.bereich === "favoriten"} onclick={() => haupt.zeigeFavoriten()}>
     <i class="fa-solid fa-star"></i> Favoriten
   </button>
 
-  <button class="nav-eintrag" class:aktiv={zustand.bereich === "geteilt"} onclick={zeigeGeteilt}>
+  <button class="nav-eintrag" class:aktiv={haupt.bereich === "geteilt"} onclick={() => haupt.zeigeGeteilt()}>
     <i class="fa-solid fa-share-nodes"></i> Geteilt
   </button>
 
-  <button
-    class="nav-eintrag"
-    class:aktiv={zustand.bereich === "extern"}
-    onclick={zeigeExterneQuellen}
-  >
+  <button class="nav-eintrag" class:aktiv={haupt.bereich === "extern"} onclick={() => haupt.zeigeExterneQuellen()}>
     <i class="fa-solid fa-folder-tree"></i> Externe Quellen
   </button>
 
-  <button
-    class="nav-eintrag"
-    class:aktiv={zustand.bereich === "papierkorb"}
-    onclick={zeigePapierkorb}
-  >
+  <button class="nav-eintrag" class:aktiv={haupt.bereich === "papierkorb"} onclick={() => haupt.zeigePapierkorb()}>
     <i class="fa-solid fa-trash"></i> Papierkorb
   </button>
 
