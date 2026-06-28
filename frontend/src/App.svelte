@@ -201,7 +201,23 @@
         {#if haupt.fehler}
           <div class="fehlerstreifen">{haupt.fehler}</div>
         {/if}
-        <PluginAnsicht browser={haupt} />
+        <svelte:boundary onerror={(e) => console.error("Plugin-Fehler:", aktuelleApp.id, e)}>
+          <PluginAnsicht browser={haupt} />
+          {#snippet failed(error, reset)}
+            <div class="plugin-fehler" role="alert">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <h3>Die App "{aktuelleApp.label}" ist auf einen Fehler gestoßen</h3>
+              <p>Der Rest von Kellerwolke läuft normal weiter.</p>
+              <pre>{(error as Error)?.message ?? String(error)}</pre>
+              <div class="pf-knoepfe">
+                <button class="knopf" onclick={reset}>Erneut versuchen</button>
+                <button class="knopf primaer" onclick={() => waehleApp(DEFAULT_APP_ID)}>
+                  Zu den Dateien
+                </button>
+              </div>
+            </div>
+          {/snippet}
+        </svelte:boundary>
       {/if}
     </section>
 
@@ -314,6 +330,40 @@
   .modal-knoepfe {
     display: flex;
     justify-content: flex-end;
+    gap: var(--a2);
+  }
+  .plugin-fehler {
+    margin: var(--a5) auto;
+    max-width: 560px;
+    text-align: center;
+    color: var(--text-2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--a3);
+  }
+  .plugin-fehler i {
+    font-size: 2.2rem;
+    color: var(--warn);
+  }
+  .plugin-fehler h3 {
+    margin: 0;
+    color: var(--text);
+  }
+  .plugin-fehler pre {
+    max-width: 100%;
+    overflow: auto;
+    text-align: left;
+    background: var(--flaeche-2);
+    border: 1px solid var(--rand);
+    border-radius: var(--r2);
+    padding: var(--a3);
+    font-size: 0.8rem;
+    color: var(--gefahr);
+    white-space: pre-wrap;
+  }
+  .pf-knoepfe {
+    display: flex;
     gap: var(--a2);
   }
 </style>
