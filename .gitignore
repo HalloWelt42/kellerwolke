@@ -25,3 +25,8 @@ node_modules/
 dist/
 build/
 .test-speicher/
+
+# Editor und Betriebssystem
+.idea/
+.vscode/
+.DS_Store
