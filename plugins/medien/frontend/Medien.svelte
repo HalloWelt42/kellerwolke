@@ -76,6 +76,13 @@
   }
   function toggle() { if (!audioEl) return; if (audioEl.paused) audioEl.play().catch(() => {}); else audioEl.pause(); }
   function audioWeiter() { if (!aktAudio || !audios.length) return; const i = audios.findIndex((a) => a.id === aktAudio.id); spiele(audios[(i + 1) % audios.length]); }
+  function amEnde() {
+    // Am Ende einer Datei zur naechsten - aber NICHT endlos die einzige wiederholen.
+    if (!aktAudio) return;
+    const i = audios.findIndex((a) => a.id === aktAudio.id);
+    if (i >= 0 && i < audios.length - 1) spiele(audios[i + 1]);
+    else laeuft = false;
+  }
   function audioZurueck() { if (!aktAudio || !audios.length) return; const i = audios.findIndex((a) => a.id === aktAudio.id); spiele(audios[(i - 1 + audios.length) % audios.length]); }
   function suche(e: MouseEvent) { if (!audioEl || !dauer) return; const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); audioEl.currentTime = ((e.clientX - r.left) / r.width) * dauer; }
   function mmss(s: number) { if (!isFinite(s)) return "0:00"; const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${r.toString().padStart(2, "0")}`; }
@@ -92,7 +99,7 @@
   onpause={() => (laeuft = false)}
   ontimeupdate={() => (zeit = audioEl.currentTime)}
   onloadedmetadata={() => (dauer = audioEl.duration)}
-  onended={audioWeiter}
+  onended={amEnde}
 ></audio>
 
 <div class="med-werkzeuge">
@@ -185,7 +192,7 @@
         <span class="p-zeit">{mmss(dauer)}</span>
       </div>
     </div>
-    <div class="p-rechts"><button aria-label="Schließen" onclick={() => { spielId = null; laeuft = false; }}><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="p-rechts"><button aria-label="Schließen" onclick={() => { if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; } spielId = null; laeuft = false; }}><i class="fa-solid fa-xmark"></i></button></div>
   </div>
 {/if}
 
