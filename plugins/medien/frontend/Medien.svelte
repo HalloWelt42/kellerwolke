@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { SvelteSet } from "svelte/reactivity";
+  import { SvelteSet, SvelteMap } from "svelte/reactivity";
   import type { Browser } from "../../lib/browser.svelte";
   import type { Knoten } from "../../lib/types";
-  import { symbol } from "../../lib/format";
+  import { symbol, groesseText } from "../../lib/format";
   import { waehleApp } from "../appzustand.svelte";
   import {
     istBild, istAudio, formatKuerzel,
@@ -18,7 +18,8 @@
   };
 
   const kaputt = new SvelteSet<string>();
-  let modus = $state<"kachel_gross" | "kachel_klein">("kachel_gross");
+  const dauern = new SvelteMap<string, number>(); // Audio-Dauer, clientseitig geladen
+  let modus = $state<"kachel_gross" | "kachel_klein" | "liste">("kachel_gross");
   let quelle = $state<"alle" | "ordner">("alle");
   let filter = $state<"alle" | "bild" | "audio">("alle");
   let alle = $state<GMedium[]>([]);
@@ -31,6 +32,12 @@
     geladen = true;
   }
   $effect(() => { if (quelle === "alle" && !geladen) ladeAlle(); });
+
+  // Audio ist keine Kachel-Sache: beim Umschalten auf "Audio" gleich in die Liste.
+  function setzeFilter(f: "alle" | "bild" | "audio") {
+    filter = f;
+    if (f === "audio") modus = "liste";
+  }
 
   const ordner = $derived(
     quelle === "ordner" ? browser.eintraege.filter((k) => k.typ === "ordner" || k.typ === "extern") : [],
@@ -52,6 +59,7 @@
   function pfadText(p: { id: string; name: string }[] | null) { return !p || !p.length ? "Meine Dateien" : p.map((x) => x.name).join(" / "); }
   function zumOrdner(m: Anzeige | null) { if (!m || !m.pfad) return; browser.oeffnePfad(m.pfad, m.id); waehleApp("dateien"); }
   function oeffneOrdner(k: Knoten) { browser.oeffnen(k); }
+  function mmss(s: number | undefined) { if (s === undefined || !isFinite(s)) return "-"; const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${r.toString().padStart(2, "0")}`; }
 
   // --- Bild-Lightbox ---
   let vollIndex = $state<number | null>(null);
@@ -76,16 +84,14 @@
   }
   function toggle() { if (!audioEl) return; if (audioEl.paused) audioEl.play().catch(() => {}); else audioEl.pause(); }
   function audioWeiter() { if (!aktAudio || !audios.length) return; const i = audios.findIndex((a) => a.id === aktAudio.id); spiele(audios[(i + 1) % audios.length]); }
+  function audioZurueck() { if (!aktAudio || !audios.length) return; const i = audios.findIndex((a) => a.id === aktAudio.id); spiele(audios[(i - 1 + audios.length) % audios.length]); }
   function amEnde() {
-    // Am Ende einer Datei zur naechsten - aber NICHT endlos die einzige wiederholen.
     if (!aktAudio) return;
     const i = audios.findIndex((a) => a.id === aktAudio.id);
     if (i >= 0 && i < audios.length - 1) spiele(audios[i + 1]);
     else laeuft = false;
   }
-  function audioZurueck() { if (!aktAudio || !audios.length) return; const i = audios.findIndex((a) => a.id === aktAudio.id); spiele(audios[(i - 1 + audios.length) % audios.length]); }
   function suche(e: MouseEvent) { if (!audioEl || !dauer) return; const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); audioEl.currentTime = ((e.clientX - r.left) / r.width) * dauer; }
-  function mmss(s: number) { if (!isFinite(s)) return "0:00"; const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${r.toString().padStart(2, "0")}`; }
 
   function taste(e: KeyboardEvent) {
     if (vollIndex !== null) { if (e.key === "Escape") schliesse(); else if (e.key === "ArrowRight") bildWeiter(); else if (e.key === "ArrowLeft") bildZurueck(); }
@@ -98,7 +104,7 @@
   onplay={() => (laeuft = true)}
   onpause={() => (laeuft = false)}
   ontimeupdate={() => (zeit = audioEl.currentTime)}
-  onloadedmetadata={() => (dauer = audioEl.duration)}
+  onloadedmetadata={() => { dauer = audioEl.duration; if (spielId) dauern.set(spielId, audioEl.duration); }}
   onended={amEnde}
 ></audio>
 
@@ -108,13 +114,14 @@
     <button class:aktiv={quelle === "ordner"} onclick={() => (quelle = "ordner")}><i class="fa-solid fa-folder"></i> Dieser Ordner</button>
   </div>
   <div class="seg">
-    <button class:aktiv={filter === "alle"} onclick={() => (filter = "alle")}>Alle</button>
-    <button class:aktiv={filter === "bild"} onclick={() => (filter = "bild")}><i class="fa-regular fa-image"></i> Bilder</button>
-    <button class:aktiv={filter === "audio"} onclick={() => (filter = "audio")}><i class="fa-solid fa-music"></i> Audio</button>
+    <button class:aktiv={filter === "alle"} onclick={() => setzeFilter("alle")}>Alle</button>
+    <button class:aktiv={filter === "bild"} onclick={() => setzeFilter("bild")}><i class="fa-regular fa-image"></i> Bilder</button>
+    <button class:aktiv={filter === "audio"} onclick={() => setzeFilter("audio")}><i class="fa-solid fa-music"></i> Audio</button>
   </div>
   <div class="seg">
     <button class:aktiv={modus === "kachel_gross"} title="Große Kacheln" onclick={() => (modus = "kachel_gross")}><i class="fa-solid fa-table-cells-large"></i></button>
     <button class:aktiv={modus === "kachel_klein"} title="Kleine Kacheln" onclick={() => (modus = "kachel_klein")}><i class="fa-solid fa-table-cells"></i></button>
+    <button class:aktiv={modus === "liste"} title="Liste (mit Audiodaten)" onclick={() => (modus = "liste")}><i class="fa-solid fa-list"></i></button>
   </div>
   <span class="zahl">{zahlBild} Bilder &middot; {zahlAudio} Audios</span>
 </div>
@@ -125,6 +132,42 @@
   <div class="med-leer"><i class="fa-solid fa-triangle-exclamation"></i><span>{ladeFehler}</span></div>
 {:else if ordner.length === 0 && medien.length === 0}
   <div class="med-leer"><i class="fa-regular fa-image"></i><span>Keine Medien hier</span></div>
+{:else if modus === "liste"}
+  <div class="med-liste">
+    <div class="ml-kopf">
+      <span class="ml-c ml-name">Name</span>
+      <span class="ml-c ml-dauer">Dauer</span>
+      <span class="ml-c ml-format">Format</span>
+      <span class="ml-c ml-groesse">Größe</span>
+      <span class="ml-c ml-pfad">Ort</span>
+    </div>
+    {#each ordner as k (k.id)}
+      <button class="ml-zeile ordner" ondblclick={() => oeffneOrdner(k)} onclick={() => oeffneOrdner(k)}>
+        <span class="ml-c ml-name"><i class="sym fa-solid {symbol(k).icon}"></i> {k.name}</span>
+        <span class="ml-c ml-dauer">-</span><span class="ml-c ml-format">Ordner</span>
+        <span class="ml-c ml-groesse">-</span><span class="ml-c ml-pfad"></span>
+      </button>
+    {/each}
+    {#each medien as m (m.id)}
+      <button class="ml-zeile" class:spielt={spielId === m.id} onclick={() => (m.typ === "audio" ? spiele(m) : zeigeBild(m))}>
+        <span class="ml-c ml-name">
+          {#if m.typ === "audio"}
+            <i class="sym audio fa-solid {spielId === m.id && laeuft ? 'fa-circle-pause' : 'fa-circle-play'}"></i>
+            <audio preload="metadata" src={streamUrl(m.id)} onloadedmetadata={(e) => dauern.set(m.id, (e.currentTarget as HTMLAudioElement).duration)}></audio>
+          {:else if kaputt.has(m.id)}
+            <span class="sym"><i class="fa-regular fa-image"></i></span>
+          {:else}
+            <img class="ml-thumb" src={thumbUrl(m.id, 96)} alt={m.name} loading="lazy" onerror={() => kaputt.add(m.id)} />
+          {/if}
+          <span class="titel">{m.name}</span>
+        </span>
+        <span class="ml-c ml-dauer">{m.typ === "audio" ? mmss(dauern.get(m.id)) : "-"}</span>
+        <span class="ml-c ml-format"><span class="badge">{formatKuerzel(m.name)}</span></span>
+        <span class="ml-c ml-groesse">{m.groesse != null ? groesseText(m.groesse) : "-"}</span>
+        <span class="ml-c ml-pfad" title={pfadText(m.pfad)}>{quelle === "alle" ? pfadText(m.pfad) : ""}</span>
+      </button>
+    {/each}
+  </div>
 {:else}
   <div class="med-gitter" class:klein={modus === "kachel_klein"}>
     {#each ordner as k (k.id)}
@@ -135,11 +178,8 @@
     {#each medien as m (m.id)}
       {#if m.typ === "bild"}
         <button class="m-bild" onclick={() => zeigeBild(m)} title={m.name}>
-          {#if kaputt.has(m.id)}
-            <div class="m-platz"><i class="fa-regular fa-image"></i></div>
-          {:else}
-            <img src={thumbUrl(m.id, thumbKante)} alt={m.name} loading="lazy" onerror={() => kaputt.add(m.id)} />
-          {/if}
+          {#if kaputt.has(m.id)}<div class="m-platz"><i class="fa-regular fa-image"></i></div>
+          {:else}<img src={thumbUrl(m.id, thumbKante)} alt={m.name} loading="lazy" onerror={() => kaputt.add(m.id)} />{/if}
         </button>
       {:else}
         <button class="m-audio" class:spielt={spielId === m.id} onclick={() => spiele(m)} title={m.name}>
@@ -147,10 +187,7 @@
             <span class="m-format">{formatKuerzel(m.name)}</span>
             <i class="fa-solid {spielId === m.id && laeuft ? 'fa-volume-high' : 'fa-music'}"></i>
           </div>
-          <div class="m-info">
-            <span class="titel">{m.name}</span>
-            {#if quelle === "alle"}<span class="pfad">{pfadText(m.pfad)}</span>{/if}
-          </div>
+          <div class="m-info"><span class="titel">{m.name}</span>{#if quelle === "alle"}<span class="pfad">{pfadText(m.pfad)}</span>{/if}</div>
         </button>
       {/if}
     {/each}
@@ -186,9 +223,7 @@
       </div>
       <div class="p-fortschritt">
         <span class="p-zeit">{mmss(zeit)}</span>
-        <div class="p-spur" role="slider" tabindex="0" aria-label="Position" aria-valuenow={Math.floor(zeit)} onclick={suche}>
-          <div class="p-fuell" style="width:{dauer ? (zeit / dauer) * 100 : 0}%"></div>
-        </div>
+        <div class="p-spur" role="slider" tabindex="0" aria-label="Position" aria-valuenow={Math.floor(zeit)} onclick={suche}><div class="p-fuell" style="width:{dauer ? (zeit / dauer) * 100 : 0}%"></div></div>
         <span class="p-zeit">{mmss(dauer)}</span>
       </div>
     </div>
@@ -219,6 +254,25 @@
   .m-info .pfad { font-size: 0.76rem; color: var(--akzent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .m-ordner { border: 1px solid var(--rand); background: var(--flaeche-2); border-radius: var(--r2); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--a2); aspect-ratio: 1; color: var(--akzent); font-size: 2rem; }
   .m-ordner .titel { font-size: 0.8rem; color: var(--text); max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Listenansicht (v.a. fuer Audio) */
+  .med-liste { flex: 1; overflow-y: auto; padding: 0 var(--a4) 104px; }
+  .ml-kopf, .ml-zeile { display: grid; grid-template-columns: minmax(0, 1fr) 70px 84px 96px minmax(0, 1.1fr); align-items: center; gap: var(--a3); }
+  .ml-kopf { padding: var(--a2) var(--a2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); border-bottom: 1px solid var(--rand); position: sticky; top: 0; background: var(--flaeche); }
+  .ml-zeile { width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; color: var(--text); font: inherit; padding: var(--a1) var(--a2); border-radius: var(--r1); }
+  .ml-zeile:hover { background: var(--flaeche-2); }
+  .ml-zeile.spielt { background: var(--akzent-weich); }
+  .ml-name { display: flex; align-items: center; gap: var(--a2); min-width: 0; }
+  .ml-name .titel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ml-name .sym { width: 28px; text-align: center; color: var(--text-2); }
+  .ml-name .sym.audio { color: var(--akzent); font-size: 1.15rem; }
+  .ml-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: var(--r1); flex: none; }
+  .ml-dauer { font-variant-numeric: tabular-nums; color: var(--text-2); }
+  .ml-groesse { color: var(--text-2); font-size: 0.85rem; }
+  .ml-pfad { color: var(--akzent); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ml-format .badge { font-size: 0.66rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--flaeche-3); color: var(--text-2); }
+  .ml-zeile audio { display: none; }
+
   .m-voll { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 60; }
   .m-voll-bild { max-width: 96vw; max-height: 84vh; object-fit: contain; }
   .m-voll-leiste { position: absolute; bottom: calc(84px + var(--a3)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: var(--a2); background: rgba(20,20,24,0.9); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--r3); padding: var(--a2) var(--a3); color: #fff; }
@@ -226,6 +280,7 @@
   .m-voll-leiste .zaehler { color: rgba(255,255,255,0.6); font-size: 0.82rem; }
   .vk { border: none; background: transparent; color: #fff; cursor: pointer; font-size: 1rem; width: 32px; height: 32px; border-radius: var(--r1); }
   .vk:hover { background: rgba(255,255,255,0.14); }
+
   .player { position: fixed; left: 0; right: 0; bottom: 0; height: 78px; display: grid; grid-template-columns: minmax(170px, 1fr) minmax(300px, 1.6fr) auto; align-items: center; gap: var(--a4); padding: 0 var(--a4); background: var(--flaeche); border-top: 1px solid var(--rand); z-index: 50; }
   .p-jetzt { display: flex; align-items: center; gap: var(--a3); min-width: 0; }
   .p-cover { width: 48px; height: 48px; border-radius: var(--r2); display: grid; place-items: center; color: #fff; font-size: 1.1rem; flex: none; background: linear-gradient(135deg, #6d5efc, #3b82f6); }

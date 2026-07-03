@@ -11,6 +11,7 @@
     stoppeLiveAbgleich,
     vorgaengeUmschalten,
     uploadStoppen,
+    hochladen,
   } from "./lib/zustand.svelte";
   import { groesseText, zeitText } from "./lib/format";
   import Login from "./lib/Login.svelte";
@@ -93,7 +94,46 @@
   function fokus(el: HTMLInputElement) {
     el.focus();
   }
+
+  // --- Globales Drag-and-drop: Dateien lassen sich ueberall in der App ablegen
+  // (egal welche Ansicht/App aktiv ist) und landen im aktuellen Ordner. ---
+  let zieheDatei = $state(false);
+  let ziehZaehler = 0; // dragenter/leave-Zaehler gegen Flackern beim Ueberfahren von Kindelementen
+
+  function hatDateien(e: DragEvent): boolean {
+    return Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  }
+  function aufDragEnter(e: DragEvent) {
+    if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
+    e.preventDefault();
+    ziehZaehler++;
+    zieheDatei = true;
+  }
+  function aufDragOver(e: DragEvent) {
+    if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
+    e.preventDefault(); // erlaubt das Ablegen ueberall im Fenster
+  }
+  function aufDragLeave(e: DragEvent) {
+    if (!hatDateien(e)) return;
+    ziehZaehler--;
+    if (ziehZaehler <= 0) { ziehZaehler = 0; zieheDatei = false; }
+  }
+  function aufDrop(e: DragEvent) {
+    ziehZaehler = 0;
+    zieheDatei = false;
+    if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
+    e.preventDefault();
+    const dateien = e.dataTransfer?.files;
+    if (dateien && dateien.length) hochladen(dateien);
+  }
 </script>
+
+<svelte:window
+  ondragenter={aufDragEnter}
+  ondragover={aufDragOver}
+  ondragleave={aufDragLeave}
+  ondrop={aufDrop}
+/>
 
 {#if !auth.geladen}
   <div class="start-laden"><i class="fa-solid fa-cloud fa-beat-fade"></i></div>
@@ -102,6 +142,15 @@
 {:else if verwaltungOffen}
   <Einstellungen schliessen={() => (verwaltungOffen = false)} />
 {:else}
+  {#if zieheDatei}
+    <div class="global-drop" role="presentation">
+      <div class="global-drop-karte">
+        <i class="fa-solid fa-cloud-arrow-up"></i>
+        <strong>Dateien hier ablegen</strong>
+        <span>Sie landen im aktuellen Ordner.</span>
+      </div>
+    </div>
+  {/if}
   <div class="app" class:mit-detail={mitDetail} class:nav-aus={zustand.navAus}>
     <header class="kopf">
       <div class="marke"><Logo size={22} /> Kellerwolke</div>
@@ -365,5 +414,36 @@
   .pf-knoepfe {
     display: flex;
     gap: var(--a2);
+  }
+  .global-drop {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: color-mix(in srgb, var(--akzent) 14%, transparent);
+    backdrop-filter: blur(1px);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    padding: var(--a4);
+  }
+  .global-drop-karte {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--a2);
+    padding: var(--a5) var(--a6);
+    border: 2px dashed var(--akzent);
+    border-radius: var(--r3);
+    background: var(--flaeche);
+    color: var(--text);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+  }
+  .global-drop-karte i {
+    font-size: 2.6rem;
+    color: var(--akzent);
+  }
+  .global-drop-karte span {
+    color: var(--text-2);
+    font-size: 0.9rem;
   }
 </style>
