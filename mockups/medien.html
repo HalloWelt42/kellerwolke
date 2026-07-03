@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Medien</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      /* --- App-Leiste unter dem Suchfeld (Plugin-System) --- */
+      .app-leiste {
+        display: flex;
+        align-items: center;
+        gap: var(--a1);
+        padding: var(--a2) var(--a4) 0;
+      }
+      .app-knopf {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--a2);
+        padding: var(--a1) var(--a3);
+        border: 1px solid transparent;
+        border-radius: var(--r2);
+        background: transparent;
+        color: var(--text-2);
+        font: inherit;
+        font-size: 0.86rem;
+        cursor: pointer;
+      }
+      .app-knopf:hover { background: var(--flaeche-3); color: var(--text); }
+      .app-knopf.aktiv { background: var(--akzent-weich); color: var(--akzent-stark); }
+
+      /* --- Werkzeuge: Quelle + Medien-Filter --- */
+      .seg {
+        display: inline-flex;
+        gap: 2px;
+        background: var(--flaeche-2);
+        border: 1px solid var(--rand);
+        border-radius: var(--r2);
+        padding: 2px;
+      }
+      .seg button {
+        border: none;
+        background: transparent;
+        color: var(--text-2);
+        font: inherit;
+        font-size: 0.84rem;
+        padding: var(--a1) var(--a3);
+        border-radius: var(--r1);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--a1);
+      }
+      .seg button.aktiv { background: var(--akzent-weich); color: var(--akzent-stark); }
+      .anzahl { margin-left: auto; color: var(--text-3); font-size: 0.82rem; }
+
+      /* --- Medien-Raster --- */
+      .medien-grid {
+        flex: 1;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: var(--a3);
+        padding: var(--a3) var(--a4) 120px; /* Platz fuer die Player-Leiste */
+        align-content: start;
+      }
+      /* Bild-Kachel: randlos, Foto fuellt die Flaeche */
+      .m-bild {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: var(--r2);
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .m-bild .foto { width: 100%; height: 100%; }
+      .m-bild .typ {
+        position: absolute; top: 8px; left: 8px;
+        width: 24px; height: 24px; border-radius: 50%;
+        background: rgba(0,0,0,0.45); color: #fff;
+        display: grid; place-items: center; font-size: 0.7rem;
+      }
+      /* Audio-Kachel: Karte mit Cover + Titel + Dauer */
+      .m-audio {
+        aspect-ratio: 1;
+        border: 1px solid var(--rand);
+        border-radius: var(--r2);
+        background: var(--flaeche);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        cursor: pointer;
+        transition: border-color var(--schnell, .15s), transform var(--schnell, .15s);
+      }
+      .m-audio:hover { border-color: var(--rand-stark); transform: translateY(-2px); }
+      .m-cover {
+        flex: 1;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 2rem;
+        position: relative;
+      }
+      .m-play {
+        position: absolute; inset: 0;
+        display: grid; place-items: center;
+        background: rgba(0,0,0,0.25);
+        opacity: 0; transition: opacity var(--schnell, .15s);
+        font-size: 2.4rem;
+      }
+      .m-audio:hover .m-play { opacity: 1; }
+      .m-audio .info { padding: var(--a2) var(--a3); }
+      .m-audio .titel {
+        font-size: 0.85rem; font-weight: 600; color: var(--text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .m-audio .dauer { font-size: 0.78rem; color: var(--text-3); }
+      .m-format {
+        position: absolute; top: 8px; right: 8px;
+        font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em;
+        padding: 2px 7px; border-radius: 999px;
+        background: rgba(0,0,0,0.42); color: #fff;
+      }
+      /* laufender Titel: Akzentrahmen + Equalizer */
+      .m-audio.spielt { border-color: var(--akzent); }
+      .m-audio.spielt .m-cover .m-play { opacity: 1; background: transparent; }
+      .eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 26px; }
+      .eq span {
+        width: 4px; background: #fff; border-radius: 2px;
+        animation: eq 0.9s ease-in-out infinite;
+      }
+      .eq span:nth-child(2){ animation-delay: .2s } .eq span:nth-child(3){ animation-delay: .4s }
+      .eq span:nth-child(4){ animation-delay: .1s } .eq span:nth-child(5){ animation-delay: .3s }
+      @keyframes eq { 0%,100%{ height: 7px } 50%{ height: 24px } }
+
+      .cov-a { background: linear-gradient(135deg,#6d5efc,#b06ab3); }
+      .cov-b { background: linear-gradient(135deg,#0ea5a4,#3b82f6); }
+      .cov-c { background: linear-gradient(135deg,#f59e0b,#ef4444); }
+      .cov-d { background: linear-gradient(135deg,#10b981,#0ea5e9); }
+      .foto-a { background: linear-gradient(135deg,#f6d365,#fda085); }
+      .foto-b { background: linear-gradient(160deg,#84fab0,#8fd3f4); }
+      .foto-c { background: linear-gradient(135deg,#a18cd1,#fbc2eb); }
+      .foto-d { background: linear-gradient(135deg,#5ee7df,#b490ca); }
+      .foto-e { background: linear-gradient(135deg,#e0c3fc,#8ec5fc); }
+      .foto-f { background: linear-gradient(160deg,#f093fb,#f5576c); }
+
+      /* --- Player-Leiste unten --- */
+      .player {
+        position: fixed; left: 0; right: 0; bottom: 0;
+        height: 84px;
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(320px, 2fr) minmax(180px, 1fr);
+        align-items: center;
+        gap: var(--a4);
+        padding: 0 var(--a4);
+        background: var(--flaeche);
+        border-top: 1px solid var(--rand);
+        z-index: 40;
+      }
+      .p-jetzt { display: flex; align-items: center; gap: var(--a3); min-width: 0; }
+      .p-cover {
+        width: 52px; height: 52px; border-radius: var(--r2);
+        display: grid; place-items: center; color: #fff; font-size: 1.2rem; flex: none;
+      }
+      .p-text { min-width: 0; }
+      .p-titel { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .p-pfad { font-size: 0.8rem; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .p-mitte { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .p-tasten { display: flex; align-items: center; gap: var(--a3); }
+      .p-tasten button {
+        border: none; background: transparent; color: var(--text-2);
+        cursor: pointer; font-size: 1rem; width: 34px; height: 34px; border-radius: 50%;
+      }
+      .p-tasten button:hover { background: var(--flaeche-2); color: var(--text); }
+      .p-tasten .gross {
+        width: 44px; height: 44px; font-size: 1.15rem;
+        background: var(--akzent); color: var(--akzent-text);
+      }
+      .p-tasten .gross:hover { background: var(--akzent-stark); }
+      .p-fortschritt { display: flex; align-items: center; gap: var(--a2); width: 100%; max-width: 520px; }
+      .p-zeit { font-size: 0.75rem; color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 34px; text-align: center; }
+      .p-spur { flex: 1; height: 5px; border-radius: 3px; background: var(--flaeche-3); position: relative; cursor: pointer; }
+      .p-fuell { position: absolute; left: 0; top: 0; bottom: 0; width: 37%; background: var(--akzent); border-radius: 3px; }
+      .p-fuell::after {
+        content: ""; position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+        width: 12px; height: 12px; border-radius: 50%; background: var(--akzent);
+      }
+      .p-rechts { display: flex; align-items: center; justify-content: flex-end; gap: var(--a2); color: var(--text-2); }
+      .p-rechts .lautstaerke { width: 90px; height: 5px; border-radius: 3px; background: var(--flaeche-3); position: relative; }
+      .p-rechts .lautstaerke::before { content:""; position:absolute; left:0; top:0; bottom:0; width:65%; background: var(--text-3); border-radius:3px; }
+      .p-rechts button { border:none; background:transparent; color:var(--text-2); cursor:pointer; font-size: 0.95rem; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip"><span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i></button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche <button class="nav-einklapp" title="Navigation ausblenden"><i class="fa-solid fa-angles-left"></i></button></div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+        <div class="nav-fuss">
+          <div class="nav-version">Kellerwolke v0.45.0</div>
+        </div>
+      </nav>
+
+      <section class="inhalt">
+        <!-- App-Leiste: die Medien-App ist gewaehlt -->
+        <div class="app-leiste">
+          <button class="app-knopf"><i class="fa-solid fa-folder"></i> Dateien</button>
+          <button class="app-knopf aktiv"><i class="fa-solid fa-photo-film"></i> Medien</button>
+        </div>
+
+        <div class="werkzeuge">
+          <div class="seg">
+            <button class="aktiv"><i class="fa-solid fa-layer-group"></i> Alle Medien</button>
+            <button><i class="fa-solid fa-folder"></i> Dieser Ordner</button>
+          </div>
+          <div class="seg">
+            <button class="aktiv">Alle</button>
+            <button><i class="fa-regular fa-image"></i> Bilder</button>
+            <button><i class="fa-solid fa-music"></i> Audio</button>
+          </div>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button class="aktiv" title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+          </div>
+          <span class="anzahl">7 Bilder &middot; 5 Audios</span>
+        </div>
+
+        <nav class="breadcrumb"><span class="aktuell">Meine Dateien</span></nav>
+
+        <div class="medien-grid">
+          <!-- laufender Audio-Titel -->
+          <div class="m-audio spielt">
+            <div class="m-cover cov-a">
+              <span class="m-format">WAV</span>
+              <span class="m-play"><span class="eq"><span></span><span></span><span></span><span></span><span></span></span></span>
+            </div>
+            <div class="info"><div class="titel">Interview Teil 1.wav</div><div class="dauer"><i class="fa-solid fa-volume-high"></i> laeuft &middot; 3:47</div></div>
+          </div>
+
+          <div class="m-bild"><div class="foto foto-a"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+          <div class="m-bild"><div class="foto foto-b"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+
+          <div class="m-audio">
+            <div class="m-cover cov-b"><i class="fa-solid fa-music"></i><span class="m-format">OGG</span><span class="m-play"><i class="fa-solid fa-circle-play"></i></span></div>
+            <div class="info"><div class="titel">Notiz Mietvertrag.ogg</div><div class="dauer">1:12</div></div>
+          </div>
+
+          <div class="m-bild"><div class="foto foto-c"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+
+          <div class="m-audio">
+            <div class="m-cover cov-c"><i class="fa-solid fa-music"></i><span class="m-format">MP3</span><span class="m-play"><i class="fa-solid fa-circle-play"></i></span></div>
+            <div class="info"><div class="titel">Aufnahme_2026-03-31.mp3</div><div class="dauer">5:08</div></div>
+          </div>
+
+          <div class="m-bild"><div class="foto foto-d"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+          <div class="m-bild"><div class="foto foto-e"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+
+          <div class="m-audio">
+            <div class="m-cover cov-d"><i class="fa-solid fa-music"></i><span class="m-format">M4A</span><span class="m-play"><i class="fa-solid fa-circle-play"></i></span></div>
+            <div class="info"><div class="titel">Gespraech Versicherung.m4a</div><div class="dauer">8:23</div></div>
+          </div>
+
+          <div class="m-bild"><div class="foto foto-f"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+          <div class="m-bild"><div class="foto foto-a"></div><span class="typ"><i class="fa-solid fa-image"></i></span></div>
+
+          <div class="m-audio">
+            <div class="m-cover cov-a"><i class="fa-solid fa-music"></i><span class="m-format">FLAC</span><span class="m-play"><i class="fa-solid fa-circle-play"></i></span></div>
+            <div class="info"><div class="titel">Sprachnotiz.flac</div><div class="dauer">0:44</div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Durchgehende Player-Leiste -->
+    <div class="player">
+      <div class="p-jetzt">
+        <div class="p-cover cov-a"><i class="fa-solid fa-music"></i></div>
+        <div class="p-text">
+          <div class="p-titel">Interview Teil 1.wav</div>
+          <div class="p-pfad">Meine Dateien / Aufnahmen</div>
+        </div>
+      </div>
+      <div class="p-mitte">
+        <div class="p-tasten">
+          <button title="Zufall"><i class="fa-solid fa-shuffle"></i></button>
+          <button title="Zurueck"><i class="fa-solid fa-backward-step"></i></button>
+          <button class="gross" title="Pause"><i class="fa-solid fa-pause"></i></button>
+          <button title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+          <button title="Wiederholen"><i class="fa-solid fa-repeat"></i></button>
+        </div>
+        <div class="p-fortschritt">
+          <span class="p-zeit">1:24</span>
+          <div class="p-spur"><div class="p-fuell"></div></div>
+          <span class="p-zeit">3:47</span>
+        </div>
+      </div>
+      <div class="p-rechts">
+        <button title="Warteschlange"><i class="fa-solid fa-list-ol"></i></button>
+        <button title="Lautstaerke"><i class="fa-solid fa-volume-high"></i></button>
+        <div class="lautstaerke"></div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

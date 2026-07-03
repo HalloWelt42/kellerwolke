@@ -1,0 +1,11 @@
+{
+  "id": "medien",
+  "name": "Medien",
+  "version": "1.0.0",
+  "kategorie": "ansicht-app",
+  "icon": "fa-solid fa-photo-film",
+  "backend_entry": "api:register",
+  "frontend_entry": "plugin.ts",
+  "kern_min": "0.44.0",
+  "daten_loeschen_bei_deinstall": "fragen"
+}
