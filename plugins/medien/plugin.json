@@ -7,5 +7,9 @@
   "backend_entry": "api:register",
   "frontend_entry": "plugin.ts",
   "kern_min": "0.44.0",
-  "daten_loeschen_bei_deinstall": "fragen"
+  "daten_loeschen_bei_deinstall": "fragen",
+  "behandelt": [
+    "bild",
+    "audio"
+  ]
 }

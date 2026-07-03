@@ -451,6 +451,26 @@ export async function pluginHochladen(datei: File): Promise<PluginInfo> {
   return (await antwort.json()) as PluginInfo;
 }
 
+// Startet den Backend-Prozess neu (damit Plugin-Aenderungen wirken).
+export function pluginNeustart(): Promise<void> {
+  return hole<void>("/v1/admin/neustart", { method: "POST" });
+}
+
+// Wartet, bis das Backend nach dem Neustart wieder antwortet.
+export async function warteAufGesundheit(maxMs = 30000): Promise<boolean> {
+  const bis = Date.now() + maxMs;
+  while (Date.now() < bis) {
+    try {
+      const r = await fetch("/api/health", { cache: "no-store" });
+      if (r.ok) return true;
+    } catch {
+      // Backend noch unten - weiter warten
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  return false;
+}
+
 export function externeQuelleAnlegen(
   besitzerId: string,
   name: string,

@@ -21,6 +21,8 @@ class PluginAus(BaseModel):
     aktiv: bool
     defekt: str | None = None
     quelle: str
+    behandelt: list[str] = []
+    konflikt: list[str] = []  # Namen aktiver Plugins mit ueberlappenden Medientypen
 
 
 class PluginUpdate(BaseModel):

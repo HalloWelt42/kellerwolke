@@ -38,6 +38,7 @@ class Manifest(BaseModel):
     frontend_entry: str = "plugin.ts"
     kern_min: str = "0.0.0"
     daten_loeschen_bei_deinstall: str = "fragen"  # fragen | loeschen | behalten
+    behandelt: list[str] = []  # Medientypen, die das Plugin behandelt (z.B. ["bild","audio"]) - fuer Konflikterkennung
 
     def id_gueltig(self) -> bool:
         return bool(ID_MUSTER.match(self.id))

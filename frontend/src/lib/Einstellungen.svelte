@@ -239,6 +239,27 @@
       pluginUpload = false;
     }
   }
+
+  // Selbst-Neustart des Backends, damit Aktivieren/Deinstallieren/Upload sofort wirkt.
+  let neustartLaeuft = $state(false);
+  async function neustarten() {
+    neustartLaeuft = true;
+    pluginFehler = "";
+    try {
+      await api.pluginNeustart();
+    } catch {
+      // Verbindung kann beim Neustart abbrechen - egal, wir warten auf Gesundheit.
+    }
+    const ok = await api.warteAufGesundheit();
+    if (ok) location.reload();
+    else {
+      neustartLaeuft = false;
+      pluginFehler = "Neustart hat zu lange gedauert - bitte die Seite manuell neu laden.";
+    }
+  }
+
+  // Sind Aenderungen offen, die einen Neustart brauchen? (jede Meldung deutet darauf hin)
+  const neustartNoetig = $derived(pluginMeldung !== "");
 </script>
 
 <div class="app">
@@ -512,6 +533,12 @@
                     {#if p.defekt}
                       <span class="app-fehler"><i class="fa-solid fa-triangle-exclamation"></i> {p.defekt}</span>
                     {/if}
+                    {#if p.konflikt && p.konflikt.length}
+                      <span class="app-konflikt">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        Konflikt mit {p.konflikt.join(", ")} - behandeln dieselben Medientypen
+                      </span>
+                    {/if}
                   </div>
                 </div>
                 <div class="app-aktionen">
@@ -540,9 +567,24 @@
           </ul>
         {/if}
 
-        {#if pluginMeldung}<div class="meldung">{pluginMeldung}</div>{/if}
+        {#if neustartNoetig}
+          <div class="neustart-banner">
+            <span><i class="fa-solid fa-rotate"></i> {pluginMeldung}</span>
+            <button class="knopf klein primaer" onclick={neustarten}>
+              <i class="fa-solid fa-power-off"></i> Jetzt neu starten
+            </button>
+          </div>
+        {/if}
         {#if pluginFehler}<div class="fehler">{pluginFehler}</div>{/if}
       </div>
+
+      {#if neustartLaeuft}
+        <div class="neustart-overlay" role="alert">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+          <strong>Die App wird neu gestartet ...</strong>
+          <span>Einen Moment - die Seite lädt gleich automatisch neu.</span>
+        </div>
+      {/if}
     {/if}
   </section>
 </div>
@@ -650,6 +692,48 @@
   }
   .app-fehler {
     color: var(--gefahr);
+  }
+  .app-konflikt {
+    color: var(--warn);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .neustart-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--a3);
+    flex-wrap: wrap;
+    margin-top: var(--a3);
+    padding: var(--a2) var(--a3);
+    border: 1px solid var(--akzent);
+    border-radius: var(--r2);
+    background: var(--akzent-weich);
+    font-size: 0.9rem;
+  }
+  .neustart-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--a2);
+    background: color-mix(in srgb, var(--flaeche) 88%, transparent);
+    backdrop-filter: blur(2px);
+    color: var(--text);
+    text-align: center;
+    padding: var(--a4);
+  }
+  .neustart-overlay i {
+    font-size: 2.4rem;
+    color: var(--akzent);
+  }
+  .neustart-overlay span {
+    color: var(--text-2);
+    font-size: 0.9rem;
   }
   .app-aktionen {
     display: flex;

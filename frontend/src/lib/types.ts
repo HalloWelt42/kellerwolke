@@ -95,6 +95,8 @@ export interface PluginInfo {
   aktiv: boolean;
   defekt: string | null;
   quelle: string;
+  behandelt: string[];
+  konflikt: string[];
 }
 
 export interface Version {

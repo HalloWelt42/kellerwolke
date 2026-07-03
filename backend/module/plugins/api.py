@@ -4,6 +4,10 @@ Aktiv/Inaktiv-Aenderungen wirken beim naechsten Neustart (Starlette entfernt
 Router zur Laufzeit nicht sauber) - die Antworten sagen das ehrlich.
 """
 
+import asyncio
+import os
+import sys
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
 from app import plugins as plugin_lader
@@ -33,9 +37,26 @@ async def app_leiste(request: Request, benutzer=Depends(aktueller_benutzer)):
 
 
 @router.get("/admin/plugins", response_model=list[PluginAus])
-async def liste(admin=Depends(aktueller_admin)):
-    """Alle entdeckten Plugins mit Status (auch inaktive/defekte)."""
-    return [PluginAus(**r) for r in await plugin_lader.alle_aus_db()]
+async def liste(request: Request, admin=Depends(aktueller_admin)):
+    """Alle entdeckten Plugins mit Status, behandelten Medientypen und
+    Konflikten (andere aktive Plugins, die dieselben Typen behandeln)."""
+    zeilen = await plugin_lader.alle_aus_db()
+    geladen = getattr(request.app.state, "plugins", {})
+
+    def behandelt_von(pid: str) -> list[str]:
+        e = geladen.get(pid)
+        return list(getattr(e["manifest"], "behandelt", []) or []) if e else []
+
+    aktive = [(z["id"], z["name"], set(behandelt_von(z["id"]))) for z in zeilen if z["aktiv"]]
+    ergebnis = []
+    for z in zeilen:
+        beh = behandelt_von(z["id"])
+        konflikt = []
+        if z["aktiv"] and beh:
+            meine = set(beh)
+            konflikt = [name for oid, name, typen in aktive if oid != z["id"] and (meine & typen)]
+        ergebnis.append(PluginAus(**z, behandelt=beh, konflikt=konflikt))
+    return ergebnis
 
 
 @router.patch("/admin/plugins/{plugin_id}", status_code=204)
@@ -68,3 +89,17 @@ async def hochladen(archiv: UploadFile = File(...), admin=Depends(aktueller_admi
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return PluginAus(**info)
+
+
+@router.post("/admin/neustart", status_code=202)
+async def neustart(admin=Depends(aktueller_admin)):
+    """Startet den Backend-Prozess neu (execv), damit Plugin-Aenderungen sofort
+    wirken. Antwortet zuerst; der eigentliche Neustart folgt eine halbe Sekunde
+    spaeter, damit die Antwort noch rausgeht. Die Oberflaeche wartet dann auf die
+    Gesundheitspruefung und laedt neu."""
+    async def _tue_es():
+        await asyncio.sleep(0.5)
+        os.execv(sys.executable, [sys.executable, "-m", "uvicorn", *sys.argv[1:]])
+
+    asyncio.create_task(_tue_es())
+    return {"status": "neustart"}
