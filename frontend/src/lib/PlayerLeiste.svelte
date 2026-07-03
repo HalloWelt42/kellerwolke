@@ -6,7 +6,9 @@
   import {
     player, aktuelleSpur, spurWeiter, spurZurueck, playerBeenden,
     beiEnde, wiederholungWeiter, zustandLaden, zustandSpeichern,
+    audioElement, umschalten, springen,
   } from "./player.svelte";
+  import NowPlaying from "./NowPlaying.svelte";
   import { haupt } from "./zustand.svelte";
   import { waehleApp } from "../plugins/appzustand.svelte";
 
@@ -45,6 +47,26 @@
     }
   });
 
+  // Tempo auf das Element spiegeln.
+  $effect(() => {
+    if (audioEl) audioEl.playbackRate = player.tempo;
+  });
+
+  // Media Session: Titel + Wiedergabestatus.
+  $effect(() => {
+    const s = spur;
+    if (!("mediaSession" in navigator)) return;
+    if (s) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: s.titel,
+        artist: s.pfad && s.pfad.length ? s.pfad.map((x) => x.name).join(" / ") : "Kellerwolke",
+      });
+      navigator.mediaSession.playbackState = player.laeuft ? "playing" : "paused";
+    } else {
+      navigator.mediaSession.metadata = null;
+    }
+  });
+
   // Strukturzustand sichern, sobald er sich aendert (Position kommt zusaetzlich
   // beim Verlassen der Seite dazu - kein Speichern im Sekundentakt).
   $effect(() => {
@@ -56,9 +78,23 @@
   });
 
   onMount(() => {
+    audioElement(audioEl);
     const sichern = () => zustandSpeichern();
     window.addEventListener("beforeunload", sichern);
-    return () => window.removeEventListener("beforeunload", sichern);
+    // Media Session: Betriebssystem-/Kopfhoerer-/Sperrbildschirm-Steuerung.
+    if ("mediaSession" in navigator) {
+      const ms = navigator.mediaSession;
+      ms.setActionHandler("play", () => umschalten());
+      ms.setActionHandler("pause", () => umschalten());
+      ms.setActionHandler("previoustrack", () => spurZurueck());
+      ms.setActionHandler("nexttrack", () => spurWeiter());
+      ms.setActionHandler("seekbackward", () => springen(-10));
+      ms.setActionHandler("seekforward", () => springen(10));
+    }
+    return () => {
+      window.removeEventListener("beforeunload", sichern);
+      audioElement(null);
+    };
   });
 
   function toggle() {
@@ -169,6 +205,7 @@
     </div>
 
     <div class="s-rechts">
+      <button class="s-mini" title="Große Ansicht" aria-label="Große Ansicht" onclick={() => (player.voll = true)}><i class="fa-solid fa-chevron-up"></i></button>
       <div class="s-laut">
         <button class="s-mini" aria-label={stummWirkt ? 'Ton an' : 'Stumm'} title={stummWirkt ? 'Ton an' : 'Stumm'} onclick={() => (player.stumm = !player.stumm)}>
           <i class="fa-solid {stummWirkt ? 'fa-volume-xmark' : player.lautstaerke < 0.5 ? 'fa-volume-low' : 'fa-volume-high'}"></i>
@@ -178,6 +215,10 @@
       <button class="s-mini" aria-label="Schließen" title="Schließen" onclick={playerBeenden}><i class="fa-solid fa-xmark"></i></button>
     </div>
   </div>
+{/if}
+
+{#if player.voll}
+  <NowPlaying />
 {/if}
 
 <style>

@@ -292,6 +292,90 @@
       </section>
     </div>
 
+    <style>
+      /* Now-Playing (ausgeklappte Wiedergabe) - Vorschlag M2 */
+      .jetzt-voll { position: fixed; inset: 0; z-index: 60; background: var(--flaeche); }
+      .jv-panel { height: 100%; max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; padding: 0 var(--a5); }
+      .jv-kopf { display: flex; align-items: center; justify-content: space-between; padding: var(--a3) 0; }
+      .jv-min { border: none; background: var(--flaeche-2); color: var(--text-2); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
+      .jv-titelzeile { color: var(--text-3); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
+      .jv-body { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--a5); align-items: center; padding-bottom: 96px; min-height: 0; }
+      .jv-haupt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--a3); }
+      .jv-cover { width: min(300px, 38vh); aspect-ratio: 1; border-radius: var(--r3); display: grid; place-items: center; color: #fff; font-size: 3.6rem; }
+      .jv-titel { font-size: 1.35rem; font-weight: 700; }
+      .jv-sub { color: var(--text-3); margin-top: -6px; }
+      .jv-fortschritt { display: flex; align-items: center; gap: var(--a2); width: 100%; max-width: 440px; }
+      .jv-zeit { font-size: 0.78rem; color: var(--text-3); min-width: 36px; font-variant-numeric: tabular-nums; }
+      .jv-spur { flex: 1; height: 6px; border-radius: 3px; background: var(--flaeche-3); position: relative; }
+      .jv-fuell { position: absolute; top: 0; bottom: 0; left: 0; width: 37%; background: var(--akzent); border-radius: 3px; }
+      .jv-transport { display: flex; align-items: center; gap: var(--a3); }
+      .jv-transport button { border: none; background: transparent; color: var(--text-2); cursor: pointer; font-size: 1.1rem; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; position: relative; }
+      .jv-transport button:hover { background: var(--flaeche-2); color: var(--text); }
+      .jv-transport .an { color: var(--akzent); }
+      .jv-transport .gross { width: 58px; height: 58px; font-size: 1.4rem; background: var(--akzent); color: var(--akzent-text); }
+      .jv-transport .skip i { font-size: 1.35rem; }
+      .jv-transport .skip b { position: absolute; top: 52%; left: 50%; transform: translate(-50%, -50%); font-size: 0.5rem; font-weight: 700; }
+      .jv-tempo { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: center; }
+      .jv-tempo-l { color: var(--text-3); font-size: 0.8rem; margin-right: var(--a1); }
+      .jv-tempo button { border: 1px solid var(--rand); background: var(--flaeche-2); color: var(--text-2); border-radius: 999px; padding: 3px 11px; font-size: 0.78rem; cursor: pointer; }
+      .jv-tempo button.an { background: var(--akzent-weich); color: var(--akzent-stark); border-color: transparent; font-weight: 600; }
+      .jv-schlange { align-self: stretch; display: flex; flex-direction: column; min-height: 0; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: var(--r3); padding: var(--a3); }
+      .jv-schlange-kopf { font-weight: 600; margin-bottom: var(--a2); display: flex; align-items: center; gap: var(--a2); }
+      .jv-schlange ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+      .jv-schlange li { display: flex; align-items: center; gap: var(--a2); padding: var(--a2); border-radius: var(--r2); }
+      .jv-schlange li.jetzt { background: var(--akzent-weich); }
+      .js-num { width: 24px; text-align: center; color: var(--text-3); font-size: 0.85rem; flex: none; }
+      .jv-schlange li.jetzt .js-num { color: var(--akzent); }
+      .js-t { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; text-align: left; }
+      .js-t small { color: var(--text-3); font-size: 0.72rem; }
+      .js-t b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .js-d { color: var(--text-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; flex: none; }
+    </style>
+    <div class="jetzt-voll">
+      <div class="jv-panel">
+        <div class="jv-kopf">
+          <button class="jv-min" title="Einklappen"><i class="fa-solid fa-chevron-down"></i></button>
+          <span class="jv-titelzeile">Aktuelle Wiedergabe</span>
+          <span style="width: 36px"></span>
+        </div>
+        <div class="jv-body">
+          <div class="jv-haupt">
+            <div class="jv-cover cov-a"><i class="fa-solid fa-music"></i></div>
+            <div class="jv-titel">Interview Teil 1.wav</div>
+            <div class="jv-sub">Meine Dateien / Aufnahmen</div>
+            <div class="jv-fortschritt">
+              <span class="jv-zeit">1:24</span>
+              <div class="jv-spur"><div class="jv-fuell"></div></div>
+              <span class="jv-zeit">3:47</span>
+            </div>
+            <div class="jv-transport">
+              <button class="an" title="Zufall"><i class="fa-solid fa-shuffle"></i></button>
+              <button title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+              <button class="skip" title="30 Sekunden zurück"><i class="fa-solid fa-rotate-left"></i><b>30</b></button>
+              <button class="gross" title="Pause"><i class="fa-solid fa-pause"></i></button>
+              <button class="skip" title="30 Sekunden vor"><i class="fa-solid fa-rotate-right"></i><b>30</b></button>
+              <button title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+              <button title="Wiederholen"><i class="fa-solid fa-repeat"></i></button>
+            </div>
+            <div class="jv-tempo">
+              <span class="jv-tempo-l">Tempo</span>
+              <button>0,5x</button><button>0,75x</button><button class="an">1x</button><button>1,25x</button><button>1,5x</button><button>2x</button>
+            </div>
+          </div>
+          <aside class="jv-schlange">
+            <div class="jv-schlange-kopf"><i class="fa-solid fa-list-ol"></i> Als Nächstes</div>
+            <ul>
+              <li class="jetzt"><span class="js-num"><i class="fa-solid fa-volume-high"></i></span><span class="js-t"><b>Interview Teil 1.wav</b><small>Aufnahmen</small></span><span class="js-d">3:47</span></li>
+              <li><span class="js-num">2</span><span class="js-t"><b>Interview Teil 2.wav</b><small>Aufnahmen</small></span><span class="js-d">5:12</span></li>
+              <li><span class="js-num">3</span><span class="js-t"><b>Song - Sommerlicht.mp3</b><small>Musik</small></span><span class="js-d">3:03</span></li>
+              <li><span class="js-num">4</span><span class="js-t"><b>Notiz Montag.m4a</b><small>Sprachmemos</small></span><span class="js-d">0:48</span></li>
+              <li><span class="js-num">5</span><span class="js-t"><b>Konzert Mitschnitt.flac</b><small>Musik</small></span><span class="js-d">7:22</span></li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </div>
+
     <!-- Durchgehende Player-Leiste -->
     <div class="player">
       <div class="p-jetzt">

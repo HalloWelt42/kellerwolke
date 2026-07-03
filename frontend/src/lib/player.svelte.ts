@@ -22,6 +22,8 @@ export const player = $state<{
   stumm: boolean;
   wiederholung: Wiederholung;
   zufall: boolean;
+  tempo: number; // Wiedergabegeschwindigkeit, 1 = normal
+  voll: boolean; // Now-Playing-Ansicht offen
 }>({
   liste: [],
   index: -1,
@@ -32,6 +34,8 @@ export const player = $state<{
   stumm: false,
   wiederholung: "aus",
   zufall: false,
+  tempo: 1,
+  voll: false,
 });
 
 export function aktuelleSpur(): Spur | null {
@@ -40,6 +44,32 @@ export function aktuelleSpur(): Spur | null {
 export function spielen(liste: Spur[], index: number): void {
   player.liste = liste;
   player.index = index;
+}
+
+// Das (einzige) Audio-Element meldet sich hier an, damit sowohl die Leiste als
+// auch die Now-Playing-Ansicht dieselbe Wiedergabe steuern koennen.
+let el: HTMLAudioElement | null = null;
+export function audioElement(a: HTMLAudioElement | null): void {
+  el = a;
+}
+export function umschalten(): void {
+  if (!el) return;
+  if (el.paused) el.play().catch(() => {});
+  else el.pause();
+}
+export function suchenZu(sekunde: number): void {
+  if (el && isFinite(sekunde)) el.currentTime = Math.max(0, sekunde);
+}
+export function springen(delta: number): void {
+  if (!el) return;
+  const d = el.duration || 0;
+  el.currentTime = Math.max(0, Math.min(d, el.currentTime + delta));
+}
+export function setzeTempo(t: number): void {
+  player.tempo = t;
+}
+export function springeZuIndex(i: number): void {
+  if (i >= 0 && i < player.liste.length) player.index = i;
 }
 
 function zufallsIndex(): number {
@@ -118,6 +148,7 @@ export function zustandLaden(): number {
     if (typeof d.stumm === "boolean") player.stumm = d.stumm;
     if (d.wiederholung === "aus" || d.wiederholung === "eine" || d.wiederholung === "alle") player.wiederholung = d.wiederholung;
     if (typeof d.zufall === "boolean") player.zufall = d.zufall;
+    if (typeof d.tempo === "number") player.tempo = d.tempo;
     return typeof d.zeit === "number" ? d.zeit : 0;
   } catch {
     return 0;
@@ -136,6 +167,7 @@ export function zustandSpeichern(): void {
         stumm: player.stumm,
         wiederholung: player.wiederholung,
         zufall: player.zufall,
+        tempo: player.tempo,
       }),
     );
   } catch {
