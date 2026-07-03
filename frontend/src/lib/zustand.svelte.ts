@@ -1,6 +1,6 @@
 import * as api from "./api";
 import { Browser, erzeugeBrowser } from "./browser.svelte";
-import type { SpeicherStatus, Vorgang } from "./types";
+import type { Knoten, SpeicherStatus, Vorgang } from "./types";
 
 // App-globaler Zustand: alles, was NICHT zu einer einzelnen Browsing-Flaeche
 // gehoert (Hintergrund-Vorgaenge, Upload-Fortschrittskarte, Speicheranzeige,
@@ -267,6 +267,128 @@ export async function hochladen(
     await ziel.ladeOrdner();
     ladeSpeicher();
     // Jeder Upload startet einen Indizierungs-Vorgang - sofort anzeigen.
+    ladeVorgaenge();
+  }
+}
+
+// --- Ordner-Upload (Drag-and-drop ganzer Ordner) ---------------------------
+// Traversiert die abgelegten Eintraege, legt die Ordnerstruktur an und laedt
+// alle Dateien an ihren Platz. Die Eintraege werden in aufDrop synchron per
+// webkitGetAsEntry eingesammelt und hier asynchron abgearbeitet.
+
+async function sammleDateien(
+  eintrag: FileSystemEntry,
+  pfad: string[],
+  raus: { datei: File; pfad: string[] }[],
+): Promise<void> {
+  if (eintrag.isFile) {
+    const datei = await new Promise<File>((res, rej) => (eintrag as FileSystemFileEntry).file(res, rej));
+    raus.push({ datei, pfad });
+  } else if (eintrag.isDirectory) {
+    const leser = (eintrag as FileSystemDirectoryEntry).createReader();
+    // readEntries liefert hoechstens ~100 Eintraege je Aufruf - bis leer wiederholen.
+    let stapel: FileSystemEntry[];
+    do {
+      stapel = await new Promise<FileSystemEntry[]>((res, rej) => leser.readEntries(res, rej));
+      for (const k of stapel) await sammleDateien(k, [...pfad, eintrag.name], raus);
+    } while (stapel.length > 0);
+  }
+}
+
+// Legt einen Ordner an oder liefert den vorhandenen gleichen Namens (die
+// Datenbank verbietet doppelte Namen je Elternordner) - wiederholte Ablagen
+// mischen sich so in den vorhandenen Baum, statt zu scheitern.
+async function ordnerSicherstellen(name: string, parentId: string | null): Promise<string> {
+  try {
+    return (await api.ordnerAnlegen(name, parentId)).id;
+  } catch (e) {
+    let kinder: Knoten[] = [];
+    try {
+      kinder = await api.kinder(parentId);
+    } catch {
+      // Auflisten fehlgeschlagen - unten den Originalfehler werfen.
+    }
+    const vorhanden = kinder.find((k) => k.typ === "ordner" && k.name.toLowerCase() === name.toLowerCase());
+    if (vorhanden) return vorhanden.id;
+    throw e;
+  }
+}
+
+export async function strukturHochladen(eintraege: FileSystemEntry[], ziel: Browser = haupt): Promise<void> {
+  if (zustand.uploads.length > 0) return; // kein ueberlappender Upload
+  const alle: { datei: File; pfad: string[] }[] = [];
+  for (const e of eintraege) await sammleDateien(e, [], alle);
+  if (alle.length === 0) return;
+
+  const start = ziel.aktuellerOrdner;
+  ziel.fehler = "";
+  uploadAbgebrochen = false;
+
+  // Ordnerstruktur anlegen (kuerzeste Pfade zuerst), Pfad -> Ordner-Id.
+  const idFuer = new Map<string, string | null>();
+  idFuer.set("", start);
+  const pfade = new Set<string>();
+  for (const { pfad } of alle) for (let i = 1; i <= pfad.length; i++) pfade.add(pfad.slice(0, i).join("/"));
+  const sortiert = [...pfade].sort((a, b) => a.split("/").length - b.split("/").length);
+  try {
+    for (const p of sortiert) {
+      const teile = p.split("/");
+      const eltern = idFuer.get(teile.slice(0, -1).join("/")) ?? start;
+      idFuer.set(p, await ordnerSicherstellen(teile[teile.length - 1], eltern));
+    }
+  } catch (e) {
+    ziel.fehler = "Ordner konnte nicht angelegt werden: " + (e as Error).message;
+    return;
+  }
+
+  // Dateien hochladen (Fortschrittskarte je Datei, mit Ordner als Ziel).
+  zustand.uploads = alle.map(({ datei }) => ({ name: datei.name, prozent: 0, geladen: 0, gesamt: datei.size, tempo: 0, restzeit: -1 }));
+  try {
+    for (let i = 0; i < alle.length; i++) {
+      if (uploadAbgebrochen) break;
+      const { datei, pfad } = alle[i];
+      const parentId = idFuer.get(pfad.join("/")) ?? start;
+      let letzteZeit = Date.now();
+      let letzteBytes = 0;
+      try {
+        await api.hochladen(
+          datei,
+          parentId,
+          (geladen, gesamt) => {
+            const u = zustand.uploads[i];
+            if (!u) return;
+            const jetzt = Date.now();
+            const dt = (jetzt - letzteZeit) / 1000;
+            if (dt >= 0.2) {
+              u.tempo = (geladen - letzteBytes) / dt;
+              letzteBytes = geladen;
+              letzteZeit = jetzt;
+            }
+            u.geladen = geladen;
+            u.gesamt = gesamt;
+            u.prozent = gesamt ? Math.round((geladen / gesamt) * 100) : 0;
+            u.restzeit = u.tempo > 0 ? (gesamt - geladen) / u.tempo : -1;
+          },
+          (griff) => {
+            aktuellerUploadGriff = griff.abbrechen;
+          },
+        );
+        const u = zustand.uploads[i];
+        if (u) {
+          u.prozent = 100;
+          u.restzeit = 0;
+        }
+      } catch (f) {
+        if (uploadAbgebrochen) break;
+        ziel.fehler = (f as Error).message;
+        break;
+      }
+    }
+  } finally {
+    aktuellerUploadGriff = null;
+    zustand.uploads = [];
+    await ziel.ladeOrdner();
+    ladeSpeicher();
     ladeVorgaenge();
   }
 }

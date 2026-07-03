@@ -12,6 +12,7 @@
     vorgaengeUmschalten,
     uploadStoppen,
     hochladen,
+    strukturHochladen,
   } from "./lib/zustand.svelte";
   import { groesseText, zeitText } from "./lib/format";
   import Login from "./lib/Login.svelte";
@@ -125,6 +126,20 @@
     zieheDatei = false;
     if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
     e.preventDefault();
+    // Ganze Ordner? Eintraege synchron einsammeln (dataTransfer gilt nur waehrend
+    // des Ereignisses); enthaelt die Ablage einen Ordner, Struktur erhalten.
+    const posten = e.dataTransfer?.items;
+    if (posten && posten.length && typeof posten[0].webkitGetAsEntry === "function") {
+      const eintraege: FileSystemEntry[] = [];
+      for (const p of Array.from(posten)) {
+        const en = p.webkitGetAsEntry?.();
+        if (en) eintraege.push(en);
+      }
+      if (eintraege.some((en) => en.isDirectory)) {
+        strukturHochladen(eintraege);
+        return;
+      }
+    }
     const dateien = e.dataTransfer?.files;
     if (dateien && dateien.length) hochladen(dateien);
   }
@@ -148,8 +163,8 @@
     <div class="global-drop" role="presentation">
       <div class="global-drop-karte">
         <i class="fa-solid fa-cloud-arrow-up"></i>
-        <strong>Dateien hier ablegen</strong>
-        <span>Sie landen im aktuellen Ordner.</span>
+        <strong>Dateien und Ordner hier ablegen</strong>
+        <span>Sie landen im aktuellen Ordner - Ordner mit ihrer Struktur.</span>
       </div>
     </div>
   {/if}
