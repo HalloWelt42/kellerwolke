@@ -181,7 +181,9 @@
 {/if}
 
 <style>
-  .spieler { position: fixed; left: 0; right: 0; bottom: 0; height: 78px; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(320px, 1.6fr) minmax(160px, 1fr); align-items: center; gap: var(--a4); padding: 0 var(--a4); background: var(--flaeche); border-top: 1px solid var(--rand); z-index: 55; }
+  audio { display: none; }
+  /* Eigene, letzte Rasterzeile im .app-Grid - hebt die Ansicht an statt zu ueberlagern. */
+  .spieler { grid-column: 1 / -1; grid-row: 3; height: 78px; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(320px, 1.6fr) minmax(160px, 1fr); align-items: center; gap: var(--a4); padding: 0 var(--a4); background: var(--flaeche); border-top: 1px solid var(--rand); }
   .s-jetzt { display: flex; align-items: center; gap: var(--a3); min-width: 0; }
   .s-cover { width: 48px; height: 48px; border-radius: var(--r2); display: grid; place-items: center; color: #fff; font-size: 1.1rem; flex: none; background: linear-gradient(135deg, #6d5efc, #3b82f6); }
   .s-text { min-width: 0; }

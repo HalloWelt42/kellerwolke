@@ -134,6 +134,12 @@ textarea {
     "kopf kopf"
     "inhalt detail";
 }
+/* Bei aktivem Player eine dritte Rasterzeile: die Leiste hebt die gesamte
+   Ansicht an (Kopf, Navigation, Inhalt, Detail schrumpfen), statt sie zu
+   ueberlagern. Gilt fuer alle Spaltenvarianten (rows werden nur hier gesetzt). */
+.app.mit-player {
+  grid-template-rows: 56px 1fr auto;
+}
 .app.nav-aus > .nav {
   display: none;
 }

@@ -450,9 +450,4 @@
     color: var(--text-2);
     font-size: 0.9rem;
   }
-  /* Platz fuer die durchgehende Player-Leiste (fixiert, 78px), damit sie den
-     Inhalt in keiner Ansicht verdeckt. */
-  .app.mit-player .inhalt {
-    padding-bottom: 82px;
-  }
 </style>
