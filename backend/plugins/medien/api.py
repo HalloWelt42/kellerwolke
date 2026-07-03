@@ -1,0 +1,84 @@
+"""Medien-Plugin: register(kontext) baut den Router. Bild-Thumbnail/-Vollbild,
+Audio-Streaming mit HTTP-Range (fuers Spulen) und die baumweite Medienliste.
+Auth ueber Query-Token (?t=), weil <img>/<audio> keine Header setzen koennen.
+"""
+
+import re
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
+
+from app.plugin_api import PluginBeschreibung, PluginKontext
+
+from .dienst import MedienDienst
+
+_RANGE = re.compile(r"bytes=(\d*)-(\d*)")
+
+
+def register(kontext: PluginKontext) -> PluginBeschreibung:
+    dienst = MedienDienst(kontext)
+    router = APIRouter(prefix="/api/v1/plugins/medien", tags=["medien"])
+
+    async def benutzer(request: Request):
+        t = request.query_params.get("t") or request.headers.get("x-kellerwolke-sitzung", "")
+        b = await kontext.auth.sitzung_pruefen(t)
+        if not b:
+            raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
+        return b
+
+    @router.get("/thumb/{knoten_id}")
+    async def thumb(knoten_id: str, request: Request, kante: int = Query(320, ge=32, le=2000)):
+        b = await benutzer(request)
+        try:
+            daten, typ = await dienst.thumb(b["id"], knoten_id, kante)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Bild nicht gefunden")
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=415, detail="Bild nicht darstellbar")
+        return Response(content=daten, media_type=typ,
+                        headers={"Cache-Control": "private, max-age=86400"})
+
+    @router.get("/inline/{knoten_id}")
+    async def inline(knoten_id: str, request: Request):
+        b = await benutzer(request)
+        try:
+            daten, typ = await dienst.inline(b["id"], knoten_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Bild nicht gefunden")
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=415, detail="Bild nicht darstellbar")
+        return Response(content=daten, media_type=typ, headers={"Content-Disposition": "inline"})
+
+    @router.get("/stream/{knoten_id}")
+    async def stream(knoten_id: str, request: Request):
+        b = await benutzer(request)
+        try:
+            daten, typ = await dienst.audio(b["id"], knoten_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Audio nicht gefunden")
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=415, detail="Audio nicht abspielbar")
+        gesamt = len(daten)
+        bereich = request.headers.get("range")
+        if bereich:
+            m = _RANGE.match(bereich)
+            start = int(m.group(1)) if m and m.group(1) else 0
+            ende = int(m.group(2)) if m and m.group(2) else gesamt - 1
+            ende = min(ende, gesamt - 1)
+            start = max(0, min(start, ende))
+            teil = daten[start:ende + 1]
+            return Response(content=teil, status_code=206, media_type=typ, headers={
+                "Content-Range": f"bytes {start}-{ende}/{gesamt}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(teil)),
+                "Cache-Control": "private, max-age=86400",
+            })
+        return Response(content=daten, media_type=typ,
+                        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=86400"})
+
+    @router.get("/alle")
+    async def alle(request: Request):
+        b = await benutzer(request)
+        return await dienst.alle_medien(b["id"])
+
+    return PluginBeschreibung(router=router)

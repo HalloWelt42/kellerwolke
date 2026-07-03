@@ -27,6 +27,8 @@
   import Modal from "./lib/Modal.svelte";
   import Logo from "./lib/Logo.svelte";
   import AppLeiste from "./lib/AppLeiste.svelte";
+  import PlayerLeiste from "./lib/PlayerLeiste.svelte";
+  import { aktuelleSpur } from "./lib/player.svelte";
   import {
     aktiveApp,
     appZustand,
@@ -151,7 +153,7 @@
       </div>
     </div>
   {/if}
-  <div class="app" class:mit-detail={mitDetail} class:nav-aus={zustand.navAus}>
+  <div class="app" class:mit-detail={mitDetail} class:nav-aus={zustand.navAus} class:mit-player={!!aktuelleSpur()}>
     <header class="kopf">
       <div class="marke"><Logo size={22} /> Kellerwolke</div>
       <form class="kopf-suche" onsubmit={suchen}>
@@ -273,6 +275,8 @@
     {#if mitDetail && haupt.detail}
       <DetailPane k={haupt.detail} onTeilen={(k) => (teilenKnoten = k)} />
     {/if}
+
+    <PlayerLeiste />
   </div>
 
   {#if zustand.uploads.length > 0}
@@ -445,5 +449,10 @@
   .global-drop-karte span {
     color: var(--text-2);
     font-size: 0.9rem;
+  }
+  /* Platz fuer die durchgehende Player-Leiste (fixiert, 78px), damit sie den
+     Inhalt in keiner Ansicht verdeckt. */
+  .app.mit-player .inhalt {
+    padding-bottom: 82px;
   }
 </style>
