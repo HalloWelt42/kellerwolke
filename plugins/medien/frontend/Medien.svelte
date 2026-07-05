@@ -20,7 +20,9 @@
 
   const kaputt = new SvelteSet<string>();
   const dauern = new SvelteMap<string, number>(); // Audio-Dauer, clientseitig geladen
-  let modus = $state<"kachel_gross" | "kachel_klein" | "liste">("kachel_gross");
+  // Zwei sinnvolle Ansichten: grosse Kacheln (visuell) oder Liste mit Details.
+  // Eine zweite Kachelgroesse bringt keinen Mehrwert.
+  let modus = $state<"kacheln" | "liste">("kacheln");
   let quelle = $state<"alle" | "ordner">("alle");
   let filter = $state<"alle" | "bild" | "audio">("alle");
   let alle = $state<GMedium[]>([]);
@@ -53,7 +55,7 @@
   const medien = $derived(roh.filter((m) => filter === "alle" || m.typ === filter));
   const bilder = $derived(medien.filter((m) => m.typ === "bild"));
   const audios = $derived(medien.filter((m) => m.typ === "audio"));
-  const thumbKante = $derived(modus === "kachel_klein" ? 200 : 400);
+  const thumbKante = 400;
   const zahlBild = $derived(roh.filter((m) => m.typ === "bild").length);
   const zahlAudio = $derived(roh.filter((m) => m.typ === "audio").length);
 
@@ -113,9 +115,8 @@
     <button class:aktiv={filter === "audio"} onclick={() => setzeFilter("audio")}><i class="fa-solid fa-music"></i> Audio</button>
   </div>
   <div class="seg">
-    <button class:aktiv={modus === "kachel_gross"} title="Große Kacheln" onclick={() => (modus = "kachel_gross")}><i class="fa-solid fa-table-cells-large"></i></button>
-    <button class:aktiv={modus === "kachel_klein"} title="Kleine Kacheln" onclick={() => (modus = "kachel_klein")}><i class="fa-solid fa-table-cells"></i></button>
-    <button class:aktiv={modus === "liste"} title="Liste (mit Audiodaten)" onclick={() => (modus = "liste")}><i class="fa-solid fa-list"></i></button>
+    <button class:aktiv={modus === "kacheln"} title="Große Kacheln" onclick={() => (modus = "kacheln")}><i class="fa-solid fa-table-cells-large"></i></button>
+    <button class:aktiv={modus === "liste"} title="Liste mit Details" onclick={() => (modus = "liste")}><i class="fa-solid fa-list"></i></button>
   </div>
   {#if bilder.length > 0}
     <button class="med-diashow" title="Diashow starten" onclick={starteDiashow}><i class="fa-solid fa-play"></i> Diashow</button>
@@ -169,7 +170,7 @@
   <!-- Baut auf der Kern-Kachel auf (.grid/.kachel/.vorschau/.k-name aus app.css),
        damit sich das Raster GENAU wie im Datei-Browser verhaelt - kein eigenes,
        kollabierendes aspect-ratio-Raster mehr. -->
-  <div class="grid med-grid" class:klein={modus === "kachel_klein"}>
+  <div class="grid med-grid">
     {#each ordner as k (k.id)}
       <button class="kachel med-kachel" ondblclick={() => oeffneOrdner(k)} onclick={() => oeffneOrdner(k)} title={k.name}>
         <div class="vorschau ordner"><i class="fa-solid {symbol(k).icon}"></i></div>
@@ -231,10 +232,8 @@
      in app.css) - KEIN eigenes Raster mehr. Feste Vorschauhoehe statt aspect-ratio
      (das hier im echten App-Kontext kollabierte). Nur medienspezifische Zusaetze. */
   .med-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
-  .med-grid.klein { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
   .med-kachel { cursor: pointer; text-align: left; font: inherit; color: var(--text); }
   .med-kachel .vorschau { height: 128px; }
-  .med-grid.klein .vorschau { height: 88px; }
   .med-kachel.spielt { border-color: var(--akzent); background: var(--akzent-weich); }
   .med-voll { width: 100%; height: 100%; object-fit: cover; }
   .med-kachel .med-cover { background: linear-gradient(135deg, #6d5efc, #3b82f6); color: #fff; font-size: 1.7rem; position: relative; }

@@ -5,6 +5,10 @@
   interface Props { knoten: Knoten; browser: Browser; }
   let { knoten }: Props = $props();
   let kaputt = $state(false);
+  // Bei Dateiwechsel den Fehlerzustand zuruecksetzen - sonst haftet ein einmal
+  // fehlgeschlagenes Thumbnail (etwa waehrend eines Neustarts) an der naechsten
+  // Datei, obwohl deren Bild einwandfrei laedt.
+  $effect(() => { void knoten.id; kaputt = false; });
 </script>
 
 {#if kaputt}

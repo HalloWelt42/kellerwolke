@@ -466,14 +466,32 @@ textarea {
   overflow-y: auto;
   position: relative;
   z-index: 0;
+  /* Ansichts-Container: die Spalten richten sich nach der BREITE der Liste
+     (offenes Detail-Pane, Splitscreen), nicht nach dem Fenster - so schrumpft
+     der Name nie auf 0 und die Spalten laufen nicht ueber. */
+  container-type: inline-size;
 }
 .listenkopf,
 .zeile {
   display: grid;
-  grid-template-columns: 34px 1fr 110px 170px 96px;
+  grid-template-columns: 34px minmax(0, 1fr) 110px 170px 96px;
   align-items: center;
   gap: var(--a3);
   padding: 0 var(--a4);
+}
+/* Wenig Platz in der Liste selbst: zuerst das Datum weg (breiteste Spalte),
+   damit Name plus Groesse plus Aktionen sichtbar bleiben. */
+@container (max-width: 620px) {
+  .listenkopf,
+  .zeile {
+    grid-template-columns: 34px minmax(0, 1fr) 92px 92px;
+  }
+  /* Hoehere Spezifitaet als ".listenkopf .sortbar" (steht spaeter in der Datei),
+     damit das Datum-Kopffeld wirklich verschwindet - ohne !important. */
+  .liste .listenkopf .sp-geaendert,
+  .liste .zeile .z-geaendert {
+    display: none;
+  }
 }
 .listenkopf {
   height: 34px;
