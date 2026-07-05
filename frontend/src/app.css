@@ -571,6 +571,16 @@ textarea {
 .zeile.gezogen {
   opacity: 0.45;
 }
+/* Ziehbare (markierte, schreibbare) Eintraege zeigen den Greif-Cursor als
+   Hinweis, dass man sie aufnehmen und verschieben kann - gilt Liste UND Kachel. */
+.zeile[draggable="true"],
+.kachel[draggable="true"] {
+  cursor: grab;
+}
+.zeile[draggable="true"]:active,
+.kachel[draggable="true"]:active {
+  cursor: grabbing;
+}
 .z-aus {
   display: grid;
   place-items: center;
@@ -1539,12 +1549,12 @@ select.feld {
   flex: 1;
   min-height: 0;
 }
+/* Ziel-Pane beim Verschieben nur dezent umranden - NICHT die ganze Liste
+   einfaerben. Das praezise Ziel ist der Ordner darunter (.zielordner); nur wenn
+   man ueber leere Flaeche zieht, zeigt die Umrandung "in diesen Bereich". */
 .pane.ziel {
   outline: 2px dashed var(--akzent);
   outline-offset: -3px;
-}
-.pane.ziel .liste {
-  background: var(--akzent-weich);
 }
 /* Schmale Bereiche: kompakte Spalten (Auswahl, Name, Groesse), Datum/Aktionen
    entfallen, damit lange Namen nicht abgeschnitten werden. */
