@@ -148,25 +148,34 @@
     {/each}
   </div>
 {:else}
-  <div class="med-gitter" class:klein={modus === "kachel_klein"}>
+  <!-- Baut auf der Kern-Kachel auf (.grid/.kachel/.vorschau/.k-name aus app.css),
+       damit sich das Raster GENAU wie im Datei-Browser verhaelt - kein eigenes,
+       kollabierendes aspect-ratio-Raster mehr. -->
+  <div class="grid med-grid" class:klein={modus === "kachel_klein"}>
     {#each ordner as k (k.id)}
-      <button class="m-ordner" ondblclick={() => oeffneOrdner(k)} onclick={() => oeffneOrdner(k)} title={k.name}>
-        <i class="fa-solid {symbol(k).icon}"></i><span class="titel">{k.name}</span>
+      <button class="kachel med-kachel" ondblclick={() => oeffneOrdner(k)} onclick={() => oeffneOrdner(k)} title={k.name}>
+        <div class="vorschau ordner"><i class="fa-solid {symbol(k).icon}"></i></div>
+        <div class="k-name">{k.name}</div>
       </button>
     {/each}
     {#each medien as m (m.id)}
       {#if m.typ === "bild"}
-        <button class="m-bild" onclick={() => zeigeBild(m)} title={m.name}>
-          {#if kaputt.has(m.id)}<div class="m-platz"><i class="fa-regular fa-image"></i></div>
-          {:else}<img src={thumbUrl(m.id, thumbKante)} alt={m.name} loading="lazy" onerror={() => kaputt.add(m.id)} />{/if}
+        <button class="kachel med-kachel" onclick={() => zeigeBild(m)} title={m.name}>
+          <div class="vorschau">
+            {#if kaputt.has(m.id)}<i class="fa-regular fa-image"></i>
+            {:else}<img class="med-voll" src={thumbUrl(m.id, thumbKante)} alt={m.name} loading="lazy" onerror={() => kaputt.add(m.id)} />{/if}
+          </div>
+          <div class="k-name">{m.name}</div>
+          {#if quelle === "alle"}<div class="med-pfad">{pfadText(m.pfad)}</div>{/if}
         </button>
       {:else}
-        <button class="m-audio" class:spielt={spielId === m.id} onclick={() => spiele(m)} title={m.name}>
-          <div class="m-cover">
-            <span class="m-format">{formatKuerzel(m.name)}</span>
+        <button class="kachel med-kachel" class:spielt={spielId === m.id} onclick={() => spiele(m)} title={m.name}>
+          <div class="vorschau med-cover">
+            <span class="med-format">{formatKuerzel(m.name)}</span>
             <i class="fa-solid {spielId === m.id && player.laeuft ? 'fa-volume-high' : 'fa-music'}"></i>
           </div>
-          <div class="m-info"><span class="titel">{m.name}</span>{#if quelle === "alle"}<span class="pfad">{pfadText(m.pfad)}</span>{/if}</div>
+          <div class="k-name">{m.name}</div>
+          {#if quelle === "alle"}<div class="med-pfad">{pfadText(m.pfad)}</div>{/if}
         </button>
       {/if}
     {/each}
@@ -195,21 +204,19 @@
   .zahl { margin-left: auto; color: var(--text-3); font-size: 0.82rem; }
   .med-leer { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--a2); padding: var(--a5) 0; color: var(--text-3); font-size: 1.4rem; }
   .med-leer span { font-size: 0.9rem; }
-  .med-gitter { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--a3); padding: var(--a3) var(--a4); align-content: start; }
-  .med-gitter.klein { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: var(--a2); }
-  .m-bild { position: relative; aspect-ratio: 1; border: none; padding: 0; border-radius: var(--r2); overflow: hidden; cursor: pointer; background: var(--flaeche-2); }
-  .m-bild img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .m-platz { width: 100%; height: 100%; display: grid; place-items: center; color: var(--text-3); font-size: 1.8rem; }
-  .m-audio { aspect-ratio: 1; border: 1px solid var(--rand); border-radius: var(--r2); background: var(--flaeche); display: flex; flex-direction: column; overflow: hidden; cursor: pointer; padding: 0; text-align: left; }
-  .m-audio:hover { border-color: var(--rand-stark); }
-  .m-audio.spielt { border-color: var(--akzent); }
-  .m-cover { flex: 1; display: grid; place-items: center; color: #fff; font-size: 2rem; position: relative; background: linear-gradient(135deg, #6d5efc, #3b82f6); }
-  .m-format { position: absolute; top: 8px; right: 8px; font-size: 0.6rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,0.42); color: #fff; }
-  .m-info { padding: var(--a2) var(--a3); }
-  .m-info .titel { font-size: 0.84rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .m-info .pfad { font-size: 0.76rem; color: var(--akzent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .m-ordner { border: 1px solid var(--rand); background: var(--flaeche-2); border-radius: var(--r2); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--a2); aspect-ratio: 1; color: var(--akzent); font-size: 2rem; }
-  .m-ordner .titel { font-size: 0.8rem; color: var(--text); max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Medien-Kacheln bauen auf der Kern-Kachel auf (.grid/.kachel/.vorschau/.k-name
+     in app.css) - KEIN eigenes Raster mehr. Feste Vorschauhoehe statt aspect-ratio
+     (das hier im echten App-Kontext kollabierte). Nur medienspezifische Zusaetze. */
+  .med-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .med-grid.klein { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+  .med-kachel { cursor: pointer; text-align: left; font: inherit; color: var(--text); }
+  .med-kachel .vorschau { height: 128px; }
+  .med-grid.klein .vorschau { height: 88px; }
+  .med-kachel.spielt { border-color: var(--akzent); background: var(--akzent-weich); }
+  .med-voll { width: 100%; height: 100%; object-fit: cover; }
+  .med-kachel .med-cover { background: linear-gradient(135deg, #6d5efc, #3b82f6); color: #fff; font-size: 1.7rem; position: relative; }
+  .med-format { position: absolute; top: 6px; right: 6px; font-size: 0.6rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,0.42); color: #fff; }
+  .med-pfad { font-size: 0.76rem; color: var(--akzent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
 
   /* Listenansicht (v.a. fuer Audio) */
   .med-liste { flex: 1; overflow-y: auto; padding: 0 var(--a4); }
