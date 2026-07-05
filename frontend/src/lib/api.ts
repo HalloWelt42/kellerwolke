@@ -456,6 +456,15 @@ export function pluginNeustart(): Promise<void> {
   return hole<void>("/v1/admin/neustart", { method: "POST" });
 }
 
+// Selbstschutz: meldet ein nicht ladendes/renderndes Plugin als defekt; es wird
+// serverseitig deaktiviert (jeder angemeldete Nutzer darf das ausloesen).
+export function pluginMeldeDefekt(id: string, grund: string): Promise<void> {
+  return hole<void>(`/v1/plugins/${id}/melde-defekt`, {
+    method: "POST",
+    body: JSON.stringify({ grund }),
+  });
+}
+
 // Wartet, bis das Backend nach dem Neustart wieder antwortet.
 export async function warteAufGesundheit(maxMs = 30000): Promise<boolean> {
   const bis = Date.now() + maxMs;

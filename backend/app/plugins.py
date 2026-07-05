@@ -170,6 +170,15 @@ async def setze_aktiv(plugin_id: str, aktiv: bool) -> None:
         await conn.execute("UPDATE plugin SET aktiv=%s WHERE id=%s", (aktiv, plugin_id))
 
 
+async def markiere_defekt(plugin_id: str, grund: str) -> None:
+    """Selbstschutz: deaktiviert ein Plugin und vermerkt den Grund. Wird vom
+    Client ausgeloest, wenn ein Plugin nicht laedt oder rendert - so kann ein
+    kaputtes Plugin die App nicht dauerhaft stoeren."""
+    if not ID_MUSTER.match(plugin_id):
+        raise ValueError("Ungueltige Plugin-id")
+    await _als_defekt_markieren(plugin_id, grund or "Frontend-Ladefehler")
+
+
 async def deinstalliere(plugin_id: str, daten_loeschen: bool) -> None:
     """Entfernt den Registry-Eintrag und - bei daten_loeschen - das gesamte
     Plugin-Schema in EINER Anweisung (DROP SCHEMA CASCADE). Der Ordner bleibt

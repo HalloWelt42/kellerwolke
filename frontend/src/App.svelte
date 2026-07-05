@@ -35,6 +35,7 @@
     appZustand,
     ladeAktiveApps,
     waehleApp,
+    meldePluginDefekt,
     DEFAULT_APP_ID,
   } from "./plugins/registry.svelte";
   import type { Knoten } from "./lib/types";
@@ -66,6 +67,24 @@
 
   const aktuelleApp = $derived(aktiveApp());
   const istDefaultApp = $derived(aktuelleApp.id === DEFAULT_APP_ID);
+
+  // Selbstschutz: rendert eine Plugin-App fehlerhaft, wird sie nach kurzer Frist
+  // automatisch deaktiviert, damit sie die App nicht dauerhaft blockiert. Ein
+  // "Erneut versuchen" bricht die Frist ab.
+  let pluginAbschaltTimer: ReturnType<typeof setTimeout> | null = null;
+  function pluginFehler(id: string, e: unknown) {
+    console.error("Plugin-Fehler:", id, e);
+    if (pluginAbschaltTimer) clearTimeout(pluginAbschaltTimer);
+    pluginAbschaltTimer = setTimeout(
+      () => meldePluginDefekt(id, e instanceof Error ? e.message : String(e)),
+      8000,
+    );
+  }
+  function pluginErneut(reset: () => void) {
+    if (pluginAbschaltTimer) clearTimeout(pluginAbschaltTimer);
+    pluginAbschaltTimer = null;
+    reset();
+  }
   // Erlaubt die aktive App den aktuellen Bereich? Sonst zurueck auf Dateien.
   $effect(() => {
     const erlaubt = aktuelleApp.bereiche;
@@ -267,19 +286,18 @@
         {#if haupt.fehler}
           <div class="fehlerstreifen">{haupt.fehler}</div>
         {/if}
-        <svelte:boundary onerror={(e) => console.error("Plugin-Fehler:", aktuelleApp.id, e)}>
+        <svelte:boundary onerror={(e) => pluginFehler(aktuelleApp.id, e)}>
           <PluginAnsicht browser={haupt} />
           {#snippet failed(error, reset)}
             <div class="plugin-fehler" role="alert">
               <i class="fa-solid fa-triangle-exclamation"></i>
               <h3>Die App "{aktuelleApp.label}" ist auf einen Fehler gestoßen</h3>
-              <p>Der Rest von Kellerwolke läuft normal weiter.</p>
+              <p>Der Rest von Kellerwolke läuft normal weiter. Bleibt der Fehler, wird die App gleich automatisch deaktiviert.</p>
               <pre>{(error as Error)?.message ?? String(error)}</pre>
               <div class="pf-knoepfe">
-                <button class="knopf" onclick={reset}>Erneut versuchen</button>
-                <button class="knopf primaer" onclick={() => waehleApp(DEFAULT_APP_ID)}>
-                  Zu den Dateien
-                </button>
+                <button class="knopf" onclick={() => pluginErneut(reset)}>Erneut versuchen</button>
+                <button class="knopf" onclick={() => meldePluginDefekt(aktuelleApp.id, (error as Error)?.message ?? String(error))}>Jetzt deaktivieren</button>
+                <button class="knopf primaer" onclick={() => waehleApp(DEFAULT_APP_ID)}>Zu den Dateien</button>
               </div>
             </div>
           {/snippet}

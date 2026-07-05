@@ -103,3 +103,15 @@ async def neustart(admin=Depends(aktueller_admin)):
 
     asyncio.create_task(_tue_es())
     return {"status": "neustart"}
+
+
+@router.post("/plugins/{plugin_id}/melde-defekt", status_code=204)
+async def melde_defekt(plugin_id: str, eingabe: dict, benutzer=Depends(aktueller_benutzer)):
+    """Selbstschutz der App: ein Client meldet, dass ein Plugin nicht laedt oder
+    rendert. Das Plugin wird sofort deaktiviert, damit es die App nicht weiter
+    stoert. Bewusst fuer JEDEN angemeldeten Nutzer erlaubt (Sicherheitsmassnahme,
+    keine Verwaltung); ein Admin kann es nach der Reparatur wieder einschalten."""
+    try:
+        await plugin_lader.markiere_defekt(plugin_id, str(eingabe.get("grund", "")))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Ungueltige Plugin-id")
