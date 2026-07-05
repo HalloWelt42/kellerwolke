@@ -172,7 +172,8 @@
         <button class="kachel med-kachel" class:spielt={spielId === m.id} onclick={() => spiele(m)} title={m.name}>
           <div class="vorschau med-cover">
             <span class="med-format">{formatKuerzel(m.name)}</span>
-            <i class="fa-solid {spielId === m.id && player.laeuft ? 'fa-volume-high' : 'fa-music'}"></i>
+            <i class="med-note fa-solid fa-music"></i>
+            <span class="med-play"><i class="fa-solid {spielId === m.id && player.laeuft ? 'fa-pause' : 'fa-play'}"></i></span>
           </div>
           <div class="k-name">{m.name}</div>
           {#if quelle === "alle"}<div class="med-pfad">{pfadText(m.pfad)}</div>{/if}
@@ -215,6 +216,9 @@
   .med-kachel.spielt { border-color: var(--akzent); background: var(--akzent-weich); }
   .med-voll { width: 100%; height: 100%; object-fit: cover; }
   .med-kachel .med-cover { background: linear-gradient(135deg, #6d5efc, #3b82f6); color: #fff; font-size: 1.7rem; position: relative; }
+  /* Play-/Pause-Overlay auf der Audio-Kachel: bei Hover und beim laufenden Titel. */
+  .med-cover .med-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.5rem; background: rgba(0, 0, 0, 0.28); opacity: 0; transition: opacity 0.15s ease; }
+  .med-kachel:hover .med-play, .med-kachel.spielt .med-play { opacity: 1; }
   .med-format { position: absolute; top: 6px; right: 6px; font-size: 0.6rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,0.42); color: #fff; }
   .med-pfad { font-size: 0.76rem; color: var(--akzent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
 

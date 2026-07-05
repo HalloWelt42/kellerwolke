@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { Knoten } from "./types";
   import { symbol, groesseText } from "./format";
+  import { haupt } from "./zustand.svelte";
+  // aus appzustand (plugin-frei), NICHT registry - sonst Importzyklus.
+  import { vorschauFuer } from "../plugins/appzustand.svelte";
 
   interface Props {
     k: Knoten;
@@ -42,6 +45,9 @@
   }: Props = $props();
 
   const sym = $derived(symbol(k));
+  // Plugin-Vorschau (z.B. Bild-Thumbnail) - dieselbe Datei-Faehigkeit wie im
+  // Detail-Pane, nur hier im Raster. Ohne passendes Plugin bleibt das Symbol.
+  const vorschauK = $derived(k.typ === "datei" ? vorschauFuer(k) : null);
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
   const metaText = $derived(
     k.typ === "ordner"
@@ -112,8 +118,13 @@
     <i class="fa-solid fa-check"></i>
   </span>
 
-  <div class="vorschau" class:ordner={k.typ !== "datei"}>
-    <i class="fa-solid {sym.icon}"></i>
+  <div class="vorschau" class:ordner={k.typ !== "datei"} class:hat-vorschau={!!vorschauK}>
+    {#if vorschauK?.vorschau}
+      {@const V = vorschauK.vorschau}
+      <V knoten={k} browser={haupt} />
+    {:else}
+      <i class="fa-solid {sym.icon}"></i>
+    {/if}
   </div>
 
   {#if umbenennenAktiv}
