@@ -358,18 +358,24 @@ wird der Upload mit 409 abgelehnt.
 - **Deinstallieren**: mit Rückfrage, ob die eigenen Daten (Schema `plugin_<id>`)
   mitgelöscht werden. Bei `upload`-Plugins werden auch die Ordner entfernt.
 
-## 10. Referenz: die Bildergalerie
+## 10. Referenz: das Medien-Plugin
 
-Das mitgelieferte Plugin `galerie` ist die vollständige Referenzumsetzung:
+Das mitgelieferte Plugin `medien` ist die vollständige Referenzumsetzung. Es
+zeigt Bilder und Audio in einer Ansicht und geht damit über eine reine
+Bildergalerie hinaus:
 
 - Backend: serverseitige WebP-Thumbnails (Pillow, plattengecacht), HEIC optional
-  (pillow-heif), Endpunkte `/api/v1/plugins/galerie/thumb|inline|alle` mit
-  Token-Auth, Zugriff nur über `kontext.speicher`.
-- Frontend: App-Ansicht mit Kachel/Liste/Vollbild/Diashow und zentraler
-  Ansicht über alle Ordner; zusätzlich eine Datei-Fähigkeit (Bild-Vorschau im
-  Detail-Pane + Vollbild).
+  (pillow-heif), Audio-Streaming, Endpunkte
+  `/api/v1/plugins/medien/thumb|inline|stream|alle` mit Token-Auth, Zugriff nur
+  über `kontext.speicher`.
+- Frontend: App-Ansicht mit Kachel/Liste, zentraler Ansicht über alle Ordner,
+  Bild-Lightbox mit Diashow und Audio-Wiedergabe über die globale Player-Leiste
+  des Kerns. Zusätzlich Datei-Fähigkeiten (Bild-Vorschau + Vollbild, Audio-
+  Vorschau im Detail-Pane). Das Raster baut bewusst auf den Kern-Klassen
+  (`.grid`/`.kachel`/`.vorschau`) auf, statt ein eigenes nachzubauen.
 
-Sie eignet sich als Vorlage für eigene Plugins.
+Es eignet sich als Vorlage für eigene Plugins: Kernkomponenten nutzen, nur
+medienspezifische Zusätze selbst mitbringen.
 
 ## 11. Offener Architektur-Punkt
 

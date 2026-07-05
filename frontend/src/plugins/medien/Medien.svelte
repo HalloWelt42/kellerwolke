@@ -62,13 +62,23 @@
   function oeffneOrdner(k: Knoten) { browser.oeffnen(k); }
   function mmss(s: number | undefined) { if (s === undefined || !isFinite(s)) return "-"; const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${r.toString().padStart(2, "0")}`; }
 
-  // --- Bild-Lightbox ---
+  // --- Bild-Lightbox + Diashow ---
   let vollIndex = $state<number | null>(null);
+  let autoplay = $state(false);
+  let intervall = $state(4); // Sekunden je Bild
   const aktuellesBild = $derived(vollIndex === null ? null : (bilder[vollIndex] ?? null));
   function zeigeBild(m: Anzeige) { const i = bilder.findIndex((b) => b.id === m.id); if (i >= 0) vollIndex = i; }
-  function schliesse() { vollIndex = null; }
+  function starteDiashow() { if (bilder.length) { vollIndex = 0; autoplay = true; } }
+  function schliesse() { vollIndex = null; autoplay = false; }
   function bildWeiter() { if (vollIndex !== null && bilder.length) vollIndex = (vollIndex + 1) % bilder.length; }
   function bildZurueck() { if (vollIndex !== null && bilder.length) vollIndex = (vollIndex - 1 + bilder.length) % bilder.length; }
+  // Diashow: solange autoplay laeuft und ein Bild offen ist, automatisch weiter.
+  $effect(() => {
+    if (autoplay && vollIndex !== null && bilder.length > 1) {
+      const id = setInterval(bildWeiter, Math.max(1, intervall) * 1000);
+      return () => clearInterval(id);
+    }
+  });
 
   // --- Audio: die Wiedergabe laeuft in der globalen Player-Leiste (App-Rahmen),
   // damit sie die Navigation ueberlebt. Hier wird nur gestartet + hervorgehoben.
@@ -81,7 +91,12 @@
   }
 
   function taste(e: KeyboardEvent) {
-    if (vollIndex !== null) { if (e.key === "Escape") schliesse(); else if (e.key === "ArrowRight") bildWeiter(); else if (e.key === "ArrowLeft") bildZurueck(); }
+    if (vollIndex !== null) {
+      if (e.key === "Escape") schliesse();
+      else if (e.key === "ArrowRight") bildWeiter();
+      else if (e.key === "ArrowLeft") bildZurueck();
+      else if (e.key === " ") { e.preventDefault(); autoplay = !autoplay; }
+    }
   }
 </script>
 
@@ -102,6 +117,9 @@
     <button class:aktiv={modus === "kachel_klein"} title="Kleine Kacheln" onclick={() => (modus = "kachel_klein")}><i class="fa-solid fa-table-cells"></i></button>
     <button class:aktiv={modus === "liste"} title="Liste (mit Audiodaten)" onclick={() => (modus = "liste")}><i class="fa-solid fa-list"></i></button>
   </div>
+  {#if bilder.length > 0}
+    <button class="med-diashow" title="Diashow starten" onclick={starteDiashow}><i class="fa-solid fa-play"></i> Diashow</button>
+  {/if}
   <span class="zahl">{zahlBild} Bilder &middot; {zahlAudio} Audios</span>
 </div>
 
@@ -190,6 +208,8 @@
       <button class="vk" aria-label="Zurück" onclick={bildZurueck}><i class="fa-solid fa-chevron-left"></i></button>
       <span class="name">{aktuellesBild.name}</span>
       <span class="zaehler">{(vollIndex ?? 0) + 1} / {bilder.length}</span>
+      <button class="vk" class:aktiv={autoplay} title={autoplay ? "Pause" : "Diashow"} aria-label="Diashow" onclick={() => (autoplay = !autoplay)}><i class="fa-solid {autoplay ? 'fa-pause' : 'fa-play'}"></i></button>
+      <label class="sek" title="Sekunden je Bild"><input type="number" min="1" max="60" bind:value={intervall} /> s</label>
       <button class="vk" aria-label="Weiter" onclick={bildWeiter}><i class="fa-solid fa-chevron-right"></i></button>
       {#if aktuellesBild.pfad}<button class="vk" title="Zum Ordner" aria-label="Zum Ordner" onclick={() => zumOrdner(aktuellesBild)}><i class="fa-solid fa-folder-open"></i></button>{/if}
       <button class="vk" aria-label="Schließen" onclick={schliesse}><i class="fa-solid fa-xmark"></i></button>
@@ -202,6 +222,8 @@
   .seg { display: inline-flex; gap: 2px; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: var(--r2); padding: 2px; }
   .seg button { border: none; background: transparent; color: var(--text-2); font: inherit; font-size: 0.84rem; padding: var(--a1) var(--a2); border-radius: var(--r1); cursor: pointer; display: inline-flex; align-items: center; gap: var(--a1); }
   .seg button.aktiv { background: var(--akzent-weich); color: var(--akzent-stark); }
+  .med-diashow { border: 1px solid var(--rand); background: transparent; color: var(--text-2); font: inherit; font-size: 0.84rem; padding: var(--a1) var(--a2); border-radius: var(--r1); cursor: pointer; display: inline-flex; align-items: center; gap: var(--a1); }
+  .med-diashow:hover { background: var(--flaeche-3); }
   .zahl { margin-left: auto; color: var(--text-3); font-size: 0.82rem; }
   .med-leer { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--a2); padding: var(--a5) 0; color: var(--text-3); font-size: 1.4rem; }
   .med-leer span { font-size: 0.9rem; }
@@ -247,4 +269,7 @@
   .m-voll-leiste .zaehler { color: rgba(255,255,255,0.6); font-size: 0.82rem; }
   .vk { border: none; background: transparent; color: #fff; cursor: pointer; font-size: 1rem; width: 32px; height: 32px; border-radius: var(--r1); }
   .vk:hover { background: rgba(255,255,255,0.14); }
+  .vk.aktiv { color: var(--akzent); }
+  .sek { display: inline-flex; align-items: center; gap: 4px; font-size: 0.82rem; color: rgba(255,255,255,0.7); }
+  .sek input { width: 42px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: var(--r1); padding: 2px 4px; font: inherit; font-size: 0.82rem; }
 </style>

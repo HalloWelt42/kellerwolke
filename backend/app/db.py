@@ -101,7 +101,7 @@ def _anweisungen(text: str) -> list[str]:
 async def schema_aus_ordner_anwenden(conn, ordner: Path, search_path: str | None = None) -> None:
     """Wendet alle nummerierten .sql-Dateien aus ordner idempotent auf conn an.
 
-    Mit search_path (z.B. "plugin_galerie, public") landen unqualifizierte
+    Mit search_path (z.B. "plugin_medien, public") landen unqualifizierte
     Objekte im gewuenschten Schema, waehrend Kern-Tabellen ueber public
     auffindbar bleiben - so bekommt jedes Plugin sein eigenes Schema. Bei
     gesetztem search_path muss conn in einer Transaktion stehen (SET LOCAL).
