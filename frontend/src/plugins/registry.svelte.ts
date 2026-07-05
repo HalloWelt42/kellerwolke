@@ -1,19 +1,27 @@
 import type { Component } from "svelte";
 import * as api from "../lib/api";
 import type { Browser } from "../lib/browser.svelte";
-import type { Knoten } from "../lib/types";
 import Dateiliste from "../lib/Dateiliste.svelte";
-import type { AppPlugin, DateiFaehigkeit } from "./typen";
-import { DEFAULT_APP_ID, appZustand, waehleApp } from "./appzustand.svelte";
+import type { AppPlugin } from "./typen";
+import {
+  DEFAULT_APP_ID,
+  appZustand,
+  waehleApp,
+  pluginZustand,
+  vorschauFuer,
+  vollansichtFuer,
+} from "./appzustand.svelte";
 
 // Zentrale App-Registry. Der Datei-Browser ist die fest eingebaute Default-App
 // (KEIN Plugin). Plugin-Apps werden ISOLIERT und LAZY geladen: nur die aktiven
 // Plugins werden per dynamischem Import geholt, jedes in eigenem try/catch. Ein
 // kaputtes Plugin (z.B. fehlender Import) faellt damit fuer sich aus und wird
 // automatisch deaktiviert - es kann die Hauptanwendung NICHT mehr mitreissen.
-// (Frueher: eager import.meta.glob -> ein Fehler kippte das ganze Bundle.)
-// Der App-Auswahl-Zustand liegt bewusst plugin-frei in [[appzustand]].
-export { DEFAULT_APP_ID, appZustand, waehleApp };
+// WICHTIG: Die Registry importiert Dateiliste (fuer die Default-App). Deshalb
+// duerfen Kern-Komponenten wie Dateiliste die Registry NICHT importieren (Zyklus).
+// Der geladene-Plugins-Zustand UND die Datei-Faehigkeiten liegen daher plugin-frei
+// in [[appzustand]]; hier werden sie nur befuellt und re-exportiert.
+export { DEFAULT_APP_ID, appZustand, waehleApp, vorschauFuer, vollansichtFuer };
 
 const standardApp: AppPlugin = {
   id: DEFAULT_APP_ID,
@@ -32,17 +40,13 @@ for (const [pfad, loader] of Object.entries(module)) {
   if (treffer) loaderFuer[treffer[1]] = loader as () => Promise<unknown>;
 }
 
-// Erfolgreich geladene, aktive Plugin-Apps (reaktiv - fuellt sich nach dem
-// asynchronen Laden; die Oberflaeche zeigt sie dann an).
-let geladenePlugins = $state<AppPlugin[]>([]);
-
 export async function ladeAktiveApps(): Promise<void> {
   let aktive: { id: string }[] = [];
   try {
     aktive = await api.aktiveApps();
   } catch {
     appZustand.aktivierteIds = [];
-    geladenePlugins = [];
+    pluginZustand.geladen = [];
     return;
   }
   appZustand.aktivierteIds = aktive.map((a) => a.id);
@@ -66,14 +70,14 @@ export async function ladeAktiveApps(): Promise<void> {
       }
     }
   }
-  geladenePlugins = geladen;
+  pluginZustand.geladen = geladen;
 }
 
 // Ein Plugin zur Laufzeit (z.B. nach einem Render-Fehler in der Fehlergrenze)
 // als defekt melden und lokal entfernen.
 export async function meldePluginDefekt(id: string, grund: string): Promise<void> {
   appZustand.aktivierteIds = appZustand.aktivierteIds.filter((x) => x !== id);
-  geladenePlugins = geladenePlugins.filter((p) => p.id !== id);
+  pluginZustand.geladen = pluginZustand.geladen.filter((p) => p.id !== id);
   if (appZustand.aktivId === id) waehleApp(DEFAULT_APP_ID);
   try {
     await api.pluginMeldeDefekt(id, grund);
@@ -84,27 +88,11 @@ export async function meldePluginDefekt(id: string, grund: string): Promise<void
 
 // Default + geladene aktive Plugin-Apps, nach reihenfolge sortiert.
 export function sichtbareApps(): AppPlugin[] {
-  return [standardApp, ...geladenePlugins].sort(
+  return [standardApp, ...pluginZustand.geladen].sort(
     (a, b) => (a.reihenfolge ?? 99) - (b.reihenfolge ?? 99),
   );
 }
 
 export function aktiveApp(): AppPlugin {
   return sichtbareApps().find((a) => a.id === appZustand.aktivId) ?? standardApp;
-}
-
-// --- Datei-Faehigkeiten (nur geladener, aktiver Plugins) --------------------
-
-function aktiveFaehigkeiten(): DateiFaehigkeit[] {
-  return geladenePlugins.flatMap((p) => p.dateiFaehigkeiten ?? []);
-}
-
-// Erste passende Vorschau-Faehigkeit fuer den Knoten (oder null).
-export function vorschauFuer(k: Knoten): DateiFaehigkeit | null {
-  return aktiveFaehigkeiten().find((f) => f.vorschau && f.passt(k)) ?? null;
-}
-
-// Erste passende Vollansicht-Faehigkeit fuer den Knoten (oder null).
-export function vollansichtFuer(k: Knoten): DateiFaehigkeit | null {
-  return aktiveFaehigkeiten().find((f) => f.vollansicht && f.passt(k)) ?? null;
 }

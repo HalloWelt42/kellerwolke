@@ -36,8 +36,10 @@
     ladeAktiveApps,
     waehleApp,
     meldePluginDefekt,
+    vollansichtFuer,
     DEFAULT_APP_ID,
   } from "./plugins/registry.svelte";
+  import { vorschauZustand, schliesseVollansicht } from "./lib/vorschau.svelte";
   import type { Knoten } from "./lib/types";
 
   let verwaltungOffen = $state(false);
@@ -310,6 +312,16 @@
     {/if}
 
     <PlayerLeiste />
+
+    <!-- Zentrale Vollansicht: per Doppelklick/Detail-Pane geoeffnet, gerendert
+         ueber die Vollansicht-Faehigkeit des aktiven Plugins (z.B. Bild-Lightbox). -->
+    {#if vorschauZustand.knoten}
+      {@const vf = vollansichtFuer(vorschauZustand.knoten)}
+      {#if vf?.vollansicht}
+        {@const Voll = vf.vollansicht}
+        <Voll knoten={vorschauZustand.knoten} browser={haupt} schliessen={schliesseVollansicht} />
+      {/if}
+    {/if}
   </div>
 
   {#if zustand.uploads.length > 0}

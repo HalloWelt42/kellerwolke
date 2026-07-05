@@ -12,6 +12,10 @@
   import Kontextmenue from "./Kontextmenue.svelte";
   import type { MenuEintrag } from "./Kontextmenue.svelte";
   import Filterleiste from "./Filterleiste.svelte";
+  // WICHTIG: aus appzustand (plugin-frei), NICHT aus registry - die Registry
+  // importiert Dateiliste, ein Rueckimport erzeugte einen Importzyklus.
+  import { vollansichtFuer, vorschauFuer } from "../plugins/appzustand.svelte";
+  import { oeffneVollansicht } from "./vorschau.svelte";
 
   // Eine wiederverwendbare Browsing-Flaeche: rendert genau einen Browser (die
   // Einzelansicht ODER eine Splitscreen-Pane). Alle Interaktionen - Klick,
@@ -156,11 +160,21 @@
     auswahl.umschalten(k.id);
   }
 
-  // Doppelklick auf eine Datei laedt sie herunter (das bewusste "ganz holen").
-  // Bei Ordnern passiert nichts - der Einfachklick navigiert bereits hinein.
+  // Doppelklick OEFFNET die Vorschau, laedt NICHT herunter (Herunterladen ist eine
+  // bewusste eigene Aktion ueber Kontextmenue/Knopf). Reihenfolge: Plugin-
+  // Vollansicht (z.B. Bild-Lightbox) > Detail-Pane mit Plugin-Vorschau (z.B. Audio)
+  // > erst wenn es gar keine Vorschau gibt, wird die Datei geholt.
+  // Ordner navigiert bereits der Einfachklick.
   function rowDblClick(k: Knoten) {
-    if (verschiebeModus) return;
-    if (k.typ === "datei") browser.herunterladen(k);
+    if (verschiebeModus || k.typ !== "datei") return;
+    if (vollansichtFuer(k)) {
+      oeffneVollansicht(k);
+    } else if (vorschauFuer(k)) {
+      auswahl.waehleEinzeln(k.id);
+      browser.zeigeDetail(k);
+    } else {
+      browser.herunterladen(k);
+    }
   }
 
   // --- Inline-Umbenennen ------------------------------------------------------
