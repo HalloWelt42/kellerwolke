@@ -81,9 +81,9 @@ nie ein Marker ohne zugehörige Datei. Auf dem Entwickler-Mac ist die Option aus
 
 Damit die Anwendung nach einem Neustart von allein wieder hochkommt, richtet
 `tools/systemd-einrichten.sh` auf dem Zielgerät einen systemd-Dienst ein, der
-`./start.sh` als einzige Startlogik nutzt (Datenbank, Backend, Frontend). Die
+`./setup.sh` als einzige Startlogik nutzt (Datenbank, Backend, Frontend). Die
 Datenbank im Docker-Container hat zusätzlich `restart: unless-stopped`. Auf dem
-Entwickler-Mac entfällt der systemd-Schritt; dort wird mit `./start.sh`
+Entwickler-Mac entfällt der systemd-Schritt; dort wird mit `./setup.sh`
 gearbeitet.
 
 ## Durabilität beim Schreiben
