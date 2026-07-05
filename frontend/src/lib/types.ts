@@ -24,6 +24,8 @@ export interface Knoten {
   kinder_anzahl?: number | null;
   // Vom Nutzer als Favorit markiert.
   favorit?: boolean;
+  // Mit mindestens einer anderen Person geteilt (Kennzeichen in der Liste).
+  geteilt?: boolean;
   // Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
   besitzer_name?: string | null;
 }

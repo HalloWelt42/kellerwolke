@@ -83,12 +83,15 @@ class PostgresMetadataRepository:
     async def kinder(self, besitzer_id, parent_id):
         # Groesse der aktuellen Version gleich mitliefern (LEFT JOIN, hoechstens
         # ein Treffer je Knoten), damit die Liste sie ohne Zusatzabfrage zeigt.
-        # Zusaetzlich die Kinderzahl je Ordner (Zaehler) und Favoriten-Markierung.
+        # Zusaetzlich die Kinderzahl je Ordner (Zaehler), Favoriten-Markierung und
+        # ob der Knoten mit jemandem geteilt ist (dann Kennzeichen in der Liste).
         zusatz = (
             "(SELECT count(*) FROM knoten c "
             "WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl, "
             "EXISTS(SELECT 1 FROM favorit f "
-            "WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit"
+            "WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit, "
+            "EXISTS(SELECT 1 FROM freigabe fr "
+            "WHERE fr.knoten_id = k.id) AS geteilt"
         )
         if parent_id is None:
             return await self._alle(
@@ -139,7 +142,8 @@ class PostgresMetadataRepository:
         return await self._alle(
             "SELECT k.*, v.groesse, true AS favorit, "
             "(SELECT count(*) FROM knoten c WHERE c.parent_id = k.id AND NOT c.geloescht) "
-            "AS kinder_anzahl "
+            "AS kinder_anzahl, "
+            "EXISTS(SELECT 1 FROM freigabe fr WHERE fr.knoten_id = k.id) AS geteilt "
             "FROM favorit f JOIN knoten k ON k.id = f.knoten_id "
             "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
             "WHERE f.benutzer_id=%s AND NOT k.geloescht "

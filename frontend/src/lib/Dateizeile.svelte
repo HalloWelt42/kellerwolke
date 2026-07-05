@@ -138,6 +138,9 @@
       />
     {:else}
       <span class="titel">{k.name}</span>
+      {#if k.geteilt}
+        <i class="geteilt-marke fa-solid fa-share-nodes" title="Mit anderen geteilt" aria-label="Geteilt"></i>
+      {/if}
     {/if}
   </span>
 

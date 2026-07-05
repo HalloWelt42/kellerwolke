@@ -34,6 +34,8 @@ class KnotenAus(BaseModel):
     kinder_anzahl: int | None = None
     # Vom Nutzer als Favorit markiert.
     favorit: bool = False
+    # Mit mindestens einer anderen Person geteilt (Kennzeichen in der Liste).
+    geteilt: bool = False
     # Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
     besitzer_name: str | None = None
 

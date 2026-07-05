@@ -138,7 +138,12 @@
       onblur={() => onUmbenennenFertig(entwurf)}
     />
   {:else}
-    <div class="k-name" title={k.name}>{k.name}</div>
+    <div class="k-name-zeile">
+      <div class="k-name" title={k.name}>{k.name}</div>
+      {#if k.geteilt}
+        <i class="geteilt-marke fa-solid fa-share-nodes" title="Mit anderen geteilt" aria-label="Geteilt"></i>
+      {/if}
+    </div>
   {/if}
   <div class="k-meta">{metaText}</div>
 </div>

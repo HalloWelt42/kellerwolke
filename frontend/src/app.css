@@ -705,11 +705,24 @@ textarea {
 .kachel .vorschau.ordner {
   color: var(--ordner);
 }
+.kachel .k-name-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--a1);
+  min-width: 0;
+}
 .kachel .k-name {
   font-size: 0.86rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+/* Kennzeichen "mit anderen geteilt" - gleiches Symbol in Liste und Kacheln. */
+.geteilt-marke {
+  color: var(--akzent);
+  font-size: 0.72rem;
+  flex: none;
 }
 .kachel .k-meta {
   font-size: 0.75rem;
@@ -720,6 +733,9 @@ textarea {
   top: var(--a2);
   left: var(--a2);
   opacity: 0;
+  /* Ueber der Vorschau bleiben - Plugin-Cover (z.B. Audio) sind positioniert
+     und wuerden die Box sonst ueberdecken (verschwindet hinter der Ansicht). */
+  z-index: 2;
 }
 .kachel:hover .aus-box,
 .kachel.gewaehlt .aus-box {
