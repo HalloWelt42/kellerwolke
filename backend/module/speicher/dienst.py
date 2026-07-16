@@ -253,6 +253,49 @@ class SpeicherDienst:
         bloecke = [await self.blob_get(eigentuemer, c["blob_hash"], c.get("groesse", 0)) for c in teile]
         return (knoten, b"".join(bloecke))
 
+    async def geteilt_datei_kopf(self, leser_id, knoten_id):
+        """Prueft den Lesezugriff und liefert (knoten, groesse) - ohne Inhalt.
+        Damit kann die Auslieferung streamen, statt erst alles zu laden."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if not await repo.lese_zugriff(leser_id, knoten_id):
+                return None
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                return None
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+        return knoten, sum(c.get("groesse", 0) for c in teile)
+
+    async def geteilt_datei_stroemen(self, leser_id, knoten_id, start: int = 0,
+                                     laenge: int = -1, stueck: int = 1024 * 1024):
+        """Stueckweiser Inhalt einer geteilten Datei - nur bei Lesezugriff.
+        Gelesen wird aus dem Pool des EIGENTUEMERS (nicht des Lesers)."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if not await repo.lese_zugriff(leser_id, knoten_id):
+                raise PermissionError("Kein Lesezugriff")
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                raise FileNotFoundError("Datei nicht gefunden")
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+            eigentuemer = str(knoten["besitzer_id"])
+        gesamt = sum(c.get("groesse", 0) for c in teile)
+        ende = gesamt if laenge < 0 else min(start + laenge, gesamt)
+        pos = 0
+        for c in teile:
+            cg = c.get("groesse", 0)
+            c_start, c_ende = pos, pos + cg
+            pos = c_ende
+            if c_ende <= start:
+                continue
+            if c_start >= ende:
+                break
+            offen, bis = max(0, start - c_start), min(cg, ende - c_start)
+            while offen < bis:
+                nun = min(stueck, bis - offen)
+                yield await self.blob_get_bereich(eigentuemer, c["blob_hash"], offen, nun)
+                offen += nun
+
     # --- Konsistenz / Reparatur ----------------------------------------------
 
     async def pool_pruefen(self, tief: bool = False) -> dict:
@@ -621,6 +664,42 @@ class SpeicherDienst:
                 await self.blob_get_bereich(str(besitzer_id), c["blob_hash"], von, bis - von)
             )
         return b"".join(stuecke)
+
+    async def datei_stroemen(self, besitzer_id, knoten_id, start: int = 0, laenge: int = -1,
+                             stueck: int = 1024 * 1024):
+        """Liefert den Inhalt STUECKWEISE als Generator - der Speicherbedarf bleibt
+        bei einem Stueck, egal ob die Datei 1 KB oder 10 GB hat.
+
+        Das ist der einzige Weg, auf dem grosse Dateien ausgeliefert werden
+        duerfen: ein Vollpuffer wuerde bei jeder Anfrage die ganze Datei in den
+        Speicher holen. laenge=-1 heisst "bis zum Ende".
+        """
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                raise FileNotFoundError("Datei nicht gefunden")
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+        gesamt = sum(c.get("groesse", 0) for c in teile)
+        ende = gesamt if laenge < 0 else min(start + laenge, gesamt)
+        pos = 0
+        for c in teile:
+            cg = c.get("groesse", 0)
+            c_start, c_ende = pos, pos + cg
+            pos = c_ende
+            if c_ende <= start:
+                continue  # liegt komplett vor dem Bereich
+            if c_start >= ende:
+                break  # ab hier liegt alles dahinter
+            von = max(0, start - c_start)
+            bis = min(cg, ende - c_start)
+            # Innerhalb des Blocks in Haeppchen lesen, damit auch ein einzelner
+            # grosser Block nie am Stueck im Speicher landet.
+            offen = von
+            while offen < bis:
+                nun = min(stueck, bis - offen)
+                yield await self.blob_get_bereich(str(besitzer_id), c["blob_hash"], offen, nun)
+                offen += nun
 
     async def datei_lesen(self, besitzer_id, knoten_id):
         async with self.pool.connection() as conn:

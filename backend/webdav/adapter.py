@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape
 
 from psycopg.errors import UniqueViolation
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 
 from app.config import EINSTELLUNGEN
 from app.ports import SpeicherNichtVerfuegbar
@@ -141,13 +141,18 @@ async def _get(request, benutzer, pfad, mit_koerper) -> Response:
     knoten = await speicher.knoten_per_pfad(benutzer["id"], pfad)
     if not knoten or knoten["geloescht"] or knoten["typ"] != "datei":
         return Response(status_code=404)
-    daten = await speicher.datei_lesen(benutzer["id"], knoten["id"])
-    kopf = {"Content-Length": str(len(daten))}
+    # Groesse aus den Metadaten - fuer HEAD wird die Datei damit gar nicht mehr
+    # angefasst, und fuer GET geht der Inhalt stueckweise raus statt am Stueck.
+    gesamt = await speicher.datei_groesse(benutzer["id"], knoten["id"])
+    kopf = {"Content-Length": str(gesamt), "Accept-Ranges": "bytes"}
     if knoten["etag"]:
         kopf["ETag"] = f'"{knoten["etag"]}"'
     if not mit_koerper:
         return Response(status_code=200, headers=kopf)
-    return Response(content=daten, media_type="application/octet-stream", headers=kopf)
+    return StreamingResponse(
+        speicher.datei_stroemen(benutzer["id"], knoten["id"]),
+        media_type="application/octet-stream", headers=kopf,
+    )
 
 
 async def _put(request, benutzer, pfad) -> Response:

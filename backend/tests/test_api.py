@@ -320,3 +320,53 @@ async def test_sync_journal(umgebung):
     spaeter = (await client.get(f"/api/v1/sync/journal?seit={seqs[0]}", headers=h)).json()
     assert len(spaeter) == 1
     assert spaeter[0]["seq"] == seqs[1]
+
+
+async def test_download_mit_range(umgebung):
+    """Fortsetzbarer Download: Range muss 206 plus exakten Ausschnitt liefern.
+
+    Regression: frueher las der Download immer die ganze Datei und kannte gar
+    keinen Range - ein abgebrochener 1-GB-Download begann wieder bei 0.
+    """
+    client, _ = umgebung
+    h = await _anmelden(client)
+    daten = bytes(range(256)) * 40
+    r = await _upload(client, h, "teil.bin", daten)
+    knoten_id = r.json()["id"]
+
+    ganz = await client.get(f"/api/v1/dateien/{knoten_id}/inhalt", headers=h)
+    assert ganz.status_code == 200
+    assert ganz.content == daten
+    assert ganz.headers.get("accept-ranges") == "bytes"
+
+    teil = await client.get(
+        f"/api/v1/dateien/{knoten_id}/inhalt", headers={**h, "Range": "bytes=100-199"}
+    )
+    assert teil.status_code == 206
+    assert teil.content == daten[100:200]
+    assert teil.headers["content-range"] == f"bytes 100-199/{len(daten)}"
+
+    # Suffix-Form: die letzten 10 Bytes
+    letzte = await client.get(
+        f"/api/v1/dateien/{knoten_id}/inhalt", headers={**h, "Range": "bytes=-10"}
+    )
+    assert letzte.status_code == 206
+    assert letzte.content == daten[-10:]
+
+
+async def test_download_dateiname_mit_umlaut(umgebung):
+    """Umlaute im Dateinamen duerfen den Kopf nicht zerlegen.
+
+    Der Name wanderte frueher roh in Content-Disposition - bei "Übergewicht.txt"
+    oder einem Anfuehrungszeichen im Namen ging das schief.
+    """
+    client, _ = umgebung
+    h = await _anmelden(client)
+    r = await _upload(client, h, "Übergewicht bei Kindern.txt", b"inhalt")
+    knoten_id = r.json()["id"]
+    antwort = await client.get(f"/api/v1/dateien/{knoten_id}/inhalt", headers=h)
+    assert antwort.status_code == 200
+    cd = antwort.headers["content-disposition"]
+    # RFC-5987-Form traegt den echten Namen, der ASCII-Teil bleibt als Rueckfall.
+    assert "filename*=UTF-8''" in cd
+    assert "%C3%9C" in cd  # das grosse U-Umlaut, prozentkodiert

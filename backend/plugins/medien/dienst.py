@@ -132,13 +132,15 @@ class MedienDienst:
         groesse = await self.kontext.speicher.datei_groesse(benutzer_id, knoten_id)
         return groesse, strom_typ(k["name"])
 
-    async def strom_bereich(self, benutzer_id, knoten_id, start: int, laenge: int) -> bytes:
-        """Liefert NUR den angeforderten Ausschnitt. Damit kostet ein Sprung im
-        Player genau diesen Ausschnitt statt der ganzen Datei."""
+    async def strom_stroemen(self, benutzer_id, knoten_id, start: int, laenge: int):
+        """Liefert NUR den angeforderten Ausschnitt, und den stueckweise. Damit
+        kostet ein Sprung im Player genau diesen Ausschnitt statt der ganzen
+        Datei - und selbst ein grosser Bereich landet nie am Stueck im Speicher."""
         await self._knoten(benutzer_id, knoten_id, ist_abspielbar)
-        return await self.kontext.speicher.datei_bereich_lesen(
+        async for brocken in self.kontext.speicher.datei_stroemen(
             benutzer_id, knoten_id, start, laenge
-        )
+        ):
+            yield brocken
 
     async def alle_medien(self, benutzer_id) -> list[dict]:
         muster = [f"%{e}" for e in sorted(BILD_ENDUNGEN | AUDIO_ENDUNGEN | VIDEO_ENDUNGEN)]

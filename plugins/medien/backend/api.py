@@ -6,7 +6,7 @@ Auth ueber Query-Token (?t=), weil <img>/<audio> keine Header setzen koennen.
 import re
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from app.plugin_api import PluginBeschreibung, PluginKontext
 
@@ -77,14 +77,17 @@ def register(kontext: PluginKontext) -> PluginBeschreibung:
         start = max(0, min(start, gesamt - 1))
         if ende < start:
             ende = start
-        # Es wird AUSSCHLIESSLICH dieser Ausschnitt von der Platte gelesen.
-        teil = await dienst.strom_bereich(b["id"], knoten_id, start, ende - start + 1)
-        return Response(content=teil, status_code=206, media_type=typ, headers={
-            "Content-Range": f"bytes {start}-{ende}/{gesamt}",
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(len(teil)),
-            "Cache-Control": "private, max-age=86400",
-        })
+        # Stueckweise ausliefern: auch eine grosse Range (der Browser darf sie
+        # verlangen) landet nie am Stueck im Speicher.
+        return StreamingResponse(
+            dienst.strom_stroemen(b["id"], knoten_id, start, ende - start + 1),
+            status_code=206, media_type=typ, headers={
+                "Content-Range": f"bytes {start}-{ende}/{gesamt}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(ende - start + 1),
+                "Cache-Control": "private, max-age=86400",
+            },
+        )
 
     @router.get("/alle")
     async def alle(request: Request):

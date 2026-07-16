@@ -415,3 +415,46 @@ async def test_pool_pruefen_tief_findet_beschaedigte(dienst, benutzer_id):
     assert (await dienst.pool_pruefen(tief=False))["beschaedigt"] == []
     bericht = await dienst.pool_pruefen(tief=True)
     assert [b["hash"] for b in bericht["beschaedigt"]] == [blob.name]
+
+
+async def test_datei_stroemen_liefert_stueckweise(dienst, benutzer_id):
+    """Grosse Dateien duerfen NIE am Stueck in den Speicher.
+
+    Regression: der Download las frueher die ganze Datei (datei_lesen) und
+    schickte sie als Vollpuffer - bei 1 GB also 1 GB RAM. Der Strom muss die
+    Datei zerlegen, jedes Stueck begrenzt halten und trotzdem vollstaendig und
+    in der richtigen Reihenfolge liefern.
+    """
+    stueck = 64 * 1024
+    daten = bytes(range(256)) * 4 * 100  # 102400 Bytes, gut zerlegbar
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "gross.bin", daten)
+
+    stuecke = [s async for s in dienst.datei_stroemen(benutzer_id, knoten["id"], stueck=stueck)]
+
+    assert len(stuecke) > 1, "wurde gar nicht zerlegt - das ist wieder ein Vollpuffer"
+    assert max(len(s) for s in stuecke) <= stueck, "ein Stueck ist groesser als das Fenster"
+    assert b"".join(stuecke) == daten, "Inhalt unvollstaendig oder in falscher Reihenfolge"
+
+
+async def test_datei_stroemen_ausschnitt(dienst, benutzer_id):
+    """Ein Bereich (Spulen, fortgesetzter Download) muss exakt stimmen."""
+    daten = bytes(range(256)) * 400
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "bereich.bin", daten)
+
+    teil = b"".join([
+        s async for s in dienst.datei_stroemen(benutzer_id, knoten["id"], 1000, 500, stueck=128)
+    ])
+    assert teil == daten[1000:1500]
+
+    # Bis zum Ende (laenge=-1) ab einem Versatz
+    rest = b"".join([
+        s async for s in dienst.datei_stroemen(benutzer_id, knoten["id"], len(daten) - 10)
+    ])
+    assert rest == daten[-10:]
+
+
+async def test_datei_groesse_ohne_lesen(dienst, benutzer_id):
+    """Der Range-Kopf braucht nur die Groesse - die darf die Datei nicht anfassen."""
+    daten = b"x" * 5000
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "mass.bin", daten)
+    assert await dienst.datei_groesse(benutzer_id, knoten["id"]) == 5000

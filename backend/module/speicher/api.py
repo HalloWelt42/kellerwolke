@@ -2,10 +2,12 @@
 Versionen. Jede Route prueft die Eigentuemerschaft des Knotens (Isolation).
 """
 
+import re
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from psycopg.errors import UniqueViolation
 
 from app.abhaengig import (
@@ -34,6 +36,46 @@ from module.speicher.modelle import (
 )
 
 router = APIRouter(prefix="/api/v1/dateien", tags=["dateien"])
+
+_RANGE_MUSTER = re.compile(r"bytes=(\d*)-(\d*)")
+
+
+def dateiname_kopf(name: str, art: str = "attachment") -> str:
+    """Baut den Content-Disposition-Wert mit sauber kodiertem Dateinamen.
+
+    Der Name wandert in einen HTTP-Kopf und darf dort weder mit Anfuehrungs-
+    zeichen noch mit Zeilenumbruechen ausbrechen. Umlaute gehen nur ueber die
+    RFC-5987-Form (filename*), deshalb zusaetzlich ein ASCII-Rueckfallname fuer
+    aeltere Empfaenger - sonst kommt "Uebergewicht.mp4" verstuemmelt an.
+    """
+    sicher = name.replace('"', "'").replace("\r", " ").replace("\n", " ")
+    ascii_name = sicher.encode("ascii", "replace").decode("ascii")
+    return f"{art}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(sicher, safe='')}"
+
+
+def bereich_aus_kopf(kopf: str | None, gesamt: int) -> tuple[int | None, int | None]:
+    """Wertet einen Range-Kopf aus und liefert (start, ende) oder (None, None),
+    wenn nichts oder nichts Gueltiges verlangt wurde."""
+    if not kopf or gesamt <= 0:
+        return None, None
+    m = _RANGE_MUSTER.search(kopf)
+    if not m:
+        return None, None
+    roh_start, roh_ende = m.group(1), m.group(2)
+    if not roh_start and not roh_ende:
+        return None, None
+    if not roh_start:
+        # Suffix-Form "bytes=-500": die letzten 500 Bytes.
+        n = int(roh_ende)
+        if n <= 0:
+            return None, None
+        start, ende = max(0, gesamt - n), gesamt - 1
+    else:
+        start = int(roh_start)
+        ende = min(int(roh_ende), gesamt - 1) if roh_ende else gesamt - 1
+    if start > ende or start >= gesamt:
+        return None, None
+    return start, ende
 
 
 @router.get("/speicher-status", response_model=SpeicherStatusAus)
@@ -88,16 +130,29 @@ async def geteilt_kinder(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
 
 
 @router.get("/geteilt/{knoten_id}/inhalt")
-async def geteilt_inhalt(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+async def geteilt_inhalt(knoten_id: UUID, request: Request,
+                         benutzer=Depends(aktueller_benutzer),
                          speicher=Depends(hole_speicher)):
-    ergebnis = await speicher.geteilt_datei_lesen(benutzer["id"], knoten_id)
+    ergebnis = await speicher.geteilt_datei_kopf(benutzer["id"], knoten_id)
     if ergebnis is None:
         raise HTTPException(status_code=404, detail="Nicht gefunden")
-    knoten, daten = ergebnis
-    return Response(
-        content=daten,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{knoten["name"]}"'},
+    knoten, gesamt = ergebnis
+    kopf = {
+        "Content-Disposition": dateiname_kopf(knoten["name"]),
+        "Accept-Ranges": "bytes",
+    }
+    start, ende = bereich_aus_kopf(request.headers.get("range"), gesamt)
+    if start is None:
+        kopf["Content-Length"] = str(gesamt)
+        return StreamingResponse(
+            speicher.geteilt_datei_stroemen(benutzer["id"], knoten_id),
+            media_type="application/octet-stream", headers=kopf,
+        )
+    kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
+    kopf["Content-Length"] = str(ende - start + 1)
+    return StreamingResponse(
+        speicher.geteilt_datei_stroemen(benutzer["id"], knoten_id, start, ende - start + 1),
+        status_code=206, media_type="application/octet-stream", headers=kopf,
     )
 
 
@@ -230,19 +285,34 @@ async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer),
 
 
 @router.get("/{knoten_id}/inhalt")
-async def herunterladen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
+async def herunterladen(knoten_id: UUID, request: Request,
+                        benutzer=Depends(aktueller_benutzer),
                         speicher=Depends(hole_speicher)):
     knoten = await speicher.knoten_des_nutzers(benutzer["id"], knoten_id)
     if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
         raise HTTPException(status_code=404, detail="Datei nicht gefunden")
-    daten = await speicher.datei_lesen(benutzer["id"], knoten_id)
-    return Response(
-        content=daten,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="{knoten["name"]}"',
-            "ETag": knoten["etag"] or "",
-        },
+    gesamt = await speicher.datei_groesse(benutzer["id"], knoten_id)
+    kopf = {
+        "Content-Disposition": dateiname_kopf(knoten["name"]),
+        "ETag": knoten["etag"] or "",
+        # Range melden: so kann ein abgebrochener Download fortgesetzt werden,
+        # statt bei einer grossen Datei wieder bei 0 zu beginnen.
+        "Accept-Ranges": "bytes",
+    }
+
+    start, ende = bereich_aus_kopf(request.headers.get("range"), gesamt)
+    if start is None:
+        # Ganze Datei - aber STUECKWEISE, nie als Vollpuffer im Speicher.
+        kopf["Content-Length"] = str(gesamt)
+        return StreamingResponse(
+            speicher.datei_stroemen(benutzer["id"], knoten_id),
+            media_type="application/octet-stream", headers=kopf,
+        )
+    kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
+    kopf["Content-Length"] = str(ende - start + 1)
+    return StreamingResponse(
+        speicher.datei_stroemen(benutzer["id"], knoten_id, start, ende - start + 1),
+        status_code=206, media_type="application/octet-stream", headers=kopf,
     )
 
 
