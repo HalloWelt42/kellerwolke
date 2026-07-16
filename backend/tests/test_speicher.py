@@ -492,3 +492,31 @@ async def test_datei_pfad_ohne_pfadfaehigen_speicher(dienst, benutzer_id):
         assert await dienst.datei_pfad(benutzer_id, knoten["id"]) is None
     finally:
         dienst.blobstore = original
+
+
+async def test_zip_stroemt_und_bleibt_gueltig(dienst, benutzer_id):
+    """Das ZIP muss stueckweise entstehen - nicht als Vollpuffer.
+
+    Regression: frueher wurde das ganze Archiv in einem BytesIO gebaut und die
+    Dateien komplett gelesen. Deshalb gab es eine enge Groessengrenze. Der Strom
+    muss mehrere Stuecke liefern UND ein gueltiges, vollstaendiges ZIP ergeben.
+    """
+    import io
+    import zipfile
+
+    ordner = await dienst.ordner_anlegen(benutzer_id, None, "Paket")
+    gross = bytes(range(256)) * 900   # ~230 KB, sicher mehrteilig
+    await dienst.datei_hochladen(benutzer_id, ordner["id"], "gross.bin", gross)
+    await dienst.datei_hochladen(benutzer_id, ordner["id"], "klein.txt", b"hallo")
+
+    stuecke = [s async for s in dienst.zip_stroemen(benutzer_id, [ordner["id"]])]
+    assert len(stuecke) > 1, "das Archiv kam am Stueck - wieder ein Vollpuffer"
+
+    roh = b"".join(stuecke)
+    with zipfile.ZipFile(io.BytesIO(roh)) as zf:
+        assert zf.testzip() is None, "das gestroemte Archiv ist beschaedigt"
+        namen = set(zf.namelist())
+        assert "Paket/gross.bin" in namen
+        assert "Paket/klein.txt" in namen
+        assert zf.read("Paket/gross.bin") == gross, "Inhalt stimmt nicht"
+        assert zf.read("Paket/klein.txt") == b"hallo"

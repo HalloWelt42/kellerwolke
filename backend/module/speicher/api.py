@@ -271,16 +271,20 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
 @router.post("/zip")
 async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer),
                   speicher=Depends(hole_speicher)):
+    ids = [str(i) for i in eingabe.ids]
+    # Der Plan laeuft nur ueber Metadaten: so stehen "nichts zu packen" und "zu
+    # gross" fest, BEVOR das Streamen beginnt - danach liesse sich kein sauberer
+    # Fehlercode mehr senden, weil die Antwort schon laeuft.
     try:
-        daten = await speicher.als_zip(benutzer["id"], [str(i) for i in eingabe.ids])
+        plan = await speicher.zip_plan(benutzer["id"], ids)
     except ArchivZuGross:
         raise HTTPException(status_code=413, detail="Auswahl zu gross fuer ein ZIP")
-    if daten is None:
+    if not plan:
         raise HTTPException(status_code=404, detail="Nichts zum Packen")
-    return Response(
-        content=daten,
+    return StreamingResponse(
+        speicher.zip_stroemen(benutzer["id"], ids),
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="kellerwolke.zip"'},
+        headers={"Content-Disposition": dateiname_kopf("kellerwolke.zip")},
     )
 
 

@@ -30,6 +30,18 @@ FPORT="$(envget KELLERWOLKE_FRONTEND_PORT 5200)"
 listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null; }
 compose() { docker compose --env-file "$ENVFILE" "$@"; }
 
+# Ist der Dienst eingerichtet, gehoeren die Prozesse systemd - dann wird
+# durchgereicht statt selbst gestartet. Sonst wuerden beide dieselben Ports
+# belegen: stop_all killt, systemd startet sofort neu, wir starten daneben noch
+# einmal. Auf dem Mac (kein systemd) bleibt alles wie gehabt.
+systemd_aktiv() {
+  command -v systemctl >/dev/null 2>&1 &&
+    systemctl list-unit-files 2>/dev/null | grep -q '^kellerwolke\.target'
+}
+
+sd() { sudo systemctl "$1" kellerwolke.target; }
+
+
 db_start() {
   compose up -d db
   printf "Warte auf Datenbank "
@@ -105,7 +117,8 @@ update() {
   fi
   ( cd "$HIER/frontend" && npm install --no-audit --no-fund >/dev/null 2>&1 ) || echo "  (Frontend-Pakete uebersprungen)"
   echo "Neustart ..."
-  hochfahren
+  # Gehoeren die Prozesse systemd, dort neu starten - sonst laufen zwei Saetze.
+  if systemd_aktiv; then sudo systemctl restart kellerwolke.target; else hochfahren; fi
   echo "Update fertig."
 }
 
@@ -128,14 +141,19 @@ Kellerwolke - Nutzung: $0 <befehl>
 TEXT
 }
 
-# Kein Standardbefehl mehr: ohne Befehl wird die Nutzung gezeigt (kein Autostart).
 case "${1:-}" in
-  start)   hochfahren ;;
-  stop)    stop_all; echo "Kellerwolke gestoppt (Datenbank laeuft weiter; './setup.sh db-stop' beendet sie)" ;;
-  restart) hochfahren ;;
-  status)  status ;;
+  start)   if systemd_aktiv; then sd start; echo "Ueber systemd gestartet."; else hochfahren; fi ;;
+  stop)
+    if systemd_aktiv; then sd stop; echo "Ueber systemd gestoppt."
+    else stop_all; echo "Kellerwolke gestoppt (Datenbank laeuft weiter; './setup.sh db-stop' beendet sie)"; fi ;;
+  restart) if systemd_aktiv; then sd restart; echo "Ueber systemd neu gestartet."; else hochfahren; fi ;;
+  status)
+    if systemd_aktiv; then systemctl --no-pager --lines=0 status kellerwolke-db kellerwolke-backend kellerwolke-frontend 2>&1 | grep -E "^.|Active:" | head -20
+    else status; fi ;;
   update)  update ;;
-  logs)    zeige_logs "${2:-40}" ;;
+  logs)
+    if systemd_aktiv; then journalctl -u kellerwolke-backend -u kellerwolke-frontend -n "${2:-40}" --no-pager
+    else zeige_logs "${2:-40}"; fi ;;
   db-stop) compose down; echo "Datenbank gestoppt" ;;
   ""|-h|--help|help) nutzung; exit 1 ;;
   *)       echo "Unbekannter Befehl: $1"; echo; nutzung; exit 1 ;;

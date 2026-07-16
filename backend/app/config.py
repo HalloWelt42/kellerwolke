@@ -58,7 +58,10 @@ class Einstellungen:
     max_upload: int = _zahl("KELLERWOLKE_MAX_UPLOAD", 2_000_000_000)
     # ZIP wird im Speicher gebaut; Gesamtgroesse deckeln (Schutz vor OOM/DoS,
     # gerade auf dem Pi). Bei Bedarf hochsetzen.
-    max_zip: int = _zahl("KELLERWOLKE_MAX_ZIP", 500_000_000)
+    # Grosszuegig: das Archiv wird gestroemt, liegt also nicht mehr im Speicher.
+    # Die Grenze ist nur noch eine Richtlinie gegen versehentlich riesige
+    # Auswahlen - einstellbar ueber KELLERWOLKE_MAX_ZIP.
+    max_zip: int = _zahl("KELLERWOLKE_MAX_ZIP", 50_000_000_000)
     # Blob-Ein-/Ausgabe laeuft in begrenzt vielen Threads, damit eine haengende
     # Platte den Event-Loop (und die ganze App) nie einfriert. io_timeout ist das
     # Grund-Zeitlimit (Sekunden) fuer kleine Operationen; bei put/get kommt

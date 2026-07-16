@@ -22,6 +22,32 @@ from app.io_pool import im_thread
 from app.ports import SpeicherNichtVerfuegbar
 
 
+class _ZipStrom:
+    """Nimmt die Bytes des ZIP-Schreibers entgegen und gibt sie haeppchenweise weiter.
+
+    Bewusst OHNE seek/tell: fehlen die, schreibt zipfile im Stroemungsmodus und
+    springt nie zurueck - genau das erlaubt es, das Archiv auszuliefern, waehrend
+    es noch entsteht, statt es erst komplett im Speicher zu bauen.
+    """
+
+    def __init__(self) -> None:
+        self._teile: list[bytes] = []
+
+    def write(self, daten) -> int:
+        self._teile.append(bytes(daten))
+        return len(daten)
+
+    def flush(self) -> None:
+        pass
+
+    def entnehmen(self) -> bytes:
+        if not self._teile:
+            return b""
+        d = b"".join(self._teile)
+        self._teile.clear()
+        return d
+
+
 class ArchivZuGross(Exception):
     """Die ZIP-Auswahl ueberschreitet die konfigurierte Gesamtgroesse."""
 
@@ -741,12 +767,13 @@ class SpeicherDienst:
         g = knoten.get("groesse")
         return g if g is not None else await self.groesse(knoten)
 
-    async def als_zip(self, besitzer_id, ids):
-        """Packt die angegebenen Knoten in ein ZIP und liefert die Bytes.
-        Dateien direkt, Ordner rekursiv (auch leere als Verzeichniseintrag). Nur
-        eigene, nicht geloeschte Knoten. Liefert None, wenn nichts zu packen ist.
-        Wirft ArchivZuGross, wenn die Gesamtgroesse die Grenze sprengt (das ZIP
-        entsteht im Speicher - Schutz vor OOM/DoS)."""
+    async def zip_plan(self, besitzer_id, ids):
+        """Sammelt die Archiv-Eintraege und prueft die Groessengrenze.
+
+        Laeuft ausschliesslich ueber die Metadaten - es wird keine einzige Datei
+        angefasst. Liefert die Liste (archivpfad, knoten_id | None), wobei None
+        einen Verzeichniseintrag meint.
+        """
         eintraege = []  # (archivpfad, knoten_id | None); None = Verzeichniseintrag
         gesamt = 0
 
@@ -770,8 +797,21 @@ class SpeicherDienst:
                 continue
             await sammeln(knoten, "")
 
+        return eintraege
+
+    async def zip_stroemen(self, besitzer_id, ids):
+        """Packt die Knoten in ein ZIP und gibt es STUECKWEISE heraus.
+
+        Weder das Archiv noch eine einzelne Datei landen dabei vollstaendig im
+        Speicher: die Dateien kommen haeppchenweise herein und das fertige Archiv
+        geht haeppchenweise hinaus. Damit sind auch grosse Auswahlen moeglich.
+
+        Wirft ArchivZuGross, wenn die Auswahl die eingestellte Grenze sprengt -
+        das ist jetzt reine Richtlinie, kein Speicherschutz mehr.
+        """
+        eintraege = await self.zip_plan(besitzer_id, ids)
         if not eintraege:
-            return None
+            return
 
         belegt: set[str] = set()
 
@@ -790,21 +830,51 @@ class SpeicherDienst:
             belegt.add(neu)
             return neu
 
-        puffer = io.BytesIO()
+        strom = _ZipStrom()
         geschrieben = 0
-        with zipfile.ZipFile(puffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf = zipfile.ZipFile(strom, "w", zipfile.ZIP_DEFLATED)
+        try:
             for archivpfad, knoten_id in eintraege:
                 if knoten_id is None:
                     zf.writestr(eindeutig(archivpfad), b"")  # (leerer) Ordner
                     geschrieben += 1
+                    if (teil := strom.entnehmen()):
+                        yield teil
                     continue
                 try:
-                    inhalt = await self.datei_lesen(besitzer_id, knoten_id)
+                    # Erst den Eintrag oeffnen, wenn die Datei wirklich da ist -
+                    # sonst bliebe ein halber Eintrag im Archiv stehen.
+                    haeppchen = self.datei_stroemen(besitzer_id, knoten_id)
+                    erstes = await anext(haeppchen, b"")
                 except FileNotFoundError:
                     continue  # waehrend des Packens entfernt (TOCTOU): ueberspringen
-                zf.writestr(eindeutig(archivpfad), inhalt)
+                with zf.open(eindeutig(archivpfad), "w") as ziel:
+                    if erstes:
+                        ziel.write(erstes)
+                        if (teil := strom.entnehmen()):
+                            yield teil
+                    async for brocken in haeppchen:
+                        ziel.write(brocken)
+                        # Nach jedem Stueck herausgeben: so waechst weder das
+                        # Archiv noch die Datei im Speicher mit.
+                        if (teil := strom.entnehmen()):
+                            yield teil
                 geschrieben += 1
-        return puffer.getvalue() if geschrieben else None
+                if (teil := strom.entnehmen()):
+                    yield teil
+        finally:
+            zf.close()
+        if geschrieben:
+            if (teil := strom.entnehmen()):
+                yield teil  # Zentralverzeichnis am Ende
+
+    async def als_zip(self, besitzer_id, ids):
+        """Wie zip_stroemen, nur am Stueck - fuer Aufrufer, die alles auf einmal
+        brauchen (Tests). Liefert None, wenn nichts zu packen ist. Fuer die
+        Auslieferung bitte zip_stroemen nehmen, sonst liegt das ganze Archiv im
+        Speicher."""
+        teile = [t async for t in self.zip_stroemen(besitzer_id, ids)]
+        return b"".join(teile) if teile else None
 
     async def kinder(self, besitzer_id, parent_id):
         async with self.pool.connection() as conn:
