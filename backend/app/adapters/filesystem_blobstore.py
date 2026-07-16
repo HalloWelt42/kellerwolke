@@ -174,6 +174,16 @@ class FilesystemBlobStore:
     def exists(self, benutzer_id: str, blob_hash: str) -> bool:
         return self._pfad(benutzer_id, blob_hash).exists()
 
+    def pfad(self, benutzer_id: str, blob_hash: str):
+        """Lokaler Pfad des Blocks - nur fuer Werkzeuge, die zwingend eine echte
+        Datei brauchen (z.B. ffmpeg, das selbst gezielt hineinspringt, statt sie
+        zu lesen). Bewusst als Zugestaendnis dieses Adapters: ein entfernter
+        Speicher hat keinen Pfad und liefert dann None, der Aufrufer muss ohne
+        auskommen."""
+        self._sichern()
+        p = self._pfad(benutzer_id, blob_hash)
+        return p if p.exists() else None
+
     def delete(self, benutzer_id: str, blob_hash: str) -> None:
         self._sichern()
         try:

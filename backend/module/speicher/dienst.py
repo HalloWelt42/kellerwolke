@@ -665,6 +665,29 @@ class SpeicherDienst:
             )
         return b"".join(stuecke)
 
+    async def datei_pfad(self, besitzer_id, knoten_id):
+        """Lokaler Pfad der Datei - oder None.
+
+        Nur fuer Werkzeuge, die zwingend eine echte Datei brauchen (ffmpeg liest
+        daraus selbst gezielt einzelne Stellen, statt dass wir sie in den Speicher
+        holen). Liefert None, wenn die Datei aus mehreren Bloecken besteht oder
+        der Speicher gar keine Pfade kennt - der Aufrufer MUSS das vertragen.
+        """
+        holen = getattr(self.blobstore, "pfad", None)
+        if holen is None:
+            return None
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                raise FileNotFoundError("Datei nicht gefunden")
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+        if len(teile) != 1:
+            return None  # zusammengesetzt: es gibt keine eine Datei
+        return await im_thread(
+            holen, str(besitzer_id), teile[0]["blob_hash"], timeout=EINSTELLUNGEN.io_timeout
+        )
+
     async def datei_stroemen(self, besitzer_id, knoten_id, start: int = 0, laenge: int = -1,
                              stueck: int = 1024 * 1024):
         """Liefert den Inhalt STUECKWEISE als Generator - der Speicherbedarf bleibt

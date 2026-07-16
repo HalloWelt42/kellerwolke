@@ -197,10 +197,15 @@
         </button>
       {:else if m.typ === "video"}
         <button class="kachel med-kachel" onclick={() => (videoOffen = m)} title={m.name}>
-          <div class="vorschau med-cover med-video">
+          <div class="vorschau med-cover med-video" class:ohne-bild={kaputt.has(m.id)}>
+            {#if kaputt.has(m.id)}
+              <i class="med-note fa-solid fa-film"></i>
+            {:else}
+              <!-- Standbild aus dem Video; ohne ffmpeg faellt es aufs Symbol zurueck. -->
+              <img class="med-voll" src={thumbUrl(m.id, thumbKante)} alt={m.name} loading="lazy" onerror={() => kaputt.add(m.id)} />
+            {/if}
             <span class="med-format">{formatKuerzel(m.name)}</span>
-            <i class="med-note fa-solid fa-film"></i>
-            <span class="med-play"><i class="fa-solid fa-play"></i></span>
+            <span class="med-play med-video-play"><i class="fa-solid fa-play"></i></span>
           </div>
           <div class="k-name">{m.name}</div>
           {#if quelle === "alle"}<div class="med-pfad">{pfadText(m.pfad)}</div>{/if}
@@ -260,7 +265,17 @@
   .med-voll { width: 100%; height: 100%; object-fit: cover; }
   .med-kachel .med-cover { background: linear-gradient(135deg, #6d5efc, #3b82f6); color: #fff; font-size: 1.7rem; position: relative; }
   /* Video klar von Audio unterscheidbar (anderer Farbverlauf, Film statt Note). */
-  .med-kachel .med-cover.med-video { background: linear-gradient(135deg, #1f2937, #0f766e); }
+  /* Video mit Standbild: schwarzer Grund; ohne Standbild der Farbverlauf. */
+  .med-kachel .med-cover.med-video { background: #000; font-size: 1.7rem; }
+  .med-kachel .med-cover.med-video.ohne-bild { background: linear-gradient(135deg, #1f2937, #0f766e); }
+  /* Beim Video ist das Abspielzeichen dauerhaft sichtbar - sonst sieht das
+     Standbild wie ein Foto aus. */
+  .med-cover .med-play.med-video-play {
+    inset: auto; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5); border: 2px solid rgba(255, 255, 255, 0.85);
+    font-size: 0.9rem; opacity: 1;
+  }
+  .med-kachel:hover .med-play.med-video-play { background: rgba(0, 0, 0, 0.75); }
   .ml-name .sym.video { color: var(--akzent); font-size: 1.15rem; }
   /* Play-/Pause-Overlay auf der Audio-Kachel: bei Hover und beim laufenden Titel. */
   .med-cover .med-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.5rem; background: rgba(0, 0, 0, 0.28); opacity: 0; transition: opacity 0.15s ease; }

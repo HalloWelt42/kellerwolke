@@ -7,6 +7,7 @@ Bildverarbeitung laeuft im Thread, damit der Event-Loop frei bleibt.
 import asyncio
 import io
 import os
+import shutil
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -61,6 +62,52 @@ def strom_typ(name: str) -> str:
     return _AUDIO_TYP.get(e) or _VIDEO_TYP.get(e) or "application/octet-stream"
 
 
+def ffmpeg_pfad() -> str | None:
+    """Wo liegt ffmpeg - oder None, wenn es nicht installiert ist.
+
+    ffmpeg ist AUSDRUECKLICH optional: fehlt es, entfallen nur die Standbilder
+    von Videos (dann bleibt das Film-Symbol), alles andere laeuft normal weiter.
+    """
+    return os.environ.get("KELLERWOLKE_FFMPEG") or shutil.which("ffmpeg")
+
+
+async def _video_standbild(quelle: Path, sekunde: float) -> bytes | None:
+    """Holt EIN Bild aus dem Video - ffmpeg springt selbst an die Stelle und
+    liest nur dort, die Datei wandert also nicht in den Speicher.
+
+    Geliefert wird ein roher JPEG-Frame; verkleinert wird anschliessend mit
+    Pillow, also auf demselben Weg wie bei Bildern. Bewusst kein WebP direkt aus
+    ffmpeg: ob dessen WebP-Encoder einkompiliert ist, unterscheidet sich je nach
+    Build (auf dem Mac fehlt er) - mjpeg ist ueberall vorhanden.
+
+    Liefert None, wenn ffmpeg fehlt, das Format nicht mag oder zu lange braucht.
+    """
+    werkzeug = ffmpeg_pfad()
+    if not werkzeug:
+        return None
+    befehl = [
+        werkzeug, "-nostdin", "-loglevel", "error",
+        "-ss", f"{sekunde}",           # VOR -i: schneller Sprung, ohne alles zu dekodieren
+        "-i", str(quelle),
+        "-frames:v", "1",
+        "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "3",
+        "-",
+    ]
+    try:
+        p = await asyncio.create_subprocess_exec(
+            *befehl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+    except OSError:
+        return None
+    try:
+        aus, _ = await asyncio.wait_for(p.communicate(), timeout=30)
+    except asyncio.TimeoutError:
+        p.kill()
+        await p.wait()
+        return None
+    return aus if p.returncode == 0 and aus else None
+
+
 def _thumb_bytes(daten: bytes, kante: int) -> bytes:
     with Image.open(io.BytesIO(daten)) as im:
         im = ImageOps.exif_transpose(im) or im
@@ -106,7 +153,8 @@ class MedienDienst:
         os.replace(tmp, ziel)
 
     async def thumb(self, benutzer_id, knoten_id, kante: int) -> tuple[bytes, str]:
-        k = await self._knoten(benutzer_id, knoten_id, ist_bild)
+        # Bild ODER Video: Videos bekommen ein Standbild als Vorschau.
+        k = await self._knoten(benutzer_id, knoten_id, lambda n: ist_bild(n) or ist_video(n))
         if _endung(k["name"]) == "svg":
             daten = await self.kontext.speicher.datei_lesen(benutzer_id, knoten_id)
             return daten, "image/svg+xml"
@@ -114,10 +162,36 @@ class MedienDienst:
         ziel = self.cache_dir / etag[:2] / f"{etag}_{kante}.webp"
         if ziel.exists():
             return await asyncio.to_thread(ziel.read_bytes), "image/webp"
-        daten = await self.kontext.speicher.datei_lesen(benutzer_id, knoten_id)
-        thumb = await asyncio.to_thread(_thumb_bytes, daten, kante)
+
+        if ist_video(k["name"]):
+            thumb = await self._video_thumb(benutzer_id, knoten_id, kante)
+            if thumb is None:
+                # Kein ffmpeg oder Format nicht lesbar: ehrlich melden, damit die
+                # Oberflaeche auf ihr Film-Symbol zurueckfaellt.
+                raise FileNotFoundError("Kein Standbild moeglich")
+        else:
+            daten = await self.kontext.speicher.datei_lesen(benutzer_id, knoten_id)
+            thumb = await asyncio.to_thread(_thumb_bytes, daten, kante)
         await asyncio.to_thread(self._cache_schreiben, ziel, thumb)
         return thumb, "image/webp"
+
+    async def _video_thumb(self, benutzer_id, knoten_id, kante: int) -> bytes | None:
+        """Standbild eines Videos ueber ffmpeg - ohne die Datei zu lesen.
+
+        Dafuer wird der lokale Pfad des Blocks gebraucht; gibt es keinen (etwa
+        bei einem entfernten Speicher), entfaellt das Standbild.
+        """
+        quelle = await self.kontext.speicher.datei_pfad(benutzer_id, knoten_id)
+        if not quelle:
+            return None
+        # Erst ein Stueck hineinspringen - der allererste Frame ist oft schwarz.
+        # Ist das Video kuerzer, liefert ffmpeg nichts; dann vom Anfang nehmen.
+        for sekunde in (3.0, 0.0):
+            frame = await _video_standbild(Path(quelle), sekunde)
+            if frame:
+                # Verkleinern wie bei Bildern - gleiche Kette, gleiches Ergebnis.
+                return await asyncio.to_thread(_thumb_bytes, frame, kante)
+        return None
 
     async def inline(self, benutzer_id, knoten_id) -> tuple[bytes, str]:
         k = await self._knoten(benutzer_id, knoten_id, ist_bild)
