@@ -1117,60 +1117,8 @@ select.feld {
   background: var(--akzent);
   transition: width 0.2s;
 }
-.schwebe-karte {
-  position: absolute;
-  right: var(--a4);
-  bottom: var(--a4);
-  width: 308px;
-  background: var(--flaeche);
-  border: 1px solid var(--rand);
-  border-radius: var(--r2);
-  box-shadow: var(--schatten-2);
-  padding: var(--a3);
-  z-index: 8;
-}
-.schwebe-karte h4 {
-  margin: 0;
-  font-size: 0.86rem;
-}
-.schwebe-kopf {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--a2);
-  margin-bottom: var(--a3);
-}
-.schwebe-kopf .icon-knopf {
-  width: 28px;
-  height: 28px;
-}
-.fz-tempo {
-  margin-top: var(--a1);
-  color: var(--text-3);
-  font-size: 0.74rem;
-}
-.fz {
-  margin-bottom: var(--a3);
-  font-size: 0.82rem;
-}
-.fz:last-child {
-  margin-bottom: 0;
-}
-.fz-kopf {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--a3);
-  margin-bottom: var(--a1);
-}
-.fz-kopf .fz-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fz-kopf .pct {
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
+/* Die Upload-Karte bringt ihr Aussehen selbst mit (UploadKarte.svelte) - die
+   frueheren .schwebe-karte/.fz-Regeln sind mit ihr entfallen. */
 .drop-overlay {
   position: absolute;
   inset: var(--a4);

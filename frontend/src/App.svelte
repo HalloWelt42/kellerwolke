@@ -10,11 +10,9 @@
     starteLiveAbgleich,
     stoppeLiveAbgleich,
     vorgaengeUmschalten,
-    uploadStoppen,
     hochladen,
     strukturHochladen,
   } from "./lib/zustand.svelte";
-  import { groesseText, zeitText } from "./lib/format";
   import Login from "./lib/Login.svelte";
   import Navigation from "./lib/Navigation.svelte";
   import Werkzeugleiste from "./lib/Werkzeugleiste.svelte";
@@ -24,6 +22,7 @@
   import DetailPane from "./lib/DetailPane.svelte";
   import Einstellungen from "./lib/Einstellungen.svelte";
   import Vorgaenge from "./lib/Vorgaenge.svelte";
+  import UploadKarte from "./lib/UploadKarte.svelte";
   import Teilen from "./lib/Teilen.svelte";
   import Modal from "./lib/Modal.svelte";
   import Logo from "./lib/Logo.svelte";
@@ -325,29 +324,7 @@
   </div>
 
   {#if zustand.uploads.length > 0}
-    <div class="schwebe-karte">
-      <div class="schwebe-kopf">
-        <h4>
-          {zustand.uploads.length}
-          {zustand.uploads.length === 1 ? "Datei wird" : "Dateien werden"} hochgeladen
-        </h4>
-        <button class="icon-knopf" title="Abbrechen" aria-label="Abbrechen" onclick={uploadStoppen}>
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-      {#each zustand.uploads as u (u.name)}
-        <div class="fz">
-          <div class="fz-kopf">
-            <span class="fz-name">{u.name}</span><span class="pct">{u.prozent} %</span>
-          </div>
-          <div class="fortschritt"><span style="width: {u.prozent}%"></span></div>
-          <div class="fz-kopf fz-tempo">
-            <span>{u.tempo > 0 ? `${groesseText(u.tempo)}/s` : `${groesseText(u.gesamt)}`}</span>
-            <span>{u.prozent >= 100 ? "fertig" : zeitText(u.restzeit)}</span>
-          </div>
-        </div>
-      {/each}
-    </div>
+    <UploadKarte />
   {/if}
 
   {#if zustand.vorgaengeOffen}
