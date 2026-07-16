@@ -3,6 +3,7 @@
   import { symbol, groesseText, datum, typLabel } from "./format";
   import type { Knoten } from "./types";
   import { vorschauFuer, vollansichtFuer } from "../plugins/registry.svelte";
+  import { oeffneVollansicht } from "./vorschau.svelte";
 
   interface Props {
     k: Knoten;
@@ -14,12 +15,9 @@
   // Datei-Faehigkeiten aktiver Plugins (z.B. Bild-Vorschau/Vollbild der Galerie).
   const vorschau = $derived(k.typ === "datei" ? vorschauFuer(k) : null);
   const vollF = $derived(k.typ === "datei" ? vollansichtFuer(k) : null);
-  let vollOffen = $state(false);
-  // Bei Dateiwechsel die Vollansicht schliessen.
-  $effect(() => {
-    void k.id;
-    vollOffen = false;
-  });
+  // Geoeffnet wird die ZENTRALE Vollansicht (App.svelte rendert sie einmalig).
+  // Eine eigene Kopie hier hatte zur Folge, dass beide gleichzeitig aufgingen -
+  // bei Video liefen dann zwei Player uebereinander.
   const pfadText = $derived(
     "/" + haupt.pfad.slice(1).map((t) => t.name).join("/") || "/",
   );
@@ -40,7 +38,7 @@
     {#if vorschau?.vorschau}
       {@const Vorschau = vorschau.vorschau}
       {#if vollF}
-        <button class="vorschau-flaeche" title="Vollansicht" onclick={() => (vollOffen = true)}>
+        <button class="vorschau-flaeche" title="Vollansicht" onclick={() => oeffneVollansicht(k)}>
           <Vorschau knoten={k} browser={haupt} />
         </button>
       {:else}
@@ -52,13 +50,9 @@
   </div>
 
   {#if vollF?.vollansicht}
-    {@const Voll = vollF.vollansicht}
-    <button class="knopf still detail-vollknopf" onclick={() => (vollOffen = true)}>
+    <button class="knopf still detail-vollknopf" onclick={() => oeffneVollansicht(k)}>
       <i class="fa-solid fa-expand"></i> Vollansicht
     </button>
-    {#if vollOffen}
-      <Voll knoten={k} browser={haupt} schliessen={() => (vollOffen = false)} />
-    {/if}
   {/if}
 
   <div class="detail-name">{k.name}</div>
