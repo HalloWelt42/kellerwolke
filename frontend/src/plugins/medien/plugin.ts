@@ -4,7 +4,9 @@ import Medien from "./Medien.svelte";
 import BildVorschau from "./BildVorschau.svelte";
 import BildVollbild from "./BildVollbild.svelte";
 import AudioVorschau from "./AudioVorschau.svelte";
-import { istBild, istAudio } from "./medien";
+import VideoVorschau from "./VideoVorschau.svelte";
+import VideoVollbild from "./VideoVollbild.svelte";
+import { istBild, istAudio, istVideo } from "./medien";
 
 // Medien-App: Bilder + Audio in einer Ansicht mit Player-Leiste. Zusaetzlich
 // verleiht sie Bild- und Audio-Dateien im Normalmodus eine Detail-Faehigkeit.
@@ -26,6 +28,12 @@ const plugin: AppPlugin = {
       id: "audio",
       passt: (k: Knoten) => k.typ === "datei" && istAudio(k.name),
       vorschau: AudioVorschau,
+    },
+    {
+      id: "video",
+      passt: (k: Knoten) => k.typ === "datei" && istVideo(k.name),
+      vorschau: VideoVorschau,
+      vollansicht: VideoVollbild,
     },
   ],
 };

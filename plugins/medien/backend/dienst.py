@@ -20,11 +20,16 @@ except Exception:  # noqa: BLE001 - ohne HEIC laeuft der Rest weiter
 
 BILD_ENDUNGEN = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif", ".svg"}
 AUDIO_ENDUNGEN = {".mp3", ".wav", ".ogg", ".oga", ".opus", ".m4a", ".aac", ".flac"}
+# Video laeuft ueber denselben Range-Weg wie Audio - der Browser spielt es
+# direkt, sofern er den Codec kann (mp4/H.264 und webm sind der sichere Fall).
+VIDEO_ENDUNGEN = {".mp4", ".m4v", ".mov", ".webm", ".mkv", ".ogv"}
 
 _BILD_TYP = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif",
              "webp": "image/webp", "bmp": "image/bmp"}
 _AUDIO_TYP = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg", "oga": "audio/ogg",
               "opus": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac", "flac": "audio/flac"}
+_VIDEO_TYP = {"mp4": "video/mp4", "m4v": "video/mp4", "mov": "video/quicktime",
+              "webm": "video/webm", "mkv": "video/x-matroska", "ogv": "video/ogg"}
 
 
 def _endung(name: str) -> str:
@@ -39,6 +44,21 @@ def ist_bild(name: str) -> bool:
 def ist_audio(name: str) -> bool:
     p = name.rfind(".")
     return p != -1 and name[p:].lower() in AUDIO_ENDUNGEN
+
+
+def ist_video(name: str) -> bool:
+    p = name.rfind(".")
+    return p != -1 and name[p:].lower() in VIDEO_ENDUNGEN
+
+
+def ist_abspielbar(name: str) -> bool:
+    """Alles, was ueber den Stream-Endpunkt laeuft (Audio wie Video)."""
+    return ist_audio(name) or ist_video(name)
+
+
+def strom_typ(name: str) -> str:
+    e = _endung(name)
+    return _AUDIO_TYP.get(e) or _VIDEO_TYP.get(e) or "application/octet-stream"
 
 
 def _thumb_bytes(daten: bytes, kante: int) -> bytes:
@@ -104,13 +124,24 @@ class MedienDienst:
         daten = await self.kontext.speicher.datei_lesen(benutzer_id, knoten_id)
         return await asyncio.to_thread(_inline_bytes, daten, k["name"])
 
-    async def audio(self, benutzer_id, knoten_id) -> tuple[bytes, str]:
-        k = await self._knoten(benutzer_id, knoten_id, ist_audio)
-        daten = await self.kontext.speicher.datei_lesen(benutzer_id, knoten_id)
-        return daten, _AUDIO_TYP.get(_endung(k["name"]), "application/octet-stream")
+    async def strom_kopf(self, benutzer_id, knoten_id) -> tuple[int, str]:
+        """Groesse und MIME-Typ, OHNE die Datei zu lesen. Der Range-Kopf braucht
+        nur diese beiden Angaben - eine 1-GB-Datei darf dafuer nicht angefasst
+        werden."""
+        k = await self._knoten(benutzer_id, knoten_id, ist_abspielbar)
+        groesse = await self.kontext.speicher.datei_groesse(benutzer_id, knoten_id)
+        return groesse, strom_typ(k["name"])
+
+    async def strom_bereich(self, benutzer_id, knoten_id, start: int, laenge: int) -> bytes:
+        """Liefert NUR den angeforderten Ausschnitt. Damit kostet ein Sprung im
+        Player genau diesen Ausschnitt statt der ganzen Datei."""
+        await self._knoten(benutzer_id, knoten_id, ist_abspielbar)
+        return await self.kontext.speicher.datei_bereich_lesen(
+            benutzer_id, knoten_id, start, laenge
+        )
 
     async def alle_medien(self, benutzer_id) -> list[dict]:
-        muster = [f"%{e}" for e in sorted(BILD_ENDUNGEN | AUDIO_ENDUNGEN)]
+        muster = [f"%{e}" for e in sorted(BILD_ENDUNGEN | AUDIO_ENDUNGEN | VIDEO_ENDUNGEN)]
         zeilen = await self.kontext.speicher.dateien_nach_endung(benutzer_id, muster)
         ergebnis = []
         for z in zeilen:
@@ -119,6 +150,6 @@ class MedienDienst:
                 "name": z["name"],
                 "groesse": z.get("groesse"),
                 "pfad": z["pfad"],
-                "typ": "bild" if ist_bild(z["name"]) else "audio",
+                "typ": "bild" if ist_bild(z["name"]) else "video" if ist_video(z["name"]) else "audio",
             })
         return ergebnis

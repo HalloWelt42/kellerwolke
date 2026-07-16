@@ -4,6 +4,8 @@ import { token } from "../../lib/api";
 // <img>/<audio> keine Header setzen koennen.
 const BILD = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif", ".svg"];
 const AUDIO = [".mp3", ".wav", ".ogg", ".oga", ".opus", ".m4a", ".aac", ".flac"];
+// Video laeuft ueber denselben Stream-Endpunkt wie Audio (HTTP-Range).
+const VIDEO = [".mp4", ".m4v", ".mov", ".webm", ".mkv", ".ogv"];
 
 function endung(name: string): string {
   const p = name.lastIndexOf(".");
@@ -11,6 +13,7 @@ function endung(name: string): string {
 }
 export function istBild(name: string): boolean { return BILD.includes(endung(name)); }
 export function istAudio(name: string): boolean { return AUDIO.includes(endung(name)); }
+export function istVideo(name: string): boolean { return VIDEO.includes(endung(name)); }
 export function formatKuerzel(name: string): string { return endung(name).replace(".", "").toUpperCase(); }
 
 const t = () => encodeURIComponent(token());
@@ -23,7 +26,7 @@ export interface GMedium {
   name: string;
   groesse: number | null;
   pfad: { id: string; name: string }[];
-  typ: "bild" | "audio";
+  typ: "bild" | "audio" | "video";
 }
 
 export async function ladeAlleMedien(): Promise<GMedium[]> {

@@ -330,6 +330,15 @@ class SpeicherDienst:
             self.blobstore.get, benutzer_id, blob_hash, timeout=self._io_timeout(groesse)
         )
 
+    async def blob_get_bereich(self, benutzer_id: str, blob_hash: str, start: int,
+                               laenge: int) -> bytes:
+        """Nur den Ausschnitt holen. Das Zeitlimit bemisst sich an der Ausschnitts-
+        groesse, nicht an der Datei - ein kleiner Sprung bleibt schnell."""
+        return await im_thread(
+            self.blobstore.get_bereich, benutzer_id, blob_hash, start, laenge,
+            timeout=self._io_timeout(max(laenge, 0)),
+        )
+
     async def blob_delete(self, benutzer_id: str, blob_hash: str) -> None:
         await im_thread(
             self.blobstore.delete, benutzer_id, blob_hash, timeout=self._io_timeout()
@@ -571,6 +580,47 @@ class SpeicherDienst:
                     except SpeicherNichtVerfuegbar:
                         pass
             raise
+
+    async def datei_groesse(self, besitzer_id, knoten_id) -> int:
+        """Groesse der aktuellen Version, OHNE den Inhalt zu lesen. Der Range-
+        Kopf braucht die Gesamtgroesse - dafuer darf die Datei nicht angefasst
+        werden."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                raise FileNotFoundError("Datei nicht gefunden")
+            version = await repo.version_holen(knoten["aktuelle_version_id"])
+        if not version:
+            raise FileNotFoundError("Datei ohne Version")
+        return version["groesse"]
+
+    async def datei_bereich_lesen(self, besitzer_id, knoten_id, start: int, laenge: int) -> bytes:
+        """Liest NUR den angeforderten Ausschnitt. Angefasst werden ausschliesslich
+        die Bloecke, die den Bereich ueberlappen - ein Sprung im Player holt damit
+        nicht mehr die ganze Datei von der Platte."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
+                raise FileNotFoundError("Datei nicht gefunden")
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+        ende = start + laenge
+        stuecke, pos = [], 0
+        for c in teile:
+            cg = c.get("groesse", 0)
+            c_start, c_ende = pos, pos + cg
+            pos = c_ende
+            if c_ende <= start:
+                continue  # liegt komplett vor dem Bereich
+            if c_start >= ende:
+                break  # ab hier liegt alles dahinter
+            von = max(0, start - c_start)
+            bis = min(cg, ende - c_start)
+            stuecke.append(
+                await self.blob_get_bereich(str(besitzer_id), c["blob_hash"], von, bis - von)
+            )
+        return b"".join(stuecke)
 
     async def datei_lesen(self, besitzer_id, knoten_id):
         async with self.pool.connection() as conn:

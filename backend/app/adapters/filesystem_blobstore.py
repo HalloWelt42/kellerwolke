@@ -160,6 +160,17 @@ class FilesystemBlobStore:
         self._sichern()
         return self._pfad(benutzer_id, blob_hash).read_bytes()
 
+    def get_bereich(self, benutzer_id: str, blob_hash: str, start: int = 0,
+                    laenge: int = -1) -> bytes:
+        """Liest NUR den angeforderten Ausschnitt (seek + read), ohne den ganzen
+        Block anzufassen. Grundlage fuers Spulen: ein Sprung im Player darf nicht
+        die komplette Datei von der Platte holen."""
+        self._sichern()
+        with open(self._pfad(benutzer_id, blob_hash), "rb") as f:
+            if start:
+                f.seek(start)
+            return f.read(laenge) if laenge >= 0 else f.read()
+
     def exists(self, benutzer_id: str, blob_hash: str) -> bool:
         return self._pfad(benutzer_id, blob_hash).exists()
 

@@ -5,8 +5,9 @@
   import { symbol, groesseText } from "../../lib/format";
   import { waehleApp } from "../appzustand.svelte";
   import { player, spielen, aktuelleSpur, type Spur } from "../../lib/player.svelte";
+  import VideoVollbild from "./VideoVollbild.svelte";
   import {
-    istBild, istAudio, formatKuerzel,
+    istBild, istAudio, istVideo, formatKuerzel,
     thumbUrl, inlineUrl, streamUrl, ladeAlleMedien, type GMedium,
   } from "./medien";
 
@@ -15,7 +16,7 @@
 
   type Anzeige = {
     id: string; name: string; groesse: number | null;
-    pfad: { id: string; name: string }[] | null; typ: "bild" | "audio";
+    pfad: { id: string; name: string }[] | null; typ: "bild" | "audio" | "video";
   };
 
   const kaputt = new SvelteSet<string>();
@@ -24,7 +25,7 @@
   // Eine zweite Kachelgroesse bringt keinen Mehrwert.
   let modus = $state<"kacheln" | "liste">("kacheln");
   let quelle = $state<"alle" | "ordner">("alle");
-  let filter = $state<"alle" | "bild" | "audio">("alle");
+  let filter = $state<"alle" | "bild" | "audio" | "video">("alle");
   let alle = $state<GMedium[]>([]);
   let geladen = $state(false);
   let ladeFehler = $state("");
@@ -37,7 +38,7 @@
   $effect(() => { if (quelle === "alle" && !geladen) ladeAlle(); });
 
   // Audio ist keine Kachel-Sache: beim Umschalten auf "Audio" gleich in die Liste.
-  function setzeFilter(f: "alle" | "bild" | "audio") {
+  function setzeFilter(f: "alle" | "bild" | "audio" | "video") {
     filter = f;
     if (f === "audio") modus = "liste";
   }
@@ -49,8 +50,8 @@
     quelle === "alle"
       ? alle.map((m) => ({ id: m.id, name: m.name, groesse: m.groesse, pfad: m.pfad, typ: m.typ }))
       : browser.eintraege
-          .filter((k) => k.typ === "datei" && (istBild(k.name) || istAudio(k.name)))
-          .map((k) => ({ id: k.id, name: k.name, groesse: k.groesse ?? null, pfad: null, typ: (istBild(k.name) ? "bild" : "audio") as "bild" | "audio" })),
+          .filter((k) => k.typ === "datei" && (istBild(k.name) || istAudio(k.name) || istVideo(k.name)))
+          .map((k) => ({ id: k.id, name: k.name, groesse: k.groesse ?? null, pfad: null, typ: (istBild(k.name) ? "bild" : istVideo(k.name) ? "video" : "audio") as "bild" | "audio" | "video" })),
   );
   const medien = $derived(roh.filter((m) => filter === "alle" || m.typ === filter));
   const bilder = $derived(medien.filter((m) => m.typ === "bild"));
@@ -58,11 +59,15 @@
   const thumbKante = 400;
   const zahlBild = $derived(roh.filter((m) => m.typ === "bild").length);
   const zahlAudio = $derived(roh.filter((m) => m.typ === "audio").length);
+  const zahlVideo = $derived(roh.filter((m) => m.typ === "video").length);
 
   function pfadText(p: { id: string; name: string }[] | null) { return !p || !p.length ? "Meine Dateien" : p.map((x) => x.name).join(" / "); }
   function zumOrdner(m: Anzeige | null) { if (!m || !m.pfad) return; browser.oeffnePfad(m.pfad, m.id); waehleApp("dateien"); }
   function oeffneOrdner(k: Knoten) { browser.oeffnen(k); }
   function mmss(s: number | undefined) { if (s === undefined || !isFinite(s)) return "-"; const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${r.toString().padStart(2, "0")}`; }
+
+  // --- Video: laeuft in der Vollansicht (HTTP-Range, deshalb billiges Spulen) ---
+  let videoOffen = $state<Anzeige | null>(null);
 
   // --- Bild-Lightbox + Diashow ---
   let vollIndex = $state<number | null>(null);
@@ -113,6 +118,7 @@
     <button class:aktiv={filter === "alle"} onclick={() => setzeFilter("alle")}>Alle</button>
     <button class:aktiv={filter === "bild"} onclick={() => setzeFilter("bild")}><i class="fa-regular fa-image"></i> Bilder</button>
     <button class:aktiv={filter === "audio"} onclick={() => setzeFilter("audio")}><i class="fa-solid fa-music"></i> Audio</button>
+    <button class:aktiv={filter === "video"} onclick={() => setzeFilter("video")}><i class="fa-solid fa-film"></i> Video</button>
   </div>
   <div class="seg">
     <button class:aktiv={modus === "kacheln"} title="Große Kacheln" onclick={() => (modus = "kacheln")}><i class="fa-solid fa-table-cells-large"></i></button>
@@ -121,7 +127,7 @@
   {#if bilder.length > 0}
     <button class="med-diashow" title="Diashow starten" onclick={starteDiashow}><i class="fa-solid fa-play"></i> Diashow</button>
   {/if}
-  <span class="zahl">{zahlBild} Bilder &middot; {zahlAudio} Audios</span>
+  <span class="zahl">{zahlBild} Bilder &middot; {zahlAudio} Audios &middot; {zahlVideo} Videos</span>
 </div>
 
 {#if (quelle === "alle" && !geladen) || (quelle === "ordner" && browser.laden)}
@@ -147,11 +153,13 @@
       </button>
     {/each}
     {#each medien as m (m.id)}
-      <button class="ml-zeile" class:spielt={spielId === m.id} onclick={() => (m.typ === "audio" ? spiele(m) : zeigeBild(m))}>
+      <button class="ml-zeile" class:spielt={spielId === m.id} onclick={() => (m.typ === "audio" ? spiele(m) : m.typ === "video" ? (videoOffen = m) : zeigeBild(m))}>
         <span class="ml-c ml-name">
           {#if m.typ === "audio"}
             <i class="sym audio fa-solid {spielId === m.id && player.laeuft ? 'fa-circle-pause' : 'fa-circle-play'}"></i>
             <audio preload="metadata" src={streamUrl(m.id)} onloadedmetadata={(e) => dauern.set(m.id, (e.currentTarget as HTMLAudioElement).duration)}></audio>
+          {:else if m.typ === "video"}
+            <i class="sym video fa-solid fa-circle-play"></i>
           {:else if kaputt.has(m.id)}
             <span class="sym"><i class="fa-regular fa-image"></i></span>
           {:else}
@@ -187,6 +195,16 @@
           <div class="k-name">{m.name}</div>
           {#if quelle === "alle"}<div class="med-pfad">{pfadText(m.pfad)}</div>{/if}
         </button>
+      {:else if m.typ === "video"}
+        <button class="kachel med-kachel" onclick={() => (videoOffen = m)} title={m.name}>
+          <div class="vorschau med-cover med-video">
+            <span class="med-format">{formatKuerzel(m.name)}</span>
+            <i class="med-note fa-solid fa-film"></i>
+            <span class="med-play"><i class="fa-solid fa-play"></i></span>
+          </div>
+          <div class="k-name">{m.name}</div>
+          {#if quelle === "alle"}<div class="med-pfad">{pfadText(m.pfad)}</div>{/if}
+        </button>
       {:else}
         <button class="kachel med-kachel" class:spielt={spielId === m.id} onclick={() => spiele(m)} title={m.name}>
           <div class="vorschau med-cover">
@@ -200,6 +218,10 @@
       {/if}
     {/each}
   </div>
+{/if}
+
+{#if videoOffen}
+  <VideoVollbild knoten={videoOffen} schliessen={() => (videoOffen = null)} />
 {/if}
 
 {#if aktuellesBild}
@@ -237,6 +259,9 @@
   .med-kachel.spielt { border-color: var(--akzent); background: var(--akzent-weich); }
   .med-voll { width: 100%; height: 100%; object-fit: cover; }
   .med-kachel .med-cover { background: linear-gradient(135deg, #6d5efc, #3b82f6); color: #fff; font-size: 1.7rem; position: relative; }
+  /* Video klar von Audio unterscheidbar (anderer Farbverlauf, Film statt Note). */
+  .med-kachel .med-cover.med-video { background: linear-gradient(135deg, #1f2937, #0f766e); }
+  .ml-name .sym.video { color: var(--akzent); font-size: 1.15rem; }
   /* Play-/Pause-Overlay auf der Audio-Kachel: bei Hover und beim laufenden Titel. */
   .med-cover .med-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.5rem; background: rgba(0, 0, 0, 0.28); opacity: 0; transition: opacity 0.15s ease; }
   .med-kachel:hover .med-play, .med-kachel.spielt .med-play { opacity: 1; }

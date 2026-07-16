@@ -49,32 +49,42 @@ def register(kontext: PluginKontext) -> PluginBeschreibung:
             raise HTTPException(status_code=415, detail="Bild nicht darstellbar")
         return Response(content=daten, media_type=typ, headers={"Content-Disposition": "inline"})
 
+    # Ohne Range wuerde der Browser die ganze Datei am Stueck ziehen. Wir liefern
+    # deshalb auch dann nur ein erstes Fenster und melden per Accept-Ranges, dass
+    # er sich den Rest bereichsweise holen kann.
+    _FENSTER = 2 * 1024 * 1024
+
     @router.get("/stream/{knoten_id}")
     async def stream(knoten_id: str, request: Request):
         b = await benutzer(request)
         try:
-            daten, typ = await dienst.audio(b["id"], knoten_id)
+            gesamt, typ = await dienst.strom_kopf(b["id"], knoten_id)
         except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="Audio nicht gefunden")
+            raise HTTPException(status_code=404, detail="Medium nicht gefunden")
         except Exception:  # noqa: BLE001
-            raise HTTPException(status_code=415, detail="Audio nicht abspielbar")
-        gesamt = len(daten)
+            raise HTTPException(status_code=415, detail="Medium nicht abspielbar")
+        if gesamt <= 0:
+            raise HTTPException(status_code=415, detail="Medium ist leer")
+
         bereich = request.headers.get("range")
-        if bereich:
-            m = _RANGE.match(bereich)
-            start = int(m.group(1)) if m and m.group(1) else 0
-            ende = int(m.group(2)) if m and m.group(2) else gesamt - 1
-            ende = min(ende, gesamt - 1)
-            start = max(0, min(start, ende))
-            teil = daten[start:ende + 1]
-            return Response(content=teil, status_code=206, media_type=typ, headers={
-                "Content-Range": f"bytes {start}-{ende}/{gesamt}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(len(teil)),
-                "Cache-Control": "private, max-age=86400",
-            })
-        return Response(content=daten, media_type=typ,
-                        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=86400"})
+        m = _RANGE.match(bereich) if bereich else None
+        start = int(m.group(1)) if m and m.group(1) else 0
+        if m and m.group(2):
+            ende = min(int(m.group(2)), gesamt - 1)
+        else:
+            # Offenes Ende: nur ein Fenster ausliefern, nicht den ganzen Rest.
+            ende = min(start + _FENSTER - 1, gesamt - 1)
+        start = max(0, min(start, gesamt - 1))
+        if ende < start:
+            ende = start
+        # Es wird AUSSCHLIESSLICH dieser Ausschnitt von der Platte gelesen.
+        teil = await dienst.strom_bereich(b["id"], knoten_id, start, ende - start + 1)
+        return Response(content=teil, status_code=206, media_type=typ, headers={
+            "Content-Range": f"bytes {start}-{ende}/{gesamt}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(teil)),
+            "Cache-Control": "private, max-age=86400",
+        })
 
     @router.get("/alle")
     async def alle(request: Request):

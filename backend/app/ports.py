@@ -47,6 +47,12 @@ class BlobStore(Protocol):
     def get(self, benutzer_id: str, blob_hash: str) -> bytes:
         ...
 
+    def get_bereich(self, benutzer_id: str, blob_hash: str, start: int = 0,
+                    laenge: int = -1) -> bytes:
+        """Liefert nur den Ausschnitt ab start (laenge=-1 heisst bis zum Ende),
+        ohne den ganzen Block zu lesen. Fuers Spulen unverzichtbar."""
+        ...
+
     def exists(self, benutzer_id: str, blob_hash: str) -> bool:
         ...
 
