@@ -458,3 +458,37 @@ async def test_datei_groesse_ohne_lesen(dienst, benutzer_id):
     daten = b"x" * 5000
     knoten = await dienst.datei_hochladen(benutzer_id, None, "mass.bin", daten)
     assert await dienst.datei_groesse(benutzer_id, knoten["id"]) == 5000
+
+
+async def test_datei_pfad_fuer_werkzeuge(dienst, benutzer_id):
+    """Werkzeuge wie ffmpeg brauchen eine echte Datei - der Pfad muss stimmen.
+
+    Wichtig: der Inhalt darf dafuer NICHT gelesen werden. Der Pfad zeigt auf den
+    Block im Pool; wer ihn nutzt (ffmpeg), liest selbst nur die noetigen Stellen.
+    """
+    daten = b"irgendwas" * 100
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "clip.mp4", daten)
+
+    pfad = await dienst.datei_pfad(benutzer_id, knoten["id"])
+    assert pfad is not None, "dateibasierter Speicher muss einen Pfad liefern"
+    assert pfad.exists()
+    assert pfad.read_bytes() == daten, "der Pfad zeigt auf den falschen Block"
+
+
+async def test_datei_pfad_ohne_pfadfaehigen_speicher(dienst, benutzer_id):
+    """Ein Speicher ohne Pfade (z.B. entfernt) liefert None statt zu krachen -
+    der Aufrufer muss ohne Standbild auskommen koennen."""
+    knoten = await dienst.datei_hochladen(benutzer_id, None, "clip2.mp4", b"x" * 50)
+
+    class OhnePfad:
+        def __getattr__(self, name):
+            if name == "pfad":
+                raise AttributeError(name)
+            return getattr(dienst.blobstore, name)
+
+    original = dienst.blobstore
+    dienst.blobstore = OhnePfad()
+    try:
+        assert await dienst.datei_pfad(benutzer_id, knoten["id"]) is None
+    finally:
+        dienst.blobstore = original
