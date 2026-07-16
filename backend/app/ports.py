@@ -16,6 +16,12 @@ class SpeicherNichtVerfuegbar(Exception):
     HTTP 503 - der Aufrufer soll spaeter erneut versuchen, nichts geht verloren."""
 
 
+class DateiZuGross(Exception):
+    """Der Strom hat die erlaubte Obergrenze ueberschritten. Wird beim Streamen
+    erkannt (nicht erst danach), damit nie eine ganze Datei im Speicher landet,
+    nur um sie anschliessend abzulehnen. Die API uebersetzt das in HTTP 413."""
+
+
 @runtime_checkable
 class BlobStore(Protocol):
     """Inhaltsadressierte Ablage roher Bloecke, Pool pro Nutzer isoliert."""
@@ -29,6 +35,13 @@ class BlobStore(Protocol):
         """Legt die Bytes ab und liefert (hash, neu_geschrieben). Existiert der
         Block schon, wird nichts geschrieben (Dedup) und neu_geschrieben=False.
         Bei abgehaengtem Pool -> SpeicherNichtVerfuegbar (vor jedem Schreibversuch)."""
+        ...
+
+    def put_strom(self, benutzer_id: str, quelle, max_bytes: int = 0) -> tuple[str, bool, int]:
+        """Wie put, liest den Inhalt aber stueckweise aus einem Datei-Objekt und
+        haelt ihn nie vollstaendig im Speicher - dadurch ist der Speicherbedarf
+        unabhaengig von der Dateigroesse. Liefert (hash, neu_geschrieben, groesse).
+        max_bytes=0 heisst ohne Grenze; darueber -> DateiZuGross."""
         ...
 
     def get(self, benutzer_id: str, blob_hash: str) -> bytes:

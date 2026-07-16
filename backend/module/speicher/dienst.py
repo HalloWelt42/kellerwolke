@@ -316,6 +316,15 @@ class SpeicherDienst:
             self.blobstore.put, benutzer_id, daten, timeout=self._io_timeout(len(daten))
         )
 
+    async def blob_put_strom(self, benutzer_id: str, quelle, max_bytes: int = 0):
+        """Streamendes Ablegen. Die Groesse ist vorab unbekannt, deshalb wird das
+        Zeitlimit auf die erlaubte Obergrenze bemessen - eine grosse Datei darf
+        lange dauern, ohne dass die Wache zuschlaegt."""
+        return await im_thread(
+            self.blobstore.put_strom, benutzer_id, quelle, max_bytes,
+            timeout=self._io_timeout(max_bytes or EINSTELLUNGEN.max_upload),
+        )
+
     async def blob_get(self, benutzer_id: str, blob_hash: str, groesse: int = 0) -> bytes:
         return await im_thread(
             self.blobstore.get, benutzer_id, blob_hash, timeout=self._io_timeout(groesse)
@@ -505,7 +514,25 @@ class SpeicherDienst:
         # 1. Block zuerst auf die Platte (inhaltsadressiert). neu sagt, ob dieser
         #    Aufruf den Block erzeugt hat - wichtig fuer die Kompensation unten.
         blob_hash, neu = await self.blob_put(str(besitzer_id), daten)
-        groesse = len(daten)
+        return await self._datei_eintragen(
+            besitzer_id, parent_id, name, blob_hash, neu, len(daten)
+        )
+
+    async def datei_hochladen_strom(self, besitzer_id, parent_id, name, quelle, max_bytes: int = 0):
+        """Wie datei_hochladen, nimmt den Inhalt aber als Datei-Objekt und streamt
+        ihn auf die Platte - der Speicherbedarf haengt NICHT an der Dateigroesse.
+        Liefert (knoten, blob_hash, groesse); Hash und Groesse braucht der Aufrufer
+        fuer die Indizierung, ohne die Bytes festhalten zu muessen."""
+        blob_hash, neu, groesse = await self.blob_put_strom(str(besitzer_id), quelle, max_bytes)
+        knoten = await self._datei_eintragen(
+            besitzer_id, parent_id, name, blob_hash, neu, groesse
+        )
+        return knoten, blob_hash, groesse
+
+    async def _datei_eintragen(self, besitzer_id, parent_id, name, blob_hash, neu, groesse):
+        """Traegt einen bereits geschriebenen Block als Datei-Version ein. Geteilt
+        von der Bytes- und der Strom-Variante, damit Idempotenz, Journal und die
+        Kompensation nur an einer Stelle stehen."""
         try:
             async with self.pool.connection() as conn:
                 async with conn.transaction():
@@ -715,6 +742,19 @@ class SpeicherDienst:
         if quelle is None:
             return False
         quelle.schreiben(self._externer_pfad(unterpfad, name), daten)
+        return True
+
+    async def externe_datei_schreiben_strom(self, besitzer_id, knoten_id, unterpfad, name,
+                                            strom, max_bytes: int = 0):
+        """Wie externe_datei_schreiben, streamt den Inhalt aber auf die Quelle,
+        statt ihn vorher komplett in den Speicher zu laden."""
+        quelle = await self._externe_quelle(besitzer_id, knoten_id)
+        if quelle is None:
+            return False
+        await im_thread(
+            quelle.schreiben_strom, self._externer_pfad(unterpfad, name), strom, max_bytes,
+            timeout=self._io_timeout(max_bytes or EINSTELLUNGEN.max_upload),
+        )
         return True
 
     async def externe_ordner_anlegen(self, besitzer_id, knoten_id, unterpfad, name):

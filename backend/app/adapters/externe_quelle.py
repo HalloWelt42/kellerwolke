@@ -8,7 +8,7 @@ Testordner.
 
 from pathlib import Path
 
-from app.ports import Eintrag
+from app.ports import DateiZuGross, Eintrag
 
 
 class DateibaumQuelle:
@@ -56,6 +56,35 @@ class DateibaumQuelle:
             raise IsADirectoryError(relativ)
         ziel.parent.mkdir(parents=True, exist_ok=True)
         ziel.write_bytes(daten)
+
+    def schreiben_strom(self, relativ: str, quelle, max_bytes: int = 0,
+                        stueck: int = 1024 * 1024) -> int:
+        """Wie schreiben, aber stueckweise aus einem Datei-Objekt - der Inhalt
+        landet nie vollstaendig im Speicher. Liefert die geschriebene Groesse.
+        Ueberschreitet der Strom max_bytes, wird abgebrochen und die angefangene
+        Datei wieder entfernt (keine halbe Datei in der fremden Quelle)."""
+        ziel = self._aufloesen(relativ)
+        if ziel == self.wurzel or ziel.is_dir():
+            raise IsADirectoryError(relativ)
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        groesse = 0
+        try:
+            with open(ziel, "wb") as f:
+                while True:
+                    brocken = quelle.read(stueck)
+                    if not brocken:
+                        break
+                    groesse += len(brocken)
+                    if max_bytes and groesse > max_bytes:
+                        raise DateiZuGross(f"Datei groesser als {max_bytes} Bytes")
+                    f.write(brocken)
+            return groesse
+        except BaseException:
+            try:
+                ziel.unlink()
+            except OSError:
+                pass
+            raise
 
     def ordner_anlegen(self, relativ: str) -> None:
         ziel = self._aufloesen(relativ)

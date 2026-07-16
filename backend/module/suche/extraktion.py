@@ -30,6 +30,18 @@ def _endung(name: str) -> str:
     return name.lower().rsplit(".", 1)[-1] if "." in name else ""
 
 
+def inhalt_noetig(name: str, groesse: int) -> bool:
+    """Sagt VORAB, ob sich das Lesen des Inhalts fuer die Indexierung ueberhaupt
+    lohnt - anhand von Endung und Groesse allein, ohne die Datei anzufassen.
+
+    Dadurch muss eine grosse Video- oder Audiodatei gar nicht erst eingelesen
+    werden, nur damit text_extrahieren am Ende "" liefert. Bei False wird nur der
+    Dateiname indexiert."""
+    if groesse > _MAX_DATEI:
+        return False
+    return _endung(name) in _TEXT_ENDUNGEN or _endung(name) in ("pdf", "docx")
+
+
 def _pdf_text(daten: bytes) -> str:
     try:
         from pypdf import PdfReader

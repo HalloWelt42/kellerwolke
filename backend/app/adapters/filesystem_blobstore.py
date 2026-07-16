@@ -17,7 +17,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from app.ports import SpeicherNichtVerfuegbar
+from app.ports import DateiZuGross, SpeicherNichtVerfuegbar
 
 MARKER_DATEI = ".kellerwolke_pool"
 
@@ -94,6 +94,53 @@ class FilesystemBlobStore:
                 pass
             raise
         return blob_hash, True
+
+    def put_strom(self, benutzer_id: str, quelle, max_bytes: int = 0,
+                  stueck: int = 1024 * 1024) -> tuple[str, bool, int]:
+        """Wie put, aber stueckweise aus einem Datei-Objekt - die Datei landet nie
+        vollstaendig im Speicher, der Bedarf bleibt konstant (ein Stueck).
+
+        Der inhaltsadressierte Name steht erst am Ende fest, deshalb: erst in eine
+        temporaere Datei UNTERHALB der Pool-Wurzel schreiben (gleiches Dateisystem
+        -> spaeteres rename ist atomar) und dabei mithashen, dann umbenennen.
+        Liefert (hash, neu_geschrieben, groesse).
+        """
+        self._sichern()
+        basis = self.wurzel / benutzer_id
+        basis.mkdir(parents=True, exist_ok=True)
+        hasher = hashlib.sha256()
+        groesse = 0
+        fd, tmp = tempfile.mkstemp(dir=str(basis))
+        try:
+            with os.fdopen(fd, "wb") as f:
+                while True:
+                    brocken = quelle.read(stueck)
+                    if not brocken:
+                        break
+                    groesse += len(brocken)
+                    # Grenze WAEHREND des Lesens durchsetzen: sonst muesste erst
+                    # alles ankommen, nur um es dann abzulehnen.
+                    if max_bytes and groesse > max_bytes:
+                        raise DateiZuGross(f"Datei groesser als {max_bytes} Bytes")
+                    hasher.update(brocken)
+                    f.write(brocken)
+                f.flush()
+                os.fsync(f.fileno())
+            blob_hash = hasher.hexdigest()
+            ziel = self._pfad(benutzer_id, blob_hash)
+            if ziel.exists():
+                os.unlink(tmp)  # Dedup: Block ist schon da
+                return blob_hash, False, groesse
+            ziel.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(tmp, ziel)
+            self._verzeichnis_fsync(ziel.parent)
+            return blob_hash, True, groesse
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+            raise
 
     @staticmethod
     def _verzeichnis_fsync(ordner: Path) -> None:

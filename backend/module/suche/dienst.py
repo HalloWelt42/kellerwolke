@@ -10,7 +10,7 @@ import re
 
 from psycopg.rows import dict_row
 
-from module.suche.extraktion import text_extrahieren
+from module.suche.extraktion import inhalt_noetig, text_extrahieren
 
 
 def _name_tokens(name: str) -> str:
@@ -22,6 +22,12 @@ def _name_tokens(name: str) -> str:
 class SuchDienst:
     def __init__(self, pool) -> None:
         self.pool = pool
+
+    def braucht_inhalt(self, name: str, groesse: int) -> bool:
+        """Ob der Inhalt fuer die Indexierung ueberhaupt gelesen werden muss.
+        Der Aufrufer kann so eine grosse Datei ungelesen lassen, statt sie fuer
+        nichts in den Speicher zu holen."""
+        return inhalt_noetig(name, groesse)
 
     async def indexieren(self, besitzer_id, knoten_id, name, daten) -> None:
         # besitzer_id kommt aus dem Knoten selbst, und es wird nur indexiert,

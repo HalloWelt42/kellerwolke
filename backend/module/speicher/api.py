@@ -16,6 +16,7 @@ from app.abhaengig import (
     hole_vorgaenge,
 )
 from app.config import EINSTELLUNGEN
+from app.ports import DateiZuGross
 from module.speicher.dienst import ArchivZuGross
 from module.speicher.modelle import (
     ExternEintragAus,
@@ -140,19 +141,15 @@ async def extern_inhalt(knoten_id: UUID, unterpfad: str,
 @router.post("/extern/{knoten_id}/upload", status_code=204)
 async def extern_upload(knoten_id: UUID, datei: UploadFile, unterpfad: str = Form(default=""),
                         benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
-    stuecke, gesamt = [], 0
-    while True:
-        stueck = await datei.read(1024 * 1024)
-        if not stueck:
-            break
-        gesamt += len(stueck)
-        if gesamt > EINSTELLUNGEN.max_upload:
-            raise HTTPException(status_code=413, detail="Datei zu gross")
-        stuecke.append(stueck)
+    # Wie beim normalen Upload: direkt streamen, nichts vollstaendig im Speicher.
+    await datei.seek(0)
     try:
-        ok = await speicher.externe_datei_schreiben(
-            benutzer["id"], knoten_id, unterpfad, datei.filename or "datei", b"".join(stuecke)
+        ok = await speicher.externe_datei_schreiben_strom(
+            benutzer["id"], knoten_id, unterpfad, datei.filename or "datei",
+            datei.file, EINSTELLUNGEN.max_upload,
         )
+    except DateiZuGross:
+        raise HTTPException(status_code=413, detail="Datei zu gross")
     except (PermissionError, IsADirectoryError, OSError, ValueError):
         raise HTTPException(status_code=400, detail="Schreiben nicht moeglich")
     if not ok:
@@ -190,24 +187,27 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
                     suche=Depends(hole_suche), vorgaenge=Depends(hole_vorgaenge)):
     if parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], parent_id):
         raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
-    # In Stuecken lesen und harte Obergrenze durchsetzen (Speicher-Schutz).
-    stuecke, gesamt = [], 0
-    while True:
-        stueck = await datei.read(1024 * 1024)
-        if not stueck:
-            break
-        gesamt += len(stueck)
-        if gesamt > EINSTELLUNGEN.max_upload:
-            raise HTTPException(status_code=413, detail="Datei zu gross")
-        stuecke.append(stueck)
-    daten = b"".join(stuecke)
+    # Direkt aus dem Strom auf die Platte: die Datei landet NIE vollstaendig im
+    # Speicher, damit auch sehr grosse Dateien sicher ankommen. Die Obergrenze
+    # wird beim Streamen durchgesetzt.
     name = datei.filename or "datei"
-    knoten = await speicher.datei_hochladen(benutzer["id"], parent_id, name, daten)
+    await datei.seek(0)
+    try:
+        knoten, blob_hash, groesse = await speicher.datei_hochladen_strom(
+            benutzer["id"], parent_id, name, datei.file, EINSTELLUNGEN.max_upload
+        )
+    except DateiZuGross:
+        raise HTTPException(status_code=413, detail="Datei zu gross")
 
     # Indizierung laeuft als Hintergrund-Vorgang, damit der Upload nicht darauf
-    # wartet und ein Index-Fehler den Upload nicht scheitern laesst.
+    # wartet und ein Index-Fehler den Upload nicht scheitern laesst. Der Inhalt
+    # wird NUR nachgelesen, wenn die Extraktion ihn auch nutzt - sonst wuerde eine
+    # grosse Datei allein fuer den Index im Speicher gehalten.
     async def _indizieren(_vorgang):
-        await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
+        inhalt = b""
+        if suche.braucht_inhalt(name, groesse):
+            inhalt = await speicher.blob_get(str(benutzer["id"]), blob_hash, groesse)
+        await suche.indexieren(benutzer["id"], knoten["id"], name, inhalt)
 
     vorgaenge.starte(benutzer["id"], "indizierung", f"{name} indizieren", _indizieren)
     return KnotenAus.model_validate(knoten)
