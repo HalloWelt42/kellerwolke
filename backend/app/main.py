@@ -17,7 +17,11 @@ from . import plugins as plugin_lader
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
 from .ports import SpeicherNichtVerfuegbar
+from module.ablage.api import router as ablage_router
+from module.ablage.dienst import AblageDienst
 from module.admin.api import router as admin_router
+from module.appzugang.api import router as appzugang_router
+from module.appzugang.dienst import AppZugangDienst
 from module.auth.api import router as auth_router
 from module.auth.dienst import AuthDienst
 from module.speicher.api import router as datei_router
@@ -57,6 +61,8 @@ async def lebenszyklus(app: FastAPI):
     await app.state.speicher.speicher_initialisieren(EINSTELLUNGEN.objekt_pfad)
     app.state.suche = SuchDienst(pool)
     app.state.vorgaenge = VorgangRegistry()
+    app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
+    app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
     await _admin_seed(app.state.auth)
     # Plugins entdecken + aktive einbinden (jedes isoliert; ein defektes Plugin
     # deaktiviert nur sich selbst, der Kern startet weiter).
@@ -103,6 +109,8 @@ def app_bauen() -> FastAPI:
     app.include_router(sync_router)
     app.include_router(vorgaenge_router)
     app.include_router(plugins_router)
+    app.include_router(appzugang_router)
+    app.include_router(ablage_router)
     webdav_einbinden(app)
     return app
 

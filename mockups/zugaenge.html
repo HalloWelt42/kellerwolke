@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Zugänge</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <nav class="breadcrumb" style="padding: 0;">
+          <i class="fa-solid fa-gear"></i> <span class="aktuell">Einstellungen</span>
+        </nav>
+        <div class="kopf-rechts">
+          <button class="knopf still" title="Zu den Dateien">
+            <i class="fa-solid fa-arrow-left"></i> Zu den Dateien
+          </button>
+        </div>
+      </header>
+
+      <nav class="einst-nav">
+        <div class="nav-titel">Einstellungen</div>
+        <a class="einst-eintrag"><i class="fa-solid fa-users"></i> Konten</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-hard-drive"></i> Speicherorte</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="einst-eintrag aktiv"><i class="fa-solid fa-key"></i> Zugänge</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-magnifying-glass-chart"></i> Index</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-sliders"></i> System</a>
+      </nav>
+
+      <section class="einst-inhalt">
+        <h1>Zugänge</h1>
+        <p class="unter">
+          Eigene Apps greifen mit einem Schlüssel auf deine Dateien zu, ohne Browser und ohne dein Passwort. Jede App
+          arbeitet in ihrem Ordner unter <span class="pfad-text">Apps</span> und nur in den Ordnern, die du ihr
+          freigibst. Ordner, die mehrere Apps beschreiben dürfen, sind gemeinsame Arbeitsordner.
+        </p>
+
+        <!-- Zustand: ein Schlüssel wurde gerade ausgestellt; er steht nur dieses eine Mal hier -->
+        <div class="schluessel-box">
+          <div class="sb-kopf"><i class="fa-solid fa-key"></i> Schlüssel für <b>Vertonung</b> ausgestellt</div>
+          <div class="sb-zeile">
+            <code class="sb-wert">kw_app_Vh3qR8xL0dJm2ZtYw4bN9cKpF7aE1sGu6iOyQ5rTe0M</code>
+            <button class="knopf primaer"><i class="fa-solid fa-copy"></i> Kopieren</button>
+          </div>
+          <p class="sb-hinweis">
+            Nur jetzt sichtbar. Trag ihn in den Einstellungen der App ein; danach zeigt die Kellerwolke ihn nie wieder.
+            Geht er verloren, stellst du einen neuen aus.
+          </p>
+        </div>
+
+        <div class="karte">
+          <h2><i class="fa-solid fa-plug"></i> Apps</h2>
+          <p class="karte-unter">Ein Schlüssel je App. Rechte gelten für den Ordner und alles darunter; schreiben schließt lesen ein.</p>
+
+          <div class="zugang">
+            <div class="so-icon"><i class="fa-solid fa-closed-captioning"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Transkription</span>
+                <span class="marke-std">aktiv</span>
+                <span class="zg-zeit">zuletzt genutzt vor 3 Minuten</span>
+              </div>
+              <div class="rechte">
+                <span class="recht schreiben"><i class="fa-solid fa-pen"></i> Apps/Transkription</span>
+                <span class="recht schreiben"><i class="fa-solid fa-pen"></i> Apps/Gemeinsam/Videos</span>
+                <span class="recht lesen"><i class="fa-solid fa-eye"></i> Apps</span>
+              </div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Rechte bearbeiten"><i class="fa-solid fa-folder-tree"></i></button>
+              <button class="icon-knopf" title="Neuen Schlüssel ausstellen (der alte gilt sofort nicht mehr)"><i class="fa-solid fa-rotate"></i></button>
+              <button class="icon-knopf" title="Sperren"><i class="fa-solid fa-lock"></i></button>
+              <button class="icon-knopf gefahr" title="Zugang entfernen (die Dateien der App bleiben)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- Zustand: Rechte bearbeiten (aufgeklappt) -->
+          <div class="zugang offen">
+            <div class="so-icon"><i class="fa-solid fa-film"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Vertonung</span>
+                <span class="marke-std">aktiv</span>
+                <span class="zg-zeit">noch nie genutzt</span>
+              </div>
+              <div class="rechte-bearbeiten">
+                <div class="rb-zeile">
+                  <span class="pfad-text"><i class="fa-solid fa-folder"></i> Apps/Vertonung</span>
+                  <select class="feld"><option selected>schreiben</option><option>lesen</option></select>
+                  <button class="icon-knopf gefahr" title="Recht entfernen"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div class="rb-zeile">
+                  <span class="pfad-text"><i class="fa-solid fa-folder"></i> Apps/Gemeinsam/Videos</span>
+                  <select class="feld"><option selected>schreiben</option><option>lesen</option></select>
+                  <button class="icon-knopf gefahr" title="Recht entfernen"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div class="rb-zeile">
+                  <span class="pfad-text"><i class="fa-solid fa-folder"></i> Apps</span>
+                  <select class="feld"><option>schreiben</option><option selected>lesen</option></select>
+                  <button class="icon-knopf gefahr" title="Recht entfernen"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div class="rb-zeile neu">
+                  <button class="knopf still"><i class="fa-solid fa-folder-plus"></i> Ordner hinzufügen</button>
+                  <span class="rb-hinweis">Ordner aus deinen Dateien wählen</span>
+                </div>
+                <div class="rb-fuss">
+                  <button class="knopf still">Abbrechen</button>
+                  <button class="knopf primaer"><i class="fa-solid fa-check"></i> Rechte speichern</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="zugang">
+            <div class="so-icon"><i class="fa-solid fa-comment-dots"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Stimmenausgabe</span>
+                <span class="marke-std">aktiv</span>
+                <span class="zg-zeit">zuletzt genutzt gestern, 21:14</span>
+              </div>
+              <div class="rechte">
+                <span class="recht schreiben"><i class="fa-solid fa-pen"></i> Apps/Stimmenausgabe</span>
+                <span class="recht lesen"><i class="fa-solid fa-eye"></i> Apps</span>
+              </div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Rechte bearbeiten"><i class="fa-solid fa-folder-tree"></i></button>
+              <button class="icon-knopf" title="Neuen Schlüssel ausstellen"><i class="fa-solid fa-rotate"></i></button>
+              <button class="icon-knopf" title="Sperren"><i class="fa-solid fa-lock"></i></button>
+              <button class="icon-knopf gefahr" title="Zugang entfernen"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- Zustand: gesperrt -->
+          <div class="zugang gesperrt">
+            <div class="so-icon"><i class="fa-solid fa-robot"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Assistent</span>
+                <span class="marke-ro">gesperrt</span>
+                <span class="zg-zeit">zuletzt genutzt am 12.10.</span>
+              </div>
+              <div class="rechte">
+                <span class="recht schreiben"><i class="fa-solid fa-pen"></i> Apps/Assistent</span>
+                <span class="recht lesen"><i class="fa-solid fa-eye"></i> Apps</span>
+              </div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Entsperren"><i class="fa-solid fa-lock-open"></i></button>
+              <button class="icon-knopf gefahr" title="Zugang entfernen"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <div class="formzeile">
+            <input class="feld" type="text" placeholder="Name der App (zugleich ihr Ordner unter Apps)" value="Tonbearbeitung" />
+            <button class="knopf primaer"><i class="fa-solid fa-key"></i> Schlüssel ausstellen</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+          b.classList.toggle("aktiv", b.dataset.themeBtn === t),
+        );
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

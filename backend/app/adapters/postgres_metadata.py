@@ -351,6 +351,29 @@ class PostgresMetadataRepository:
         # ON DELETE CASCADE raeumt Kinder, Versionen und Chunks mit ab.
         await self.conn.execute("DELETE FROM knoten WHERE id = ANY(%s)", (wurzeln,))
 
+    async def pfad_namen(self, knoten_id) -> list[str]:
+        """Namen vom Wurzelordner bis zum Knoten, für Pfadangaben (leer, wenn es den Knoten nicht gibt)."""
+        zeilen = await self._alle(
+            "WITH RECURSIVE kette AS ("
+            "  SELECT id, parent_id, name, 0 AS tiefe FROM knoten WHERE id=%s "
+            "  UNION ALL "
+            "  SELECT k.id, k.parent_id, k.name, kette.tiefe + 1 FROM knoten k JOIN kette ON k.id = kette.parent_id"
+            ") SELECT name FROM kette ORDER BY tiefe DESC",
+            (knoten_id,),
+        )
+        return [z["name"] for z in zeilen]
+
+    async def kinder_seite(self, parent_id, ab: int, anzahl: int):
+        """Eine Seite der lebenden Kinder eines Ordners in fester Reihenfolge (Ordner vor Dateien, Name, Kennung),
+        mit Größe der aktuellen Version. Der Zugriff auf den Ordner ist vorher geprüft."""
+        return await self._alle(
+            "SELECT k.*, v.groesse FROM knoten k LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "WHERE k.parent_id=%s AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, lower(k.name), k.id "
+            "LIMIT %s OFFSET %s",
+            (parent_id, anzahl, ab),
+        )
+
     async def ist_im_teilbaum(self, wurzel_id, kandidat_id) -> bool:
         """True, wenn kandidat_id der Knoten wurzel_id selbst oder ein Nachkomme
         davon ist (zum Erkennen von Verschiebe-Zyklen)."""
