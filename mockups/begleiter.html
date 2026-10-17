@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Begleitdateien und Aktionen der Apps</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <!-- Echte Gestaltung der Oberfläche; was hier unten neu ist, kommt nach der Freigabe in app.css. -->
+    <link rel="stylesheet" href="/frontend/src/app.css" />
+    <style>
+      /* ===== unverändert, aus AppLeiste.svelte, Filterleiste.svelte, Speicheranzeige.svelte ===== */
+      .app-leiste { display: flex; align-items: center; gap: var(--a1); padding: var(--a2) var(--a4) 0; flex-wrap: wrap; }
+      .app-knopf { display: inline-flex; align-items: center; gap: var(--a2); padding: var(--a1) var(--a3); border: 1px solid transparent;
+        border-radius: var(--r2); background: transparent; color: var(--text-2); font: inherit; font-size: 0.86rem; cursor: pointer; }
+      .app-knopf.aktiv { background: var(--akzent-weich); color: var(--akzent-stark); }
+      .filterleiste { display: flex; flex-wrap: wrap; align-items: center; gap: var(--a2); padding: var(--a2) var(--a4); }
+      .filter-regel { display: flex; align-items: center; gap: var(--a1); background: var(--flaeche-2); border: 1px solid var(--rand);
+        border-radius: var(--r2); padding: 2px 2px 2px var(--a2); }
+      .filter-regel .symbol { color: var(--text-3); font-size: 0.8rem; }
+      .filter-regel input { border: none; background: transparent; color: var(--text-1); font: inherit; font-size: 0.86rem;
+        padding: var(--a1) var(--a1); min-width: 160px; outline: none; }
+      .filter-regel select { border: none; background: transparent; color: var(--text-2); font: inherit; font-size: 0.8rem; padding: 2px; }
+      .opt { border: 1px solid transparent; background: transparent; color: var(--text-2); font: inherit; font-size: 0.8rem; font-weight: 600;
+        min-width: 26px; height: 26px; padding: 0 var(--a1); border-radius: var(--r1); display: inline-flex; align-items: center;
+        justify-content: center; gap: 4px; }
+      .opt.still { color: var(--text-3); }
+      .filter-aktionen { display: flex; align-items: center; gap: var(--a1); }
+      .ring-zeile { display: flex; align-items: center; gap: var(--a3); }
+      .ring { width: 56px; height: 56px; flex: none; transform: rotate(-90deg); }
+      .ring .spur { fill: none; stroke: var(--flaeche-3); stroke-width: 5; }
+      .ring .seg { fill: none; stroke-width: 5; stroke-linecap: round; }
+      .ring .seg.kw { stroke: var(--akzent); }
+      .ring .seg.sonst { stroke: var(--rand-stark); }
+      .legende { display: flex; flex-direction: column; gap: var(--a1); font-size: 0.78rem; color: var(--text-2); min-width: 0; }
+      .le { display: flex; align-items: center; gap: var(--a2); white-space: nowrap; }
+      .punkt { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+      .punkt.kw { background: var(--akzent); }
+      .punkt.frei { background: var(--flaeche-3); border: 1px solid var(--rand-stark); }
+      .nav-version { margin: var(--a3) var(--a3) var(--a1); font-size: 0.72rem; color: var(--text-3); }
+
+      /* ===== neu: Begleitdateien ===== */
+      .begleit-knopf {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 22px;
+        padding: 0 8px;
+        border: none;
+        border-radius: 999px;
+        background: var(--flaeche-3);
+        color: var(--text-2);
+        font: inherit;
+        font-size: 0.76rem;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+      }
+      .begleit-knopf:hover { background: var(--rand); color: var(--text); }
+      .begleit-knopf.offen { background: var(--akzent-weich); color: var(--akzent-stark); }
+      .begleit-knopf .fa-chevron-right { font-size: 0.62rem; transition: transform var(--schnell); }
+      .begleit-knopf.offen .fa-chevron-right { transform: rotate(90deg); }
+      .begleit-marke {
+        flex: none;
+        font-size: 0.76rem;
+        color: var(--text-3);
+        white-space: nowrap;
+      }
+      .zeile.begleiter .z-name { padding-left: 30px; }
+      .zeile.begleiter .z-name .sym { font-size: 1.2rem; width: 24px; }
+      .zeile.begleiter .titel { color: var(--text-2); }
+      .rolle-chip {
+        flex: none;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--flaeche-3);
+        color: var(--text-2);
+        white-space: nowrap;
+      }
+      /* Laufende Anfrage an der Zeile: feste Breite, damit nichts springt */
+      .anfrage-pille {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 168px;
+        height: 22px;
+        padding: 0 9px;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        background: var(--akzent-weich);
+        color: var(--akzent-stark);
+      }
+      .anfrage-pille.wartet { background: var(--flaeche-3); color: var(--text-2); }
+      /* Neue Marken schieben sich nie über die Nachbarspalten; bei schmaler Liste bleiben nur Zähler und Prozent */
+      .zeile .z-name { overflow: hidden; }
+      .zeile .z-name .sym { flex: none; }
+      @container (max-width: 620px) {
+        .rolle-chip, .begleit-marke, .anfrage-pille .ap-text, .begleit-knopf .fa-paperclip { display: none; }
+        .anfrage-pille { min-width: 0; }
+        .zeile.begleiter .z-name { padding-left: 14px; }
+      }
+      /* Sehr schmale Liste (Detail offen bei kleinem Fenster): Knöpfe der Zeile weg, der Name bekommt den Platz;
+         dieselben Handlungen bleiben über das Menü (Rechtsklick) und die Auswahlleiste. */
+      @container (max-width: 440px) {
+        .liste .listenkopf, .liste .zeile { grid-template-columns: 34px minmax(0, 1fr) 76px; }
+        .liste .zeile .z-akt, .liste .listenkopf > span:last-child { display: none; }
+      }
+      /* Kontextmenü: Abschnitt der Apps */
+      .kontextmenue .kgruppe {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-3);
+        padding: var(--a2) var(--a3) var(--a1);
+      }
+      .kontextmenue button .k-app { margin-left: auto; padding-left: var(--a4); font-size: 0.78rem; color: var(--text-3); }
+      .kontextmenue button .k-unter { margin-left: auto; padding-left: var(--a4); font-size: 0.78rem; color: var(--text-3); }
+      /* Detail: Begleiter und Apps */
+      .begleit-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+      .begleit-liste li {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--a2);
+        padding: 6px var(--a2);
+        border-radius: var(--r1);
+        font-size: 0.88rem;
+        cursor: pointer;
+      }
+      .begleit-liste li:hover { background: var(--flaeche-2); }
+      .begleit-liste li i { color: var(--text-2); text-align: center; }
+      .begleit-liste .b-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .begleit-liste .b-meta { grid-column: 2 / 4; font-size: 0.78rem; color: var(--text-3); margin-top: -2px; }
+      .app-knoepfe { display: flex; flex-direction: column; gap: var(--a2); }
+      .app-knoepfe .knopf { justify-content: flex-start; }
+      .app-knoepfe .knopf .k-app { margin-left: auto; font-size: 0.78rem; color: var(--text-3); }
+
+      /* ===== nur für den Entwurf: Zustand wählen ===== */
+      .entwurf-wahl {
+        position: fixed;
+        right: 12px;
+        bottom: 12px;
+        z-index: 40;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        background: var(--flaeche);
+        border: 1px solid var(--rand);
+        border-radius: var(--r2);
+        box-shadow: var(--schatten-1);
+        font-size: 0.78rem;
+      }
+      .entwurf-wahl a {
+        padding: 3px 8px;
+        border-radius: var(--r1);
+        color: var(--text-2);
+        text-decoration: none;
+      }
+      .entwurf-wahl a.an { background: var(--akzent); color: var(--akzent-text); }
+    </style>
+  </head>
+  <body>
+    <nav class="entwurf-wahl" aria-label="Zustand des Entwurfs"></nav>
+
+    <div class="app" id="app">
+      <header class="kopf">
+        <div class="marke"><svg width="22" height="22" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true" class="kw-logo">
+          <rect x="5" y="11" width="22" height="7" rx="3.5" /><circle cx="10" cy="12.5" r="4.5" /><circle cx="16" cy="8.5" r="6" />
+          <circle cx="22" cy="13" r="4" /><rect x="9" y="21" width="14" height="2.6" rx="1.3" /><rect x="9" y="25" width="14" height="2.6" rx="1.3" />
+          <rect x="9" y="29" width="14" height="2.6" rx="1.3" /></svg> Kellerwolke</div>
+        <form class="kopf-suche" onsubmit="return false">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </form>
+        <div class="kopf-rechts">
+          <button class="icon-knopf kopf-knopf" title="Vorgänge">
+            <i class="fa-solid fa-list-check"></i>
+            <span class="badge" data-nur="5">2</span>
+          </button>
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip"><span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i></button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche <button class="nav-einklapp" title="Navigation ausblenden"><i class="fa-solid fa-angles-left"></i></button></div>
+        <button class="nav-eintrag" data-aktiv="dateien"><i class="fa-solid fa-folder"></i> Meine Dateien</button>
+        <button class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</button>
+        <button class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt</button>
+        <button class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</button>
+        <button class="nav-eintrag" data-aktiv="papierkorb"><i class="fa-solid fa-trash"></i> Papierkorb</button>
+        <div class="nav-fuss">
+          <div class="speicher">
+            <div class="ring-zeile">
+              <svg class="ring" viewBox="0 0 36 36" role="img" aria-label="Speicherbelegung">
+                <circle class="spur" cx="18" cy="18" r="15.5" pathLength="100"></circle>
+                <circle class="seg sonst" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="1 100" stroke-dashoffset="-3"></circle>
+                <circle class="seg kw" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="3 100" stroke-dashoffset="0"></circle>
+              </svg>
+              <div class="legende"><div class="le"><span class="punkt kw"></span> Kellerwolke 1.8 GB</div><div class="le"><span class="punkt frei"></span> Frei 615.3 GB</div></div>
+            </div>
+          </div>
+          <div class="nav-version">Kellerwolke v0.79.0</div>
+        </div>
+      </nav>
+
+      <section class="inhalt">
+        <div class="app-leiste">
+          <button type="button" class="app-knopf aktiv"><i class="fa-solid fa-folder"></i><span>Dateien</span></button>
+          <button type="button" class="app-knopf"><i class="fa-solid fa-photo-film"></i><span>Medien</span></button>
+        </div>
+        <div class="werkzeuge">
+          <button class="knopf primaer" data-ausser="8"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <label class="knopf" data-ausser="8"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</label>
+          <button class="knopf" data-nur="8"><i class="fa-solid fa-trash-can"></i> Papierkorb leeren</button>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button class="aktiv" title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+            <button title="Splitscreen"><i class="fa-solid fa-table-columns"></i></button>
+          </div>
+        </div>
+
+        <!-- Ordner Besprechungen -->
+        <div data-ausser="8" style="display: contents">
+          <nav class="breadcrumb">
+            <a>Meine Dateien</a> <i class="fa-solid fa-chevron-right"></i>
+            <span class="aktuell">Besprechungen</span>
+          </nav>
+          <div class="filterleiste">
+            <div class="filter-regel"><i class="fa-solid fa-filter symbol"></i><input type="text" placeholder="In dieser Ansicht filtern ..." />
+              <select aria-label="Filtermodus"><option>Wörter</option></select><button type="button" class="opt">Aa</button>
+              <button type="button" class="opt"><i class="fa-solid fa-not-equal"></i></button></div>
+            <div class="filter-aktionen"><button type="button" class="opt still"><i class="fa-solid fa-plus"></i> Regel</button>
+              <button type="button" class="opt still" aria-label="Filter leeren"><i class="fa-solid fa-eraser"></i></button></div>
+          </div>
+
+          <div class="fehlerstreifen meldung" role="alert" data-nur="7">
+            <span>Runde 2026-10-12.srt gibt es in Archiv schon, ein Begleiter von Runde 2026-10-12.wav braucht diesen Namen;
+              nichts wurde geändert.</span>
+            <button class="meldung-zu" title="Schließen" aria-label="Meldung schließen"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div class="liste">
+            <div class="listenkopf">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-minus"></i></span></span>
+              <button class="sortbar aktiv">Name <i class="fa-solid fa-arrow-up-short-wide"></i></button>
+              <button class="sortbar">Größe</button>
+              <button class="sortbar sp-geaendert">Geändert</button>
+              <span></span>
+            </div>
+
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-folder ordner"></i><span class="titel">Archiv</span></span>
+              <span class="z-meta">3 Einträge</span><span class="z-meta z-geaendert">09.10.2026, 18:20</span><span class="z-akt"></span>
+            </div>
+
+            <!-- Elternabend: ohne Begleiter, in 5 läuft eine Anfrage -->
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-audio"></i><span class="titel">Elternabend Klasse 7b.m4a</span>
+                <span class="anfrage-pille" data-nur="5"><i class="fa-solid fa-circle-notch fa-spin"></i><span class="ap-text">Transkribieren</span> 62 %</span></span>
+              <span class="z-meta">23,4 MB</span><span class="z-meta z-geaendert">gestern, 19:42</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <!-- Hauptdatei mit zwei Begleitern -->
+            <div class="zeile" id="runde" data-gewaehlt="3 6">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-audio"></i><span class="titel">Runde 2026-10-12.wav</span>
+                <button class="begleit-knopf" data-offen="2 4 6" title="Begleiter zeigen: Transkript, Untertitel"><i class="fa-solid fa-chevron-right"></i><i class="fa-solid fa-paperclip"></i> 2</button></span>
+              <span class="z-meta">54,2 MB</span><span class="z-meta z-geaendert">12.10.2026, 10:05</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+            <div class="zeile begleiter" data-nur="2 4 6" data-gewaehlt="4">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-closed-captioning"></i><span class="titel">Runde 2026-10-12.transkript.json</span>
+                <span class="rolle-chip" title="angelegt von Transkription">Transkript</span></span>
+              <span class="z-meta">84 KB</span><span class="z-meta z-geaendert">12.10.2026, 10:19</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+            <div class="zeile begleiter" data-nur="2 4 6">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Runde 2026-10-12.srt</span>
+                <span class="rolle-chip" title="angelegt von Transkription">Untertitel</span></span>
+              <span class="z-meta">12 KB</span><span class="z-meta z-geaendert">12.10.2026, 10:21</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <!-- Text mit Sprachausgabe; in 5 wartet eine Anfrage, weil die App gerade aus ist -->
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Rundbrief Oktober.md</span>
+                <button class="begleit-knopf" title="Begleiter zeigen: Sprachausgabe"><i class="fa-solid fa-chevron-right"></i><i class="fa-solid fa-paperclip"></i> 1</button>
+                <span class="anfrage-pille wartet" data-nur="5" title="Die Stimmenausgabe läuft gerade nicht; die Anfrage wartet und startet, sobald sie wieder da ist"><i class="fa-regular fa-clock"></i><span class="ap-text">wartet auf Stimmenausgabe</span></span></span>
+              <span class="z-meta">6 KB</span><span class="z-meta z-geaendert">14.10.2026, 08:30</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Tagesordnung.md</span></span>
+              <span class="z-meta">2 KB</span><span class="z-meta z-geaendert">11.10.2026, 21:12</span><span class="z-akt"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Papierkorb: die Gruppe ist eine Zeile -->
+        <div data-nur="8" style="display: contents">
+          <nav class="breadcrumb"><span class="aktuell">Papierkorb</span></nav>
+          <div class="filterleiste">
+            <div class="filter-regel"><i class="fa-solid fa-filter symbol"></i><input type="text" placeholder="In dieser Ansicht filtern ..." />
+              <select aria-label="Filtermodus"><option>Wörter</option></select><button type="button" class="opt">Aa</button>
+              <button type="button" class="opt"><i class="fa-solid fa-not-equal"></i></button></div>
+            <div class="filter-aktionen"><button type="button" class="opt still"><i class="fa-solid fa-plus"></i> Regel</button>
+              <button type="button" class="opt still" aria-label="Filter leeren"><i class="fa-solid fa-eraser"></i></button></div>
+          </div>
+          <div class="liste">
+            <div class="listenkopf">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-minus"></i></span></span>
+              <button class="sortbar aktiv">Name <i class="fa-solid fa-arrow-up-short-wide"></i></button>
+              <button class="sortbar">Größe</button>
+              <button class="sortbar sp-geaendert">Gelöscht</button>
+              <span></span>
+            </div>
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-audio"></i><span class="titel">Runde 2026-10-12.wav</span>
+                <span class="begleit-marke" title="Runde 2026-10-12.transkript.json, Runde 2026-10-12.srt"><i class="fa-solid fa-paperclip"></i> mit 2 Begleitern</span></span>
+              <span class="z-meta">54,3 MB</span><span class="z-meta z-geaendert">heute, 11:02</span>
+              <span class="z-akt" style="opacity:1"><button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button><button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-closed-captioning"></i><span class="titel">Elternabend Klasse 7b.transkript.json</span>
+                <span class="begleit-marke" title="Kommt beim Wiederherstellen zurück neben Elternabend Klasse 7b.m4a">Transkript zu Elternabend Klasse 7b.m4a</span></span>
+              <span class="z-meta">41 KB</span><span class="z-meta z-geaendert">heute, 10:47</span>
+              <span class="z-akt" style="opacity:1"><button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button><button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Detail einer Hauptdatei -->
+      <aside class="detail" data-nur="6">
+        <div class="detail-kopf"><h2>Details</h2><button class="icon-knopf" title="Schließen"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="detail-vorschau"><i class="fa-solid fa-file-audio"></i></div>
+        <div class="detail-name">Runde 2026-10-12.wav</div>
+        <div class="detail-block">
+          <h3>Informationen</h3>
+          <div class="infozeile"><span>Typ</span><span>Ton (WAV)</span></div>
+          <div class="infozeile"><span>Größe</span><span>54,2 MB</span></div>
+          <div class="infozeile"><span>Geändert</span><span>12.10.2026, 10:05</span></div>
+          <div class="infozeile"><span>Pfad</span><span>Besprechungen</span></div>
+        </div>
+        <div class="detail-block">
+          <h3>Begleiter</h3>
+          <ul class="begleit-liste">
+            <li><i class="fa-solid fa-closed-captioning"></i><span class="b-name">Runde 2026-10-12.transkript.json</span><span class="rolle-chip">Transkript</span>
+              <span class="b-meta">84 KB · von Transkription · 12.10.2026, 10:19</span></li>
+            <li><i class="fa-solid fa-file-lines"></i><span class="b-name">Runde 2026-10-12.srt</span><span class="rolle-chip">Untertitel</span>
+              <span class="b-meta">12 KB · von Transkription · 12.10.2026, 10:21</span></li>
+          </ul>
+        </div>
+        <div class="detail-block">
+          <h3>Mit Apps</h3>
+          <div class="app-knoepfe">
+            <button class="knopf"><i class="fa-solid fa-up-right-from-square"></i> In Transkription öffnen</button>
+            <button class="knopf"><i class="fa-solid fa-closed-captioning"></i> Neu transkribieren <span class="k-app">neue Version</span></button>
+          </div>
+        </div>
+        <div class="detail-block" style="margin-top: auto;">
+          <div style="display: flex; gap: var(--a2);">
+            <button class="knopf primaer" style="flex: 1;"><i class="fa-solid fa-download"></i> Herunterladen</button>
+            <button class="knopf" style="flex: 1;"><i class="fa-solid fa-share-nodes"></i> Teilen</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 3: Menü der Hauptdatei -->
+    <div class="kontextmenue" role="menu" data-nur="3" style="left: 520px; top: 262px;">
+      <button><i class="fa-solid fa-eye"></i> Öffnen</button>
+      <button><i class="fa-solid fa-download"></i> Herunterladen</button>
+      <button><i class="fa-solid fa-pen"></i> Umbenennen</button>
+      <button><i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben <span class="k-unter">mit 2 Begleitern</span></button>
+      <button><i class="fa-solid fa-share-nodes"></i> Teilen</button>
+      <div class="ktrenner"></div>
+      <div class="kgruppe">Mit Apps</div>
+      <button><i class="fa-solid fa-up-right-from-square"></i> In Transkription öffnen</button>
+      <button><i class="fa-solid fa-closed-captioning"></i> Neu transkribieren <span class="k-app">Transkription</span></button>
+      <div class="ktrenner"></div>
+      <button class="gefahr"><i class="fa-solid fa-trash"></i> In den Papierkorb <span class="k-unter">mit 2 Begleitern</span></button>
+    </div>
+
+    <!-- 4: Menü eines Begleiters -->
+    <div class="kontextmenue" role="menu" data-nur="4" style="left: 560px; top: 314px;">
+      <button><i class="fa-solid fa-eye"></i> Öffnen</button>
+      <button><i class="fa-solid fa-download"></i> Herunterladen</button>
+      <button><i class="fa-solid fa-pen"></i> Umbenennen</button>
+      <button><i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben <span class="k-unter">mit der Gruppe</span></button>
+      <div class="ktrenner"></div>
+      <button><i class="fa-solid fa-file-audio"></i> Zur Hauptdatei</button>
+      <button><i class="fa-solid fa-link-slash"></i> Aus der Gruppe lösen</button>
+      <div class="ktrenner"></div>
+      <div class="kgruppe">Mit Apps</div>
+      <button><i class="fa-solid fa-up-right-from-square"></i> In Transkription öffnen</button>
+      <div class="ktrenner"></div>
+      <button class="gefahr"><i class="fa-solid fa-trash"></i> In den Papierkorb <span class="k-unter">nur dieser</span></button>
+    </div>
+
+    <!-- 5: Vorgänge mit Anfragen an Apps -->
+    <aside class="vorgaenge" data-nur="5">
+      <div class="vorgaenge-kopf">
+        <h2><i class="fa-solid fa-list-check"></i> Vorgänge</h2>
+        <button class="icon-knopf" title="Schließen" aria-label="Schließen"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="vorgaenge-liste">
+        <div class="vorgaenge-abschnitt">Läuft</div>
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel"><i class="fa-solid fa-closed-captioning"></i><span>Elternabend Klasse 7b.m4a</span></div>
+            <span class="status-pill laeuft">Läuft</span>
+          </div>
+          <div class="fortschritt"><span style="width: 62%"></span></div>
+          <div class="vorgang-meta"><span>Transkribieren mit Transkription · Abschnitt 4 von 7</span><span>62 %</span></div>
+          <div class="vorgang-aktionen"><button class="icon-knopf gefahr" title="Abbrechen" aria-label="Abbrechen"><i class="fa-solid fa-stop"></i></button></div>
+        </div>
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel"><i class="fa-solid fa-volume-high"></i><span>Rundbrief Oktober.md</span></div>
+            <span class="status-pill">Wartet</span>
+          </div>
+          <div class="vorgang-meta"><span>Vorlesen mit Stimmenausgabe; die App läuft gerade nicht, die Anfrage startet, sobald sie wieder da ist</span></div>
+          <div class="vorgang-aktionen"><button class="icon-knopf gefahr" title="Abbrechen" aria-label="Abbrechen"><i class="fa-solid fa-stop"></i></button></div>
+        </div>
+        <div class="vorgaenge-abschnitt">Abgeschlossen</div>
+        <div class="vorgang">
+          <div class="vorgang-kopf">
+            <div class="vorgang-titel"><i class="fa-solid fa-circle-check"></i><span>Runde 2026-10-12.wav</span></div>
+            <span class="status-pill fertig">Fertig</span>
+          </div>
+          <div class="vorgang-meta"><span>Transkribiert: Runde 2026-10-12.transkript.json liegt daneben</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <script>
+      // Nur für den Entwurf: ?z=1..8 wählt den Zustand, ?thema=dunkel das Thema.
+      const ZUSTAENDE = [
+        [1, "Gruppen zu"], [2, "Gruppe offen"], [3, "Menü Hauptdatei"], [4, "Menü Begleiter"],
+        [5, "Anfragen"], [6, "Detail"], [7, "Belegt"], [8, "Papierkorb"],
+      ];
+      const q = new URLSearchParams(location.search);
+      const z = String(q.get("z") || "1");
+      if (q.get("thema") === "dunkel") document.documentElement.dataset.theme = "dunkel";
+      const wahl = document.querySelector(".entwurf-wahl");
+      for (const [n, titel] of ZUSTAENDE) {
+        const a = document.createElement("a");
+        a.href = `?z=${n}${q.get("thema") ? "&thema=" + q.get("thema") : ""}`;
+        a.textContent = `${n} ${titel}`;
+        if (String(n) === z) a.className = "an";
+        wahl.append(a);
+      }
+      // Was nicht zum Zustand gehört, kommt aus der Seite (so bleibt die echte Gestaltung unberührt).
+      const passt = (el, attr) => el.getAttribute(attr).split(" ").includes(z);
+      document.querySelectorAll("[data-nur]").forEach((el) => { if (!passt(el, "data-nur")) el.remove(); });
+      document.querySelectorAll("[data-ausser]").forEach((el) => { if (passt(el, "data-ausser")) el.remove(); });
+      document.querySelectorAll("[data-offen]").forEach((el) => el.classList.toggle("offen", passt(el, "data-offen")));
+      document.querySelectorAll("[data-gewaehlt]").forEach((el) => el.classList.toggle("gewaehlt", passt(el, "data-gewaehlt")));
+      document.querySelector('[data-aktiv="' + (z === "8" ? "papierkorb" : "dateien") + '"]').classList.add("aktiv");
+      if (z === "6") document.getElementById("app").classList.add("mit-detail");
+    </script>
+  </body>
+</html>

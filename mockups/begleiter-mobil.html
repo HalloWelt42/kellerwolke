@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Kellerwolke - Begleitdateien am Telefon</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/mobil.css" />
+    <style>
+      /* neu: Begleitdateien und Aktionen der Apps am Telefon */
+      .m-zeile .m-symbol.cc { color: var(--m-text-2); }
+      .m-meta .m-begleit { color: var(--m-text-2); white-space: nowrap; }
+      .m-meta .m-anfrage { color: var(--m-akzent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .m-meta .m-anfrage.wartet { color: var(--m-text-2); }
+      .m-blatt .m-gruppe { padding-top: 10px; }
+      .m-aktion .m-rolle { margin-left: auto; font-size: var(--m-marke); color: var(--m-text-3); }
+      .m-aktion .m-zweizeilig { min-width: 0; display: flex; flex-direction: column; }
+      .m-aktion .m-zweizeilig span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .m-aktion .m-zweizeilig span:last-child { font-size: var(--m-marke); color: var(--m-text-3); }
+      .m-blatt.hoch { max-height: 760px; overflow-y: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="buehne">
+
+      <!-- 1. Ordner mit Gruppen -->
+      <div>
+        <p class="zustand-titel">1. Ordner: Begleiter stehen an der Hauptdatei</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf">
+            <button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button>
+            <h1>Besprechungen<span class="m-unter">Meine Dateien</span></h1>
+            <button class="m-knopf"><i class="fa-solid fa-arrow-down-a-z"></i></button>
+          </div>
+          <div class="m-suche"><i class="fa-solid fa-magnifying-glass"></i> In Besprechungen suchen</div>
+          <div class="m-inhalt">
+            <div class="m-gruppe">Ordner</div>
+            <div class="m-liste">
+              <div class="m-zeile"><i class="fa-solid fa-folder m-symbol ordner"></i><div class="m-text"><div class="m-name">Archiv</div><div class="m-meta">3 Einträge</div></div><span class="m-mehr"><i class="fa-solid fa-chevron-right"></i></span></div>
+            </div>
+            <div class="m-gruppe">Dateien</div>
+            <div class="m-liste">
+              <div class="m-zeile"><i class="fa-solid fa-file-audio m-symbol ton"></i><div class="m-text"><div class="m-name">Elternabend Klasse 7b.m4a</div><div class="m-meta">23,4 MB · gestern</div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-audio m-symbol ton"></i><div class="m-text"><div class="m-name">Runde 2026-10-12.wav</div><div class="m-meta">54,2 MB · 12.10.2026 · <span class="m-begleit"><i class="fa-solid fa-paperclip"></i> 2 Begleiter</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-lines m-symbol"></i><div class="m-text"><div class="m-name">Rundbrief Oktober.md</div><div class="m-meta">6 KB · 14.10.2026 · <span class="m-begleit"><i class="fa-solid fa-paperclip"></i> 1 Begleiter</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-lines m-symbol"></i><div class="m-text"><div class="m-name">Tagesordnung.md</div><div class="m-meta">2 KB · 11.10.2026</div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+            </div>
+          </div>
+          <div class="m-plus"><i class="fa-solid fa-plus"></i></div>
+          <nav class="m-tabs">
+            <span class="m-tab aktiv"><i class="fa-solid fa-folder"></i>Dateien</span>
+            <span class="m-tab"><i class="fa-solid fa-images"></i>Medien</span>
+            <span class="m-tab"><i class="fa-solid fa-star"></i>Favoriten</span>
+            <span class="m-tab"><i class="fa-solid fa-ellipsis"></i>Mehr</span>
+          </nav>
+        </div>
+      </div>
+
+      <!-- 2. Blatt der Hauptdatei -->
+      <div>
+        <p class="zustand-titel">2. Antippen von ⋮: Apps und Begleiter</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>Besprechungen</h1></div>
+          <div class="m-inhalt"></div>
+          <div class="m-schleier"></div>
+          <div class="m-blatt hoch">
+            <div class="m-griff"></div>
+            <div class="m-blatt-kopf"><i class="fa-solid fa-file-audio m-symbol ton"></i><div class="m-text"><div class="m-name">Runde 2026-10-12.wav</div><div class="m-meta">54,2 MB · geändert 12.10.2026</div></div></div>
+            <div class="m-gruppe">Mit Apps</div>
+            <div class="m-aktion"><i class="fa-solid fa-up-right-from-square"></i> In Transkription öffnen</div>
+            <div class="m-aktion"><i class="fa-solid fa-closed-captioning"></i> Neu transkribieren<span class="m-hinweis">neue Version</span></div>
+            <div class="m-gruppe">Begleiter</div>
+            <div class="m-aktion"><i class="fa-solid fa-closed-captioning"></i><span class="m-zweizeilig"><span>Runde 2026-10-12.transkript.json</span><span>84 KB · von Transkription</span></span><span class="m-rolle">Transkript</span></div>
+            <div class="m-aktion"><i class="fa-solid fa-file-lines"></i><span class="m-zweizeilig"><span>Runde 2026-10-12.srt</span><span>12 KB · von Transkription</span></span><span class="m-rolle">Untertitel</span></div>
+            <div class="m-gruppe">Datei</div>
+            <div class="m-aktion"><i class="fa-solid fa-eye"></i> Öffnen</div>
+            <div class="m-aktion"><i class="fa-solid fa-arrow-up-from-bracket"></i> Teilen oder sichern<span class="m-hinweis">Telefon</span></div>
+            <div class="m-aktion"><i class="fa-solid fa-pen"></i> Umbenennen<span class="m-hinweis">Begleiter folgen</span></div>
+            <div class="m-aktion"><i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben<span class="m-hinweis">mit 2 Begleitern</span></div>
+            <div class="m-aktion gefahr"><i class="fa-solid fa-trash"></i> In den Papierkorb<span class="m-hinweis">halten, mit 2 Begleitern</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Anfragen an der Zeile -->
+      <div>
+        <p class="zustand-titel">3. Anfragen an Apps: Stand an der Zeile</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf">
+            <button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button>
+            <h1>Besprechungen<span class="m-unter">Meine Dateien</span></h1>
+            <button class="m-knopf"><i class="fa-solid fa-arrow-down-a-z"></i></button>
+          </div>
+          <div class="m-suche"><i class="fa-solid fa-magnifying-glass"></i> In Besprechungen suchen</div>
+          <div class="m-inhalt">
+            <div class="m-gruppe">Dateien</div>
+            <div class="m-liste">
+              <div class="m-zeile"><i class="fa-solid fa-file-audio m-symbol ton"></i><div class="m-text"><div class="m-name">Elternabend Klasse 7b.m4a</div><div class="m-meta">23,4 MB · <span class="m-anfrage"><i class="fa-solid fa-circle-notch fa-spin"></i> Transkribieren 62 %</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-audio m-symbol ton"></i><div class="m-text"><div class="m-name">Runde 2026-10-12.wav</div><div class="m-meta">54,2 MB · 12.10.2026 · <span class="m-begleit"><i class="fa-solid fa-paperclip"></i> 2 Begleiter</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-lines m-symbol"></i><div class="m-text"><div class="m-name">Rundbrief Oktober.md</div><div class="m-meta">6 KB · <span class="m-anfrage wartet"><i class="fa-regular fa-clock"></i> wartet auf Stimmenausgabe</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-lines m-symbol"></i><div class="m-text"><div class="m-name">Tagesordnung.md</div><div class="m-meta">2 KB · 11.10.2026</div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+            </div>
+          </div>
+          <div class="m-plus"><i class="fa-solid fa-plus"></i></div>
+          <nav class="m-tabs">
+            <span class="m-tab aktiv"><i class="fa-solid fa-folder"></i>Dateien</span>
+            <span class="m-tab"><i class="fa-solid fa-images"></i>Medien</span>
+            <span class="m-tab"><i class="fa-solid fa-star"></i>Favoriten</span>
+            <span class="m-tab"><i class="fa-solid fa-ellipsis"></i>Mehr</span>
+          </nav>
+        </div>
+      </div>
+
+      <!-- 4. Blatt eines Begleiters -->
+      <div>
+        <p class="zustand-titel">4. Begleiter antippen: eigene Aktionen</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>Besprechungen</h1></div>
+          <div class="m-inhalt"></div>
+          <div class="m-schleier"></div>
+          <div class="m-blatt">
+            <div class="m-griff"></div>
+            <div class="m-blatt-kopf"><i class="fa-solid fa-closed-captioning m-symbol"></i><div class="m-text"><div class="m-name">Runde 2026-10-12.transkript.json</div><div class="m-meta">Transkript zu Runde 2026-10-12.wav</div></div></div>
+            <div class="m-aktion"><i class="fa-solid fa-up-right-from-square"></i> In Transkription öffnen</div>
+            <div class="m-aktion"><i class="fa-solid fa-file-audio"></i> Zur Hauptdatei</div>
+            <div class="m-aktion"><i class="fa-solid fa-arrow-up-from-bracket"></i> Teilen oder sichern<span class="m-hinweis">Telefon</span></div>
+            <div class="m-aktion"><i class="fa-solid fa-link-slash"></i> Aus der Gruppe lösen<span class="m-hinweis">zieht nicht mehr mit</span></div>
+            <div class="m-aktion gefahr"><i class="fa-solid fa-trash"></i> In den Papierkorb<span class="m-hinweis">halten, nur dieser</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema(new URLSearchParams(location.search).get("thema") === "dunkel" ? "dunkel" : "hell");
+    </script>
+  </body>
+</html>
