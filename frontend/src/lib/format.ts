@@ -1,6 +1,6 @@
 import type { Knoten } from "./types";
 
-// Reine Hilfsfunktionen fuer Anzeige: Groesse, Datum und Dateisymbole.
+// Reine Hilfsfunktionen für Anzeige: Größe, Datum und Dateisymbole.
 
 export function groesseText(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -67,7 +67,7 @@ export function symbolFuerName(name: string): string {
   return "fa-file";
 }
 
-// Liefert das Font-Awesome-Symbol und ob es die Sonderfarbe (Ordner/Extern) traegt.
+// Liefert das Font-Awesome-Symbol und ob es die Sonderfarbe (Ordner/Extern) trägt.
 export function symbol(k: Knoten): { icon: string; klasse: string } {
   if (k.typ === "ordner") return { icon: "fa-folder", klasse: "ordner" };
   if (k.typ === "extern") return { icon: "fa-folder-tree", klasse: "extern" };
@@ -118,4 +118,11 @@ export function typLabel(k: Knoten): string {
     if (TYP_NACH_ENDUNG[endung]) return TYP_NACH_ENDUNG[endung];
   }
   return "Datei";
+}
+
+// Inhalt eines Ordners für Zeile und Kachel: zählt Dateien und Unterordner.
+export function ordnerInhalt(anzahl: number | null | undefined, unbekannt = "Ordner"): string {
+  if (anzahl == null) return unbekannt;
+  if (anzahl === 0) return "Leer";
+  return anzahl === 1 ? "1 Eintrag" : `${anzahl} Einträge`;
 }

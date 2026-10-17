@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import { hochladen } from "./zustand.svelte";
+  import { onDestroy, untrack } from "svelte";
+  import { ablegen, hatDateien } from "./zustand.svelte";
   import type { Browser } from "./browser.svelte";
-  import { passt, filterAktiv, leererFilter } from "./filter";
-  import { groesseText, datum, symbolFuerName, zeitText, symbol } from "./format";
+  import { filterAktiv } from "./filter";
+  import { groesseText, datum, symbolFuerName, symbol, ordnerInhalt } from "./format";
   import type { Knoten } from "./types";
   import Dateizeile from "./Dateizeile.svelte";
   import type { RowAktion } from "./Dateizeile.svelte";
@@ -12,58 +12,35 @@
   import Kontextmenue from "./Kontextmenue.svelte";
   import type { MenuEintrag } from "./Kontextmenue.svelte";
   import Filterleiste from "./Filterleiste.svelte";
-  // WICHTIG: aus appzustand (plugin-frei), NICHT aus registry - die Registry
-  // importiert Dateiliste, ein Rueckimport erzeugte einen Importzyklus.
-  import { vollansichtFuer, vorschauFuer } from "../plugins/appzustand.svelte";
-  import { oeffneVollansicht } from "./vorschau.svelte";
+  import { vollansichtOffen } from "./vorschau.svelte";
+  import { knotenOeffnen } from "./medien/oeffnen";
 
-  // Eine wiederverwendbare Browsing-Flaeche: rendert genau einen Browser (die
+  // Eine wiederverwendbare Browsing-Fläche: rendert genau einen Browser (die
   // Einzelansicht ODER eine Splitscreen-Pane). Alle Interaktionen - Klick,
-  // Auswahl, Marquee, Filter, Scroll, Kontextmenue, Drag/Drop - leben hier
+  // Auswahl, Marquee, Filter, Scroll, Kontextmenü, Drag/Drop - leben hier
   // EINMAL und gelten in jeder Ansicht identisch.
   interface Props {
     browser: Browser;
     aktiv?: boolean; // hat den Tastatur-Fokus (in Split nur die fokussierte Pane)
     mitDetail?: boolean; // Einfachklick auf eine Datei zeigt das Detail-Pane (nur Einzelansicht)
     onTeilen?: (k: Knoten) => void;
-    onEndgueltig?: (k: Knoten) => void;
+    onEndgueltig?: (knoten: Knoten[]) => void; // fragt nach und löscht dann
     onAktiv?: () => void;
   }
   let { browser, aktiv = true, mitDetail = true, onTeilen, onEndgueltig, onAktiv }: Props = $props();
 
   const auswahl = $derived(browser.auswahl);
 
-  // --- Filtern, Sortieren, Lazy-Load -----------------------------------------
-  const gefiltert = $derived.by(() => {
-    if (!filterAktiv(browser.filter)) return browser.eintraege;
-    return browser.eintraege.filter((k) => passt(k.name, browser.filter));
-  });
-
-  function typrang(k: Knoten): number {
-    return k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2;
-  }
-  const sortiert = $derived.by(() => {
-    const key = browser.sortKey;
-    const dir = browser.sortRichtung === "auf" ? 1 : -1;
-    return [...gefiltert].sort((a, b) => {
-      // Ordner/Externe immer vor Dateien, unabhaengig von der Richtung.
-      if (typrang(a) !== typrang(b)) return typrang(a) - typrang(b);
-      let v: number;
-      if (key === "groesse") v = (a.groesse ?? 0) - (b.groesse ?? 0);
-      else if (key === "geaendert")
-        v = new Date(a.geaendert_am).getTime() - new Date(b.geaendert_am).getTime();
-      else v = a.name.localeCompare(b.name, "de", { sensitivity: "base", numeric: true });
-      return v * dir;
-    });
-  });
+  // --- Sichtbare Reihenfolge (Filter, Sortierung) kommt vom Browser; hier nur Lazy-Load ---
+  const sortiert = $derived(browser.sichtbar);
 
   const SCHRITT = 200;
   let sichtbar = $state(SCHRITT);
   const angezeigt = $derived(sortiert.slice(0, sichtbar));
   const mehrVorhanden = $derived(sichtbar < sortiert.length);
 
-  // Schluessel, der sich aendert, wenn Standort, Sortierung oder Filter wechseln
-  // (fuer das Zuruecksetzen der Lazy-Grenze; nicht bei Live-Poll).
+  // Schlüssel, der sich ändert, wenn Standort, Sortierung oder Filter wechseln
+  // (für das Zurücksetzen der Lazy-Grenze; nicht bei Live-Poll).
   const standort = $derived(
     `${browser.bereich}:${browser.aktuellerOrdner ?? ""}:${browser.geteiltPfad.length}`,
   );
@@ -72,14 +49,6 @@
       ":" +
       browser.filter.verknuepfung,
   );
-  let letzterStandort = "";
-  $effect(() => {
-    // Beim Standortwechsel den Filter dieser Pane leeren (eigener Filter je Pane).
-    if (standort !== letzterStandort) {
-      letzterStandort = standort;
-      browser.filter = leererFilter();
-    }
-  });
   $effect(() => {
     void standort;
     void filterKey;
@@ -89,9 +58,7 @@
   });
 
   function aufListenScroll() {
-    if (!containerEl) return;
-    browser.scrollTop = containerEl.scrollTop;
-    if (!mehrVorhanden) return;
+    if (!containerEl || !mehrVorhanden) return;
     if (containerEl.scrollTop + containerEl.clientHeight >= containerEl.scrollHeight - 300) {
       sichtbar += SCHRITT;
     }
@@ -99,6 +66,11 @@
 
   // Auswahl/Marquee arbeiten auf der sortierten Reihenfolge.
   const geordnet = $derived(sortiert.map((k) => k.id));
+  // Was der Filter versteckt, ist auch nicht gewählt: keine Aktion trifft Unsichtbares.
+  $effect(() => {
+    const sichtbare = geordnet;
+    untrack(() => auswahl.beschraenkeAuf(sichtbare));
+  });
 
   // Kopf-Checkbox (Massenauswahl des aktuell Gefilterten/Angezeigten).
   const alleGewaehlt = $derived(geordnet.length > 0 && geordnet.every((id) => auswahl.istGewaehlt(id)));
@@ -109,14 +81,16 @@
   }
   const imPapierkorb = $derived(browser.bereich === "papierkorb");
   const externAnsicht = $derived(browser.bereich === "extern" && browser.externBrowse !== null);
-  const modus = $derived<"dateien" | "papierkorb" | "suche">(
-    browser.bereich === "papierkorb" ? "papierkorb" : browser.bereich === "suche" ? "suche" : "dateien",
+  const rechte = $derived(browser.rechte);
+  const gewaehlteKnoten = $derived(browser.eintraege.filter((k) => auswahl.istGewaehlt(k.id)));
+  // Mehrere geht als ZIP (eigene Dateien); geteilte nur einzeln.
+  const herunterladbar = $derived(
+    rechte.zip || (gewaehlteKnoten.length === 1 && gewaehlteKnoten[0].typ === "datei"),
   );
 
   let umbenennenId = $state<string | null>(null);
   let ziehZielId = $state<string | null>(null);
   let gezogenIds = $state<string[]>([]);
-  let verschiebeModus = $state(false);
   let externDrop = $state(false);
   let containerEl = $state<HTMLElement | null>(null);
   let kontext = $state<{ x: number; y: number; eintraege: MenuEintrag[] } | null>(null);
@@ -128,12 +102,7 @@
       unterdrueckeKlick = false;
       return;
     }
-    if (verschiebeModus) {
-      if (k.typ === "ordner") browser.verschiebe([...auswahl.ids], k.id);
-      verschiebeModus = false;
-      return;
-    }
-    // Bearbeitung: Strg/Cmd schaltet um, Shift waehlt den Bereich.
+    // Bearbeitung: Strg/Cmd schaltet um, Shift wählt den Bereich.
     if (e.metaKey || e.ctrlKey) {
       auswahl.umschalten(k.id);
       return;
@@ -146,8 +115,8 @@
       auswahl.waehleEinzeln(k.id);
       return;
     }
-    // Einfachklick: Ordner/Extern oeffnen; Datei MARKIEREN (nie herunterladen),
-    // in der Einzelansicht zusaetzlich das Detail-Pane zeigen.
+    // Einfachklick: Ordner/Extern öffnen; Datei MARKIEREN (nie herunterladen),
+    // in der Einzelansicht zusätzlich das Detail-Pane zeigen.
     if (k.typ === "ordner" || k.typ === "extern") {
       browser.oeffnen(k);
     } else {
@@ -156,25 +125,28 @@
     }
   }
 
+  function medienAktivieren(k: Knoten): boolean {
+    return knotenOeffnen(browser, k);
+  }
+
+  // "Öffnen": Medien spielen oder zeigen, Ordner navigieren, sonst das Detail
+  // (in einer Pane ohne Detail das Herunterladen, damit es nie ins Leere geht).
+  function aktivieren(k: Knoten) {
+    if (k.typ === "datei" && medienAktivieren(k)) return;
+    if (k.typ === "datei" && !mitDetail) browser.herunterladen(k);
+    else browser.oeffnen(k);
+  }
+
   function boxClick(k: Knoten) {
     auswahl.umschalten(k.id);
   }
 
-  // Doppelklick OEFFNET die Vorschau, laedt NICHT herunter (Herunterladen ist eine
-  // bewusste eigene Aktion ueber Kontextmenue/Knopf). Reihenfolge: Plugin-
-  // Vollansicht (z.B. Bild-Lightbox) > Detail-Pane mit Plugin-Vorschau (z.B. Audio)
-  // > erst wenn es gar keine Vorschau gibt, wird die Datei geholt.
-  // Ordner navigiert bereits der Einfachklick.
+  // Doppelklick öffnet: Bilder und Videos in der Vollansicht, Audio im Player;
+  // erst wenn es gar keine Ansicht gibt, wird die Datei geholt. Ordner
+  // navigiert bereits der Einfachklick.
   function rowDblClick(k: Knoten) {
-    if (verschiebeModus || k.typ !== "datei") return;
-    if (vollansichtFuer(k)) {
-      oeffneVollansicht(k);
-    } else if (vorschauFuer(k)) {
-      auswahl.waehleEinzeln(k.id);
-      browser.zeigeDetail(k);
-    } else {
-      browser.herunterladen(k);
-    }
+    if (k.typ !== "datei") return;
+    if (!medienAktivieren(k)) browser.herunterladen(k);
   }
 
   // --- Inline-Umbenennen ------------------------------------------------------
@@ -199,7 +171,7 @@
     else if (art === "umbenennen") umbenennenStart(k);
     else if (art === "loeschen") browser.loeschen([k.id]);
     else if (art === "wiederherstellen") browser.wiederherstellen([k.id]);
-    else if (art === "endgueltig") onEndgueltig?.(k);
+    else if (art === "endgueltig") onEndgueltig?.([k]);
     else if (art === "favorit") browser.favoritUmschalten(k);
   }
 
@@ -207,7 +179,8 @@
 
   function dragStart(e: DragEvent, k: Knoten) {
     const ziel = e.target as HTMLElement;
-    if (ziel?.closest?.(".aus-box, button, input, .umbenennen-feld")) {
+    // Bedienelemente starten kein Ziehen - das Audio-Cover füllt aber die ganze Vorschau und darf es.
+    if (ziel?.closest?.(".aus-box, button:not(.av-cover), input, .umbenennen-feld")) {
       e.preventDefault();
       return;
     }
@@ -256,11 +229,10 @@
     if (ids.length) browser.verschiebe(ids, k.id);
   }
 
-  // --- Externer Datei-Upload per Drop -----------------------------------------
+  // --- Ablegen aus dem Dateisystem --------------------------------------------
+  // Dieselbe Ablage wie im Fenster (Ordner behalten ihre Struktur), nur mit
+  // dieser Fläche als Ziel; danach ist das Ereignis erledigt.
 
-  function hatDateien(e: DragEvent): boolean {
-    return Array.from(e.dataTransfer?.types ?? []).includes("Files");
-  }
   function flaecheDragOver(e: DragEvent) {
     if (!browser.istSchreibbar || !hatDateien(e)) return;
     e.preventDefault();
@@ -272,13 +244,15 @@
   function flaecheDrop(e: DragEvent) {
     if (!browser.istSchreibbar || !hatDateien(e)) return;
     e.preventDefault();
+    e.stopPropagation();
     externDrop = false;
-    hochladen(e.dataTransfer?.files ?? null, browser);
+    onAktiv?.();
+    ablegen(e, browser);
   }
 
   // --- Marquee (Maus-Rechteck) -----------------------------------------------
-  // Startet auf leerer Flaeche UND ueber unmarkierten Zeilen (markierte Zeilen
-  // sind ziehbar = Verschieben). So laesst sich auch bei voll gefuellter Liste
+  // Startet auf leerer Fläche UND über unmarkierten Zeilen (markierte Zeilen
+  // sind ziehbar = Verschieben). So lässt sich auch bei voll gefüllter Liste
   // immer ein Auswahl-Rechteck aufziehen.
 
   let marquee = $state<{ l: number; t: number; w: number; h: number } | null>(null);
@@ -343,8 +317,8 @@
   function flaecheMouseUp() {
     window.removeEventListener("mousemove", flaecheMouseMove);
     window.removeEventListener("mouseup", flaecheMouseUp);
-    // Klick (ohne Ziehen) auf LEERE Flaeche hebt die Auswahl auf; ein Klick auf
-    // eine Zeile bleibt dem rowClick ueberlassen.
+    // Klick (ohne Ziehen) auf LEERE Fläche hebt die Auswahl auf; ein Klick auf
+    // eine Zeile bleibt dem rowClick überlassen.
     if (!mqAktiv && mqStart && !mqAufZeile) auswahl.leeren();
     mqStart = null;
     mqAktiv = false;
@@ -356,7 +330,7 @@
     window.removeEventListener("mouseup", flaecheMouseUp);
   });
 
-  // --- Kontextmenue -----------------------------------------------------------
+  // --- Kontextmenü -----------------------------------------------------------
 
   function kontextOeffnen(e: MouseEvent, k: Knoten) {
     e.preventDefault();
@@ -374,33 +348,44 @@
         label: "Endgültig löschen",
         icon: "fa-trash",
         gefahr: true,
-        fn: () => onEndgueltig?.(k),
+        fn: () => onEndgueltig?.(gewaehlteKnoten),
       });
     } else {
       if (!mehrere) {
-        eintraege.push({ label: "Öffnen", icon: "fa-arrow-up-right-from-square", fn: () => browser.oeffnen(k) });
+        eintraege.push({ label: "Öffnen", icon: "fa-arrow-up-right-from-square", fn: () => aktivieren(k) });
       }
       if (!mehrere && k.typ === "datei") {
         eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => browser.herunterladen(k) });
-      } else if (!mehrere && k.typ === "ordner") {
+      } else if (!mehrere && k.typ === "ordner" && rechte.zip) {
         eintraege.push({
           label: "Als ZIP herunterladen",
           icon: "fa-file-zipper",
           fn: () => browser.zipHerunterladen([k.id], `${k.name}.zip`),
         });
-      } else if (mehrere) {
+      } else if (mehrere && rechte.zip) {
         eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => stapelHerunterladen() });
       }
-      if (browser.istSchreibbar) {
-        if (!mehrere) {
-          eintraege.push({ label: "Umbenennen", icon: "fa-pen", fn: () => umbenennenStart(k) });
-          eintraege.push({ label: "Teilen", icon: "fa-share-nodes", fn: () => onTeilen?.(k) });
-        }
+      if (!mehrere && rechte.favorit) {
+        eintraege.push({
+          label: k.favorit ? "Aus den Favoriten" : "Zu den Favoriten",
+          icon: k.favorit ? "fa-star-half-stroke" : "fa-star",
+          fn: () => browser.favoritUmschalten(k),
+        });
+      }
+      if (!mehrere && rechte.umbenennen) {
+        eintraege.push({ label: "Umbenennen", icon: "fa-pen", fn: () => umbenennenStart(k) });
+      }
+      if (!mehrere && rechte.teilen) {
+        eintraege.push({ label: "Teilen", icon: "fa-share-nodes", fn: () => onTeilen?.(k) });
+      }
+      if (rechte.verschieben) {
         eintraege.push({
           label: "Verschieben",
           icon: "fa-arrow-right-arrow-left",
-          fn: () => (verschiebeModus = true),
+          fn: () => browser.verschiebenBeginnen([...auswahl.ids]),
         });
+      }
+      if (rechte.loeschen) {
         eintraege.push({ trenner: true });
         eintraege.push({
           label: "In den Papierkorb",
@@ -433,12 +418,12 @@
   // --- Tastatur ---------------------------------------------------------------
 
   function fenstertaste(e: KeyboardEvent) {
-    if (!aktiv) return; // nur die fokussierte Ansicht/Pane reagiert
+    if (!aktiv || vollansichtOffen()) return; // nur die fokussierte Fläche; die Vollansicht hat Vorrang
     const imFeld = (e.target as HTMLElement)?.closest?.("input, textarea, select");
     if (imFeld) return;
     if (e.key === "Escape") {
       if (kontext) kontext = null;
-      else if (verschiebeModus) verschiebeModus = false;
+      else if (browser.verschiebeIds) browser.verschiebenAbbrechen();
       else if (umbenennenId) umbenennenId = null;
       else auswahl.leeren();
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !externAnsicht) {
@@ -450,12 +435,15 @@
 
 <svelte:window onkeydown={fenstertaste} />
 
-{#if verschiebeModus}
+{#if browser.verschiebeIds}
+  {@const n = browser.verschiebeIds.length}
   <div class="verschiebe-hinweis">
-    <i class="fa-solid fa-arrow-pointer"></i>
-    Zielordner anklicken, um {auswahl.anzahl}
-    {auswahl.anzahl === 1 ? "Objekt" : "Objekte"} zu verschieben.
-    <button class="knopf still" onclick={() => (verschiebeModus = false)}>Abbrechen</button>
+    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+    {n === 1 ? "1 Objekt" : `${n} Objekte`} verschieben: Zielordner öffnen, dann hierher.
+    <button class="knopf still" onclick={() => browser.verschiebenAbbrechen()}>Abbrechen</button>
+    <button class="knopf primaer" disabled={!browser.istSchreibbar} onclick={() => browser.verschiebenHierher()}>
+      <i class="fa-solid fa-arrow-down"></i> Hierher verschieben
+    </button>
   </div>
 {/if}
 
@@ -497,7 +485,7 @@
             <span class="titel">{e.name}</span>
           </span>
           <span class="z-meta">{e.ist_ordner ? "-" : groesseText(e.groesse)}</span>
-          <span class="z-meta z-geaendert"></span>
+          <span class="z-meta z-geaendert">{e.geaendert_am ? datum(e.geaendert_am) : "-"}</span>
           <span class="z-akt">
             {#if !e.ist_ordner}
               <button class="icon-knopf" title="Herunterladen" onclick={() => browser.externRunter(e)}>
@@ -514,7 +502,11 @@
   <div class="liste" bind:this={containerEl}>
     {#if browser.eintraege.length === 0}
       <div class="leer">
-        <i class="fa-regular fa-share-from-square"></i><span>Nichts mit dir geteilt</span>
+        {#if browser.geteiltPfad.length === 0}
+          <i class="fa-regular fa-share-from-square"></i><span>Nichts mit dir geteilt</span>
+        {:else}
+          <i class="fa-regular fa-folder-open"></i><span>Dieser Ordner ist leer</span>
+        {/if}
       </div>
     {:else}
       <div class="listenkopf">
@@ -523,7 +515,17 @@
       </div>
       {#each browser.eintraege as k (k.id)}
         {@const sym = symbol(k)}
-        <div class="zeile" role="row" tabindex="-1" onclick={() => browser.geteiltOeffnen(k)}>
+        <div
+          class="zeile"
+          class:gewaehlt={auswahl.istGewaehlt(k.id)}
+          role="row"
+          tabindex="-1"
+          onclick={() => {
+            if (k.typ === "datei") auswahl.waehleEinzeln(k.id);
+            if (k.typ !== "datei" || mitDetail) browser.geteiltOeffnen(k);
+          }}
+          ondblclick={() => k.typ === "datei" && medienAktivieren(k)}
+        >
           <span class="z-aus"></span>
           <span class="z-name">
             <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
@@ -534,9 +536,7 @@
           </span>
           <span class="z-meta">
             {k.typ === "ordner"
-              ? k.kinder_anzahl === 0
-                ? "Leer"
-                : `${k.kinder_anzahl} Dateien`
+              ? ordnerInhalt(k.kinder_anzahl, "-")
               : k.groesse != null
                 ? groesseText(k.groesse)
                 : "-"}
@@ -549,7 +549,7 @@
                 title="Herunterladen"
                 onclick={(e) => {
                   e.stopPropagation();
-                  browser.geteiltOeffnen(k);
+                  browser.herunterladen(k);
                 }}
               >
                 <i class="fa-solid fa-download"></i>
@@ -580,6 +580,7 @@
           {:else if browser.bereich === "papierkorb"}Der Papierkorb ist leer
           {:else if browser.bereich === "suche"}Nichts gefunden
           {:else if browser.bereich === "favoriten"}Noch keine Favoriten - markiere Dateien mit dem Stern
+          {:else if browser.bereich === "extern"}Keine externen Quellen eingehängt
           {:else}Dieser Ordner ist leer - Dateien hierher ziehen oder hochladen{/if}
         </span>
       </div>
@@ -619,6 +620,7 @@
           onOrdnerDragOver={(e) => ordnerDragOver(e, k)}
           onOrdnerDragLeave={() => ordnerDragLeave(k)}
           onOrdnerDrop={(e) => ordnerDrop(e, k)}
+          onSpielen={() => medienAktivieren(k)}
         />
       {/each}
       {#if mehrVorhanden}
@@ -765,11 +767,13 @@
 {#if auswahl.anzahl > 1 && !externAnsicht}
   <Auswahlleiste
     anzahl={auswahl.anzahl}
-    {modus}
+    {rechte}
+    {herunterladbar}
     onHerunterladen={stapelHerunterladen}
-    onVerschieben={() => (verschiebeModus = true)}
+    onVerschieben={() => browser.verschiebenBeginnen([...auswahl.ids])}
     onLoeschen={() => browser.loeschen([...auswahl.ids])}
     onWiederherstellen={() => browser.wiederherstellen([...auswahl.ids])}
+    onEndgueltig={() => onEndgueltig?.(gewaehlteKnoten)}
     onAbbrechen={() => auswahl.leeren()}
   />
 {/if}
@@ -795,7 +799,7 @@
     color: var(--akzent-stark);
     font-size: 0.88rem;
   }
-  .verschiebe-hinweis .knopf {
+  .verschiebe-hinweis .knopf.still {
     margin-left: auto;
     color: var(--akzent-stark);
   }

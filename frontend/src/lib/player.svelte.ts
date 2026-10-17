@@ -1,13 +1,19 @@
 // Globaler Audio-Player-Zustand. Liegt bewusst im Kern, damit die Player-Leiste
-// die App-Navigation ueberlebt (spielt weiter, waehrend man browst oder die App
-// wechselt). Plugins (z.B. Medien) fuellen die Liste und starten die Wiedergabe;
-// gerendert wird die Leiste einmalig in App.svelte.
+// die App-Navigation überlebt (spielt weiter, während man browst oder die
+// Ansicht wechselt). Dateiliste, Detail und Medienansicht füllen die Liste und
+// starten die Wiedergabe; gerendert wird die Leiste einmalig in App.svelte.
+import { stromUrl } from "./medien/adressen";
+import type { Pfadteil } from "./types";
 
 export interface Spur {
   id: string;
-  url: string; // Stream-URL
+  etag: string | null; // Versionsstand: Teil der Adresse
   titel: string;
-  pfad: { id: string; name: string }[] | null; // Ordnerkette (fuer "Zum Ordner")
+  pfad: Pfadteil[] | null; // Ordnerkette (für "Zum Ordner"); null = unbekannt
+}
+
+export function spurUrl(s: Spur): string {
+  return stromUrl(s);
 }
 
 export type Wiederholung = "aus" | "eine" | "alle";
@@ -41,13 +47,24 @@ export const player = $state<{
 export function aktuelleSpur(): Spur | null {
   return player.index >= 0 && player.index < player.liste.length ? player.liste[player.index] : null;
 }
+// Startet einen Titel. Ist es der laufende, schaltet der Klick Pause und
+// Wiedergabe um; ist er zu Ende, beginnt er von vorn.
 export function spielen(liste: Spur[], index: number): void {
+  const neu = liste[index];
+  const jetzt = aktuelleSpur();
   player.liste = liste;
   player.index = index;
+  if (!neu || !jetzt || jetzt.id !== neu.id || jetzt.etag !== neu.etag || !el) return;
+  if (el.ended) {
+    el.currentTime = 0;
+    el.play().catch(() => {});
+  } else {
+    umschalten();
+  }
 }
 
 // Das (einzige) Audio-Element meldet sich hier an, damit sowohl die Leiste als
-// auch die Now-Playing-Ansicht dieselbe Wiedergabe steuern koennen.
+// auch die Now-Playing-Ansicht dieselbe Wiedergabe steuern können.
 let el: HTMLAudioElement | null = null;
 export function audioElement(a: HTMLAudioElement | null): void {
   el = a;
@@ -82,7 +99,7 @@ function zufallsIndex(): number {
   return k;
 }
 
-// Manuelle Tasten (Weiter/Zurueck): immer wechseln, mit Umlauf.
+// Manuelle Tasten (Weiter/Zurück): immer wechseln, mit Umlauf.
 export function spurWeiter(): void {
   const n = player.liste.length;
   if (!n) return;
@@ -94,8 +111,8 @@ export function spurZurueck(): void {
   player.index = player.zufall ? zufallsIndex() : (player.index - 1 + n) % n;
 }
 
-// Track zu Ende: Wiederholung/Zufall beruecksichtigen. Rueckgabe sagt der Leiste,
-// was zu tun ist (bei "wiederhole" bleibt der Index gleich -> selbst zuruecksetzen).
+// Track zu Ende: Wiederholung/Zufall berücksichtigen. Rückgabe sagt der Leiste,
+// was zu tun ist (bei "wiederhole" bleibt der Index gleich -> selbst zurücksetzen).
 export function beiEnde(): "wiederhole" | "weiter" | "stopp" {
   const n = player.liste.length;
   if (!n) return "stopp";
@@ -128,19 +145,24 @@ export function playerBeenden(): void {
   player.dauer = 0;
 }
 
-// --- Reload-Persistenz. Fuers versehentliche Neuladen: aktuelle Liste, Position
-// und Modi im lokalen Speicher. Die Stream-URLs gelten innerhalb der Sitzung -
-// nach einem echten Neustart der Sitzung koennen sie ablaufen (dann greift der
-// Fehlerzustand der Leiste). ---
-const SCHLUESSEL = "kw_player";
+// --- Reload-Persistenz je Konto: aktuelle Liste, Position und Modi im lokalen
+// Speicher, damit ein versehentliches Neuladen nichts verliert. Die Adressen
+// hängen am Lesezugang (Cookie), nicht an einem Schlüssel - sie bleiben gültig.
+// Ein anderes Konto sieht die Liste nie; Abmelden löscht sie.
+const PRAEFIX = "kw_player:";
+let schluessel: string | null = null;
 
-export function zustandLaden(): number {
-  // Setzt Liste/Index/Modi aus dem Speicher; gibt die gemerkte Sekunde zurueck.
+export function zustandLaden(konto: string): number {
+  // Setzt Liste/Index/Modi aus dem Speicher; gibt die gemerkte Sekunde zurück.
+  schluessel = PRAEFIX + konto;
   try {
-    const roh = localStorage.getItem(SCHLUESSEL);
+    localStorage.removeItem("kw_player"); // früherer Schlüssel ohne Konto (mit Sitzungsschlüssel in den Adressen)
+    const roh = localStorage.getItem(schluessel);
     if (!roh) return 0;
     const d = JSON.parse(roh);
-    if (Array.isArray(d.liste) && d.liste.length && typeof d.index === "number") {
+    const gueltig = (x: unknown): x is Spur =>
+      !!x && typeof (x as Spur).id === "string" && typeof (x as Spur).titel === "string";
+    if (Array.isArray(d.liste) && d.liste.length && d.liste.every(gueltig) && typeof d.index === "number") {
       player.liste = d.liste;
       player.index = Math.min(Math.max(0, d.index), d.liste.length - 1);
     }
@@ -156,9 +178,10 @@ export function zustandLaden(): number {
 }
 
 export function zustandSpeichern(): void {
+  if (!schluessel) return;
   try {
     localStorage.setItem(
-      SCHLUESSEL,
+      schluessel,
       JSON.stringify({
         liste: player.liste,
         index: player.index,
@@ -173,4 +196,22 @@ export function zustandSpeichern(): void {
   } catch {
     // Speicher voll/blockiert - Persistenz ist Komfort, kein Muss.
   }
+}
+
+// Abmelden: Wiedergabe beenden und den Merker des Kontos entfernen.
+export function playerZuruecksetzen(): void {
+  if (el) {
+    el.pause();
+    el.removeAttribute("src");
+  }
+  playerBeenden();
+  player.voll = false;
+  if (schluessel) {
+    try {
+      localStorage.removeItem(schluessel);
+    } catch {
+      // egal
+    }
+  }
+  schluessel = null;
 }

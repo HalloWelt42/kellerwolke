@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Knoten } from "./types";
-  import { symbol, groesseText } from "./format";
-  import { haupt } from "./zustand.svelte";
-  // aus appzustand (plugin-frei), NICHT registry - sonst Importzyklus.
-  import { vorschauFuer } from "../plugins/appzustand.svelte";
+  import { symbol, groesseText, ordnerInhalt } from "./format";
+  import BildVorschau from "./medien/BildVorschau.svelte";
+  import VideoVorschau from "./medien/VideoVorschau.svelte";
+  import AudioVorschau from "./medien/AudioVorschau.svelte";
 
   interface Props {
     k: Knoten;
@@ -23,6 +23,7 @@
     onOrdnerDragOver?: (e: DragEvent) => void;
     onOrdnerDragLeave?: () => void;
     onOrdnerDrop?: (e: DragEvent) => void;
+    onSpielen?: () => void; // Audio: der Knopf auf dem Cover startet oder pausiert
   }
   let {
     k,
@@ -42,20 +43,16 @@
     onOrdnerDragOver,
     onOrdnerDragLeave,
     onOrdnerDrop,
+    onSpielen,
   }: Props = $props();
 
   const sym = $derived(symbol(k));
-  // Plugin-Vorschau (z.B. Bild-Thumbnail) - dieselbe Datei-Faehigkeit wie im
-  // Detail-Pane, nur hier im Raster. Ohne passendes Plugin bleibt das Symbol.
-  const vorschauK = $derived(k.typ === "datei" ? vorschauFuer(k) : null);
+  // Vorschau nach Medienart (vom Server); andere Dateien zeigen ihr Symbol.
+  const art = $derived(k.typ === "datei" ? (k.medienart ?? null) : null);
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
   const metaText = $derived(
     k.typ === "ordner"
-      ? k.kinder_anzahl == null
-        ? "Ordner"
-        : k.kinder_anzahl === 0
-          ? "Leer"
-          : `${k.kinder_anzahl} ${k.kinder_anzahl === 1 ? "Datei" : "Dateien"}`
+      ? ordnerInhalt(k.kinder_anzahl)
       : k.typ === "extern"
         ? "Externe Quelle"
         : k.groesse != null
@@ -118,10 +115,13 @@
     <i class="fa-solid fa-check"></i>
   </span>
 
-  <div class="vorschau" class:ordner={k.typ !== "datei"} class:hat-vorschau={!!vorschauK}>
-    {#if vorschauK?.vorschau}
-      {@const V = vorschauK.vorschau}
-      <V knoten={k} browser={haupt} />
+  <div class="vorschau" class:ordner={k.typ !== "datei"} class:hat-vorschau={!!art}>
+    {#if art === "bild"}
+      <BildVorschau m={k} />
+    {:else if art === "video"}
+      <VideoVorschau m={k} />
+    {:else if art === "audio"}
+      <AudioVorschau m={k} spielen={() => onSpielen?.()} />
     {:else}
       <i class="fa-solid {sym.icon}"></i>
     {/if}

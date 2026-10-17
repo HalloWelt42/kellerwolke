@@ -5,16 +5,15 @@
     player, aktuelleSpur, spurWeiter, spurZurueck, wiederholungWeiter,
     umschalten, suchenZu, springen, setzeTempo, springeZuIndex,
   } from "./player.svelte";
-  import { haupt } from "./zustand.svelte";
-  import { waehleApp } from "../plugins/appzustand.svelte";
+  import { zumOrdner as zumOrdnerGehen } from "./medien/oeffnen";
 
   const spur = $derived(aktuelleSpur());
   const TEMPI = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
   function mmss(s: number) { if (!isFinite(s)) return "0:00"; const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${r.toString().padStart(2, "0")}`; }
-  function pfadText(p: { id: string; name: string }[] | null) { return !p || !p.length ? "Meine Dateien" : p.map((x) => x.name).join(" / "); }
+  function pfadText(p: { name: string }[] | null) { return !p || !p.length ? "Meine Dateien" : p.map((x) => x.name).join(" / "); }
   function suche(e: MouseEvent) { if (!player.dauer) return; const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); suchenZu(((e.clientX - r.left) / r.width) * player.dauer); }
-  function zumOrdner() { if (!spur?.pfad) return; haupt.oeffnePfad(spur.pfad, spur.id); waehleApp("dateien"); player.voll = false; }
+  function zumOrdner() { if (!spur?.pfad) return; zumOrdnerGehen(spur.pfad, spur.id); player.voll = false; }
   function tempoName(t: number) { return (t === 1 ? "1" : t.toString().replace(".", ",")) + "x"; }
   function taste(e: KeyboardEvent) { if (e.key === "Escape") player.voll = false; }
 </script>

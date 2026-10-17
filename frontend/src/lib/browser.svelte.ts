@@ -1,38 +1,69 @@
 import * as api from "./api";
 import { erzeugeAuswahl, type Auswahl } from "./auswahl.svelte";
-import { leererFilter, type Filterzustand } from "./filter";
+import { filterAktiv, leererFilter, passt, type Filterzustand } from "./filter";
 import { eindeutigeId } from "./id";
-import type { ExternEintrag, Knoten, Version } from "./types";
+import type { ExternEintrag, Knoten, Pfadteil, Version } from "./types";
 
-// Eine instanziierbare Browsing-Flaeche: haelt Pfad, Liste, Auswahl, Filter,
+// Eine instanziierbare Browsing-Fläche: hält Pfad, Liste, Auswahl, Filter,
 // Sortierung, Detail und alle Lade-/Navigations-/Schreibaktionen. Die
 // Einzelansicht ist eine Instanz, jede Splitscreen-Pane eine weitere - alle
-// laufen denselben Code mit EIGENEM Zustand. Frueher war das ein globaler
-// Singleton in zustand.svelte.ts; genau deshalb musste der Splitscreen alles
-// duplizieren. Backend-Funktionen kommen unveraendert aus api.ts.
+// laufen denselben Code mit EIGENEM Zustand.
+//
+// Zwei Arten zu laden: ein Ortswechsel (anderer Ordner, anderer Bereich) zeigt
+// das Ladeskelett und setzt Auswahl, Filter, Detail und Meldung zurück. Alles
+// andere (eigene Aktionen, Live-Abgleich, Uploads) aktualisiert still über
+// aktualisiere(): Liste, Bildlauf, Filter und eine laufende Eingabe bleiben,
+// und zwar immer für den Bereich, den die Fläche gerade zeigt.
 
 export type Bereich = "dateien" | "extern" | "papierkorb" | "suche" | "favoriten" | "geteilt";
 export type Ansicht = "liste" | "grid";
 export type SortKey = "name" | "groesse" | "geaendert";
 export type SortRichtung = "auf" | "ab";
+export type { Pfadteil };
 
-export interface Pfadteil {
-  id: string | null;
-  name: string;
+// Was in einem Bereich erlaubt ist - eine Tabelle für Werkzeugleiste,
+// Auswahlleiste, Kontextmenü und Ablegen. Der Server prüft ohnehin selbst.
+export interface Rechte {
+  anlegen: boolean; // Neuer Ordner, Hochladen, Ablegen
+  umbenennen: boolean;
+  verschieben: boolean;
+  loeschen: boolean;
+  teilen: boolean;
+  favorit: boolean;
+  zip: boolean; // mehrere als ZIP
+  wiederherstellen: boolean;
+  endgueltig: boolean;
 }
+
+const KEINE: Rechte = {
+  anlegen: false, umbenennen: false, verschieben: false, loeschen: false, teilen: false,
+  favorit: false, zip: false, wiederherstellen: false, endgueltig: false,
+};
+
+const RECHTE: Record<Bereich, Rechte> = {
+  dateien: { ...KEINE, anlegen: true, umbenennen: true, verschieben: true, loeschen: true, teilen: true, favorit: true, zip: true },
+  favoriten: { ...KEINE, favorit: true, zip: true },
+  suche: { ...KEINE, favorit: true, zip: true },
+  geteilt: { ...KEINE },
+  extern: { ...KEINE, favorit: true },
+  papierkorb: { ...KEINE, wiederherstellen: true, endgueltig: true },
+};
+
+const WURZEL: Pfadteil = { id: null, name: "Meine Dateien" };
 
 export class Browser {
   readonly id = eindeutigeId();
   readonly auswahl: Auswahl = erzeugeAuswahl();
 
   bereich = $state<Bereich>("dateien");
-  pfad = $state<Pfadteil[]>([{ id: null, name: "Meine Dateien" }]);
+  pfad = $state<Pfadteil[]>([WURZEL]);
   eintraege = $state<Knoten[]>([]);
-  laden = $state(false);
-  fehler = $state("");
+  laden = $state(false); // nur beim Ortswechsel: das Ladeskelett
+  fehler = $state(""); // bleibt bis zum Ortswechsel oder Schliessen
   suchbegriff = $state("");
   detail = $state<Knoten | null>(null);
   detailVersionen = $state<Version[]>([]);
+  detailPfad = $state<Pfadteil[] | null>(null); // Ordnerkette über dem Detail (eigene Knoten)
   externBrowse = $state<{ knotenId: string; name: string; unterpfad: string[] } | null>(null);
   externEintraege = $state<ExternEintrag[]>([]);
   geteiltPfad = $state<Pfadteil[]>([]);
@@ -40,24 +71,62 @@ export class Browser {
   sortKey = $state<SortKey>("name");
   sortRichtung = $state<SortRichtung>("auf");
   ansicht = $state<Ansicht>("liste");
-  scrollTop = $state(0);
+  // Verschieben über Navigation: gemerkte Auswahl, Ziel ist der Ordner, in dem man "Hierher" wählt.
+  verschiebeIds = $state<string[] | null>(null);
+
+  // Was die Fläche zeigt, in der Reihenfolge, in der sie es zeigt (Filter und
+  // Sortierung); Ordner und Externe immer vor Dateien. Eine Stelle für Liste,
+  // Auswahl, Blättern in der Vollansicht und die Titelliste des Players.
+  sichtbar = $derived.by(() => {
+    const quelle = filterAktiv(this.filter) ? this.eintraege.filter((k) => passt(k.name, this.filter)) : this.eintraege;
+    const rang = (k: Knoten) => (k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2);
+    const key = this.sortKey;
+    const dir = this.sortRichtung === "auf" ? 1 : -1;
+    return [...quelle].sort((a, b) => {
+      if (rang(a) !== rang(b)) return rang(a) - rang(b);
+      let v: number;
+      if (key === "groesse") v = (a.groesse ?? 0) - (b.groesse ?? 0);
+      else if (key === "geaendert") v = new Date(a.geaendert_am).getTime() - new Date(b.geaendert_am).getTime();
+      else v = a.name.localeCompare(b.name, "de", { sensitivity: "base", numeric: true });
+      return v * dir;
+    });
+  });
 
   // Nur das jeweils neueste Laden darf das Ergebnis schreiben (verhindert, dass
-  // eine aeltere, langsamere Antwort eine neuere ueberschreibt). Pro Instanz.
+  // eine ältere, langsamere Antwort eine neuere überschreibt). Pro Instanz.
   private lauf = 0;
 
   get aktuellerOrdner(): string | null {
     return this.pfad[this.pfad.length - 1].id;
   }
 
-  // In diesen Ansichten darf angelegt, hochgeladen, verschoben und umbenannt werden.
+  get rechte(): Rechte {
+    // Externe Quellen: die Übersicht erlaubt den Stern, darin ist alles nur lesbar.
+    return this.bereich === "extern" && this.externBrowse ? KEINE : RECHTE[this.bereich];
+  }
+
+  // In diesen Ansichten darf angelegt, hochgeladen und abgelegt werden.
   get istSchreibbar(): boolean {
-    return this.bereich === "dateien";
+    return this.rechte.anlegen;
+  }
+
+  // Name des Ordners, in dem Neues landet (für Hinweise beim Ablegen).
+  get zielName(): string {
+    return this.pfad[this.pfad.length - 1].name;
   }
 
   private detailSchliessen = (): void => {
     this.detail = null;
     this.detailVersionen = [];
+    this.detailPfad = null;
+  };
+
+  // Gemeinsamer Anfang jedes Ortswechsels.
+  private ortswechsel = (): void => {
+    this.auswahl.leeren();
+    this.detailSchliessen();
+    this.filter = leererFilter();
+    this.fehler = "";
   };
 
   setzeSortierung = (key: SortKey): void => {
@@ -69,18 +138,36 @@ export class Browser {
     }
   };
 
+  fehlerSchliessen = (): void => {
+    this.fehler = "";
+  };
+
+  // Zurück in den Anfangszustand, ohne zu laden (beim Verlassen des Kontos).
+  zuruecksetzen = (): void => {
+    this.lauf++;
+    this.bereich = "dateien";
+    this.pfad = [WURZEL];
+    this.eintraege = [];
+    this.externBrowse = null;
+    this.externEintraege = [];
+    this.geteiltPfad = [];
+    this.suchbegriff = "";
+    this.verschiebeIds = null;
+    this.laden = false;
+    this.ortswechsel();
+  };
+
   // --- Laden ----------------------------------------------------------------
 
-  ladeMit = async (quelle: () => Promise<Knoten[]>): Promise<void> => {
+  private ladeMit = async (quelle: () => Promise<Knoten[]>, still: boolean): Promise<void> => {
     const meins = ++this.lauf;
-    this.laden = true;
-    this.fehler = "";
+    if (!still) this.laden = true;
     try {
       const ergebnis = await quelle();
       if (meins !== this.lauf) return;
       this.eintraege = ergebnis;
       this.auswahl.beschraenkeAuf(ergebnis.map((k) => k.id));
-      if (this.detail && !ergebnis.some((k) => k.id === this.detail!.id)) this.detailSchliessen();
+      this.detailNachziehen(ergebnis);
     } catch (f) {
       if (meins === this.lauf) this.fehler = (f as Error).message;
     } finally {
@@ -88,148 +175,143 @@ export class Browser {
     }
   };
 
-  ladeOrdner = (): Promise<void> => this.ladeMit(() => api.kinder(this.aktuellerOrdner));
+  // Das offene Detail an den neuen Stand anpassen: weg, wenn der Eintrag fehlt,
+  // sonst frische Werte und bei neuer Version auch die Versionsliste.
+  private detailNachziehen = (ergebnis: Knoten[]): void => {
+    const d = this.detail;
+    if (!d) return;
+    const neu = ergebnis.find((k) => k.id === d.id);
+    if (!neu) {
+      this.detailSchliessen();
+      return;
+    }
+    const neueVersion = neu.etag !== d.etag;
+    this.detail = neu;
+    if (neueVersion) this.versionenLaden(neu);
+  };
 
-  // Laedt die aktuelle Ansicht passend zum Bereich neu (fuer den Live-Abgleich).
-  aktualisiere = (): void => {
-    if (this.bereich === "dateien") this.ladeOrdner();
-    else if (this.bereich === "favoriten") this.ladeMit(() => api.favoriten());
-    else if (this.bereich === "geteilt") {
-      const p = this.geteiltPfad;
-      this.ladeMit(() => (p.length ? api.geteiltKinder(p[p.length - 1].id as string) : api.geteilt()));
-    } else if (this.bereich === "papierkorb") this.ladeMit(() => api.papierkorb());
-    else if (this.bereich === "suche" && this.suchbegriff) this.ladeMit(() => api.suchen(this.suchbegriff));
-    else if (this.bereich === "extern" && this.externBrowse) this.ladeExtern();
-    else if (this.bereich === "extern")
-      this.ladeMit(async () => (await api.kinder(null)).filter((k) => k.typ === "extern"));
+  // Die Quelle des Bereichs, den die Fläche gerade zeigt.
+  private quelle = (): (() => Promise<Knoten[]>) | null => {
+    switch (this.bereich) {
+      case "dateien": {
+        const ordner = this.aktuellerOrdner;
+        return () => api.kinder(ordner);
+      }
+      case "favoriten":
+        return () => api.favoriten();
+      case "papierkorb":
+        return () => api.papierkorb();
+      case "suche": {
+        const q = this.suchbegriff;
+        return q ? () => api.suchen(q) : null;
+      }
+      case "geteilt": {
+        const p = this.geteiltPfad;
+        return p.length ? () => api.geteiltKinder(p[p.length - 1].id as string) : () => api.geteilt();
+      }
+      case "extern":
+        return this.externBrowse ? null : async () => (await api.kinder(null)).filter((k) => k.typ === "extern");
+    }
+  };
+
+  private ortLaden = (): Promise<void> => {
+    const q = this.quelle();
+    if (q) return this.ladeMit(q, false);
+    if (this.bereich === "extern" && this.externBrowse) return this.ladeExtern(false);
+    return Promise.resolve();
+  };
+
+  // Still neu laden, passend zum Bereich (Aktionen, Live-Abgleich, Uploads).
+  aktualisiere = (): Promise<void> => {
+    const q = this.quelle();
+    if (q) return this.ladeMit(q, true);
+    if (this.bereich === "extern" && this.externBrowse) return this.ladeExtern(true);
+    return Promise.resolve();
   };
 
   // --- Bereichswechsel ------------------------------------------------------
 
-  zeigeDateien = (): void => {
-    this.bereich = "dateien";
-    this.pfad = [{ id: null, name: "Meine Dateien" }];
-    this.externBrowse = null;
-    this.suchbegriff = "";
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeOrdner();
-  };
-
-  zeigeGeteilt = (): void => {
-    this.bereich = "geteilt";
+  private bereichOeffnen = (bereich: Bereich): Promise<void> => {
+    this.bereich = bereich;
     this.externBrowse = null;
     this.geteiltPfad = [];
-    this.suchbegriff = "";
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeMit(() => api.geteilt());
+    this.verschiebeIds = null;
+    if (bereich !== "suche") this.suchbegriff = "";
+    this.ortswechsel();
+    return this.ortLaden();
+  };
+
+  zeigeDateien = (): Promise<void> => {
+    this.pfad = [WURZEL];
+    return this.bereichOeffnen("dateien");
+  };
+  zeigeGeteilt = (): Promise<void> => this.bereichOeffnen("geteilt");
+  zeigeFavoriten = (): Promise<void> => this.bereichOeffnen("favoriten");
+  zeigePapierkorb = (): Promise<void> => this.bereichOeffnen("papierkorb");
+  zeigeExterneQuellen = (): Promise<void> => this.bereichOeffnen("extern");
+
+  starteSuche = (q: string): Promise<void> => {
+    const sauber = q.trim();
+    if (!sauber) return this.zeigeDateien();
+    this.suchbegriff = sauber;
+    return this.bereichOeffnen("suche");
   };
 
   geteiltOeffnen = (k: Knoten): void => {
     if (k.typ === "ordner") {
       this.geteiltPfad = [...this.geteiltPfad, { id: k.id, name: k.name }];
-      this.auswahl.leeren();
-      this.ladeMit(() => api.geteiltKinder(k.id));
-    } else if (k.typ === "datei") {
-      api.geteiltHerunterladen(k).catch((f) => (this.fehler = (f as Error).message));
+      this.ortswechsel();
+      this.ortLaden();
+    } else {
+      this.zeigeDetail(k);
     }
   };
 
   geteiltBreadcrumb = (index: number): void => {
-    if (index < 0) {
-      this.geteiltPfad = [];
-      this.auswahl.leeren();
-      this.ladeMit(() => api.geteilt());
-      return;
-    }
-    const ziel = this.geteiltPfad[index];
-    this.geteiltPfad = this.geteiltPfad.slice(0, index + 1);
-    this.auswahl.leeren();
-    this.ladeMit(() => api.geteiltKinder(ziel.id as string));
-  };
-
-  zeigeFavoriten = (): void => {
-    this.bereich = "favoriten";
-    this.externBrowse = null;
-    this.suchbegriff = "";
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeMit(() => api.favoriten());
+    this.geteiltPfad = index < 0 ? [] : this.geteiltPfad.slice(0, index + 1);
+    this.ortswechsel();
+    this.ortLaden();
   };
 
   favoritUmschalten = async (k: Knoten): Promise<void> => {
     try {
       await api.favoritSetzen(k.id, !k.favorit);
-      if (this.bereich === "favoriten") await this.ladeMit(() => api.favoriten());
-      else await this.ladeOrdner();
+      await this.aktualisiere();
     } catch (f) {
       this.fehler = (f as Error).message;
     }
   };
 
-  zeigePapierkorb = (): void => {
-    this.bereich = "papierkorb";
-    this.externBrowse = null;
-    this.suchbegriff = "";
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeMit(() => api.papierkorb());
-  };
-
-  zeigeExterneQuellen = (): void => {
-    this.bereich = "extern";
-    this.externBrowse = null;
-    this.suchbegriff = "";
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    // Externe Quellen sind Knoten vom Typ "extern" auf oberster Ebene.
-    this.ladeMit(async () => (await api.kinder(null)).filter((k) => k.typ === "extern"));
-  };
-
-  starteSuche = async (q: string): Promise<void> => {
-    const sauber = q.trim();
-    this.suchbegriff = sauber;
-    if (!sauber) {
-      this.zeigeDateien();
-      return;
-    }
-    this.bereich = "suche";
-    this.externBrowse = null;
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    await this.ladeMit(() => api.suchen(sauber));
-  };
-
   // --- Navigation im Ordnerbaum ---------------------------------------------
 
-  oeffneOrdner = (k: Knoten): void => {
-    this.pfad = [...this.pfad, { id: k.id, name: k.name }];
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeOrdner();
-  };
-
-  // Ordner frisch oeffnen (aus Favoriten/Suche): Bereich auf Dateien stellen und
-  // den Pfad auf [Wurzel, Ordner] setzen (volle Ahnenkette ist dort nicht bekannt).
-  oeffneOrdnerFrisch = (k: Knoten): void => {
-    this.bereich = "dateien";
-    this.pfad = [{ id: null, name: "Meine Dateien" }, { id: k.id, name: k.name }];
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeOrdner();
-  };
-
-  // Direkt zu einem Ordner ueber die VOLLE Ahnenkette springen (z.B. aus einer
-  // baumweiten Ansicht wie der Galerie) und optional eine Datei darin markieren
-  // und ihr Detail anzeigen. `teile` ist die Ordnerkette OHNE Wurzel/Datei.
-  oeffnePfad = async (teile: Pfadteil[], markiereId?: string): Promise<void> => {
+  private ordnerZeigen = (pfad: Pfadteil[]): Promise<void> => {
     this.bereich = "dateien";
     this.externBrowse = null;
-    this.pfad = [{ id: null, name: "Meine Dateien" }, ...teile];
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    await this.ladeOrdner();
+    this.suchbegriff = "";
+    this.pfad = pfad;
+    this.ortswechsel();
+    return this.ortLaden();
+  };
+
+  oeffneOrdner = (k: Knoten): Promise<void> => this.ordnerZeigen([...this.pfad, { id: k.id, name: k.name }]);
+
+  // Ordner aus Favoriten oder Suche: mit voller Ahnenkette vom Server.
+  oeffneOrdnerMitPfad = async (k: Knoten): Promise<void> => {
+    let kette: Pfadteil[] = [];
+    try {
+      kette = await api.pfadVon(k.id);
+    } catch {
+      // ohne Kette bleibt der Breadcrumb kurz, der Ordner öffnet trotzdem
+    }
+    await this.ordnerZeigen([WURZEL, ...kette, { id: k.id, name: k.name }]);
+  };
+
+  // Direkt zu einem Ordner über die Ahnenkette springen (Medien, Player) und
+  // optional eine Datei darin markieren und ihr Detail zeigen. `teile` ist die
+  // Ordnerkette OHNE Wurzel und Datei.
+  oeffnePfad = async (teile: Pfadteil[], markiereId?: string): Promise<void> => {
+    this.verschiebeIds = null;
+    await this.ordnerZeigen([WURZEL, ...teile]);
     if (markiereId) {
       const k = this.eintraege.find((e) => e.id === markiereId);
       if (k) {
@@ -239,27 +321,32 @@ export class Browser {
     }
   };
 
-  breadcrumbGehe = (index: number): void => {
-    this.pfad = this.pfad.slice(0, index + 1);
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeOrdner();
-  };
+  breadcrumbGehe = (index: number): Promise<void> => this.ordnerZeigen(this.pfad.slice(0, index + 1));
 
   // --- Detail-Pane / Aktivieren ---------------------------------------------
+
+  private versionenLaden = async (k: Knoten): Promise<void> => {
+    try {
+      const v = await api.versionen(k.id);
+      if (this.detail?.id === k.id) this.detailVersionen = v;
+    } catch {
+      // Detail bleibt auch ohne Versionsliste nutzbar (geteilte Dateien haben keine).
+    }
+  };
 
   zeigeDetail = async (k: Knoten): Promise<void> => {
     this.detail = k;
     this.detailVersionen = [];
-    if (k.typ === "datei") {
-      // Bewusst NICHT den Lade-Zaehler anfassen - das wuerde ein laufendes
-      // Listen-Laden faelschlich als veraltet verwerfen. Stattdessen ueber die
-      // Detail-Id absichern: nur schreiben, wenn noch dieselbe Datei offen ist.
+    this.detailPfad = null;
+    if (k.typ === "datei") this.versionenLaden(k);
+    if (this.bereich === "dateien") {
+      this.detailPfad = this.pfad.slice(1);
+    } else if (this.bereich !== "geteilt") {
       try {
-        const v = await api.versionen(k.id);
-        if (this.detail?.id === k.id) this.detailVersionen = v;
+        const kette = await api.pfadVon(k.id);
+        if (this.detail?.id === k.id) this.detailPfad = kette;
       } catch {
-        // Detail bleibt auch ohne Versionsliste nutzbar.
+        // Pfad ist Zusatzinfo
       }
     }
   };
@@ -268,99 +355,82 @@ export class Browser {
     this.detailSchliessen();
   };
 
-  // Doppelklick/Aktivieren: Ordner navigiert, externer Knoten oeffnet, Datei
-  // zeigt die Vorschau/Detail - NIE ein Download. Download ist ausschliesslich
-  // die explizite Aktion herunterladen() (Knopf, Kontextmenue).
+  // Aktivieren (Doppelklick, "Öffnen"): Ordner navigiert, externer Knoten
+  // öffnet, Datei zeigt das Detail - NIE ein Download. Medien öffnet die
+  // Dateiliste selbst (Vollansicht, Wiedergabe), weil sie die Nachbarn kennt.
   oeffnen = (k: Knoten): void => {
     if (k.typ === "ordner") {
       if (this.bereich === "dateien") this.oeffneOrdner(k);
-      else this.oeffneOrdnerFrisch(k);
+      else if (this.bereich === "geteilt") this.geteiltOeffnen(k);
+      else this.oeffneOrdnerMitPfad(k);
     } else if (k.typ === "extern") {
       this.externOeffnen(k);
-    } else if (this.bereich === "geteilt") {
-      this.geteiltOeffnen(k);
     } else {
       this.zeigeDetail(k);
     }
   };
 
-  // --- Externe Quellen ------------------------------------------------------
+  // --- Externe Quellen (nur lesbar) -----------------------------------------
 
   externOeffnen = (k: Knoten): void => {
     this.bereich = "extern";
     this.externBrowse = { knotenId: k.id, name: k.name, unterpfad: [] };
-    this.auswahl.leeren();
-    this.detailSchliessen();
-    this.ladeExtern();
+    this.externEintraege = [];
+    this.ortswechsel();
+    this.ladeExtern(false);
   };
 
-  ladeExtern = async (): Promise<void> => {
+  ladeExtern = async (still = true): Promise<void> => {
     const b = this.externBrowse;
     if (!b) return;
     const meins = ++this.lauf;
-    this.laden = true;
-    this.fehler = "";
+    if (!still) this.laden = true;
     try {
       const ergebnis = await api.externAuflisten(b.knotenId, b.unterpfad.join("/"));
       if (meins === this.lauf) this.externEintraege = ergebnis;
     } catch (f) {
-      if (meins === this.lauf) this.fehler = (f as Error).message;
+      if (meins === this.lauf) {
+        this.externEintraege = [];
+        this.fehler = (f as Error).message;
+      }
     } finally {
       if (meins === this.lauf) this.laden = false;
     }
   };
 
+  private externOrt = (unterpfad: string[]): void => {
+    const b = this.externBrowse;
+    if (!b) return;
+    this.externBrowse = { ...b, unterpfad };
+    this.externEintraege = [];
+    this.ortswechsel();
+    this.ladeExtern(false);
+  };
+
   externGehe = (e: ExternEintrag): void => {
     const b = this.externBrowse;
     if (!b) return;
-    if (e.ist_ordner) {
-      b.unterpfad = [...b.unterpfad, e.name];
-      this.ladeExtern();
-    } else {
-      this.externRunter(e);
-    }
+    if (e.ist_ordner) this.externOrt([...b.unterpfad, e.name]);
+    else this.externRunter(e);
   };
 
-  externRunter = async (e: ExternEintrag): Promise<void> => {
+  externRunter = (e: ExternEintrag): void => {
     const b = this.externBrowse;
-    if (!b) return;
-    const rel = [...b.unterpfad, e.name].join("/");
-    try {
-      await api.externHerunterladen(b.knotenId, rel, e.name);
-    } catch (f) {
-      this.fehler = (f as Error).message;
-    }
+    if (b) api.externHerunterladen(b.knotenId, [...b.unterpfad, e.name].join("/"), e.name);
   };
 
   externBreadcrumb = (index: number): void => {
-    const b = this.externBrowse;
-    if (!b) return;
-    if (index < 0) {
-      this.zeigeExterneQuellen();
-      return;
-    }
-    b.unterpfad = b.unterpfad.slice(0, index);
-    this.ladeExtern();
+    if (index < 0) this.zeigeExterneQuellen();
+    else this.externOrt((this.externBrowse?.unterpfad ?? []).slice(0, index));
   };
 
   // --- Schreibaktionen ------------------------------------------------------
 
   ordnerAnlegen = async (name: string): Promise<void> => {
-    // In einer schreibbaren externen Quelle landet das Anlegen dort, sonst im
-    // eigenen Baum.
-    const b = this.externBrowse;
-    if (this.bereich === "extern" && b) {
-      try {
-        await api.externOrdnerAnlegen(b.knotenId, b.unterpfad.join("/"), name);
-        await this.ladeExtern();
-      } catch (f) {
-        this.fehler = (f as Error).message;
-      }
-      return;
-    }
+    if (!this.rechte.anlegen) return;
     try {
       await api.ordnerAnlegen(name, this.aktuellerOrdner);
-      await this.ladeOrdner();
+      await this.aktualisiere();
     } catch (f) {
       this.fehler = (f as Error).message;
     }
@@ -371,64 +441,76 @@ export class Browser {
     if (!sauber || sauber === k.name) return;
     try {
       await api.umbenennen(k.id, sauber);
-      if (this.detail?.id === k.id) this.detail = { ...this.detail, name: sauber };
-      await this.ladeOrdner();
+      await this.aktualisiere();
     } catch (f) {
       this.fehler = (f as Error).message;
     }
   };
 
+  // Verschiebt der Reihe nach; was scheitert, steht danach in der Meldung,
+  // der Rest ist trotzdem verschoben.
   verschiebe = async (ids: string[], zielId: string | null): Promise<void> => {
-    try {
-      for (const id of ids) {
-        if (id === zielId) continue;
+    const fehlschlaege: string[] = [];
+    for (const id of ids) {
+      if (id === zielId) continue;
+      try {
         await api.verschieben(id, zielId);
+      } catch (f) {
+        const name = this.eintraege.find((k) => k.id === id)?.name ?? "Ein Objekt";
+        fehlschlaege.push(`${name}: ${(f as Error).message}`);
       }
-      this.auswahl.leeren();
-      await this.ladeOrdner();
-    } catch (f) {
-      this.fehler = (f as Error).message;
     }
+    this.auswahl.leeren();
+    this.verschiebeIds = null;
+    await this.aktualisiere();
+    if (fehlschlaege.length) this.fehler = `Nicht verschoben - ${fehlschlaege.join("; ")}`;
+  };
+
+  verschiebenBeginnen = (ids: string[]): void => {
+    if (ids.length) this.verschiebeIds = [...ids];
+  };
+
+  verschiebenHierher = (): Promise<void> => {
+    const ids = this.verschiebeIds ?? [];
+    return this.verschiebe(ids, this.aktuellerOrdner);
+  };
+
+  verschiebenAbbrechen = (): void => {
+    this.verschiebeIds = null;
   };
 
   loeschen = async (ids: string[]): Promise<void> => {
     try {
       for (const id of ids) await api.loeschen(id);
-      this.auswahl.leeren();
-      this.detailSchliessen();
-      await this.ladeOrdner();
     } catch (f) {
       this.fehler = (f as Error).message;
     }
+    this.auswahl.leeren();
+    await this.aktualisiere();
   };
 
   wiederherstellen = async (ids: string[]): Promise<void> => {
     try {
       for (const id of ids) await api.wiederherstellen(id);
-      this.auswahl.leeren();
-      await this.ladeMit(() => api.papierkorb());
     } catch (f) {
       this.fehler = (f as Error).message;
     }
+    this.auswahl.leeren();
+    await this.aktualisiere();
   };
 
   endgueltigLoeschen = async (ids: string[]): Promise<void> => {
     try {
       for (const id of ids) await api.endgueltigLoeschen(id);
-      this.auswahl.leeren();
-      this.detailSchliessen();
-      await this.ladeMit(() => api.papierkorb());
     } catch (f) {
       this.fehler = (f as Error).message;
     }
+    this.auswahl.leeren();
+    await this.aktualisiere();
   };
 
-  herunterladen = async (k: Knoten): Promise<void> => {
-    try {
-      await api.herunterladen(k);
-    } catch (f) {
-      this.fehler = (f as Error).message;
-    }
+  herunterladen = (k: Knoten): void => {
+    api.herunterladen(k);
   };
 
   zipHerunterladen = async (ids: string[], dateiname: string): Promise<void> => {

@@ -1,27 +1,32 @@
 <script lang="ts">
-  import { sichtbareApps, appZustand, waehleApp } from "../plugins/registry.svelte";
+  import { ansicht, waehleAnsicht, MEDIEN_BEREICHE, type HauptAnsicht } from "./ansicht.svelte";
+  import { haupt } from "./zustand.svelte";
 
-  // Schmale Leiste unter dem Hauptsuchfeld: die aktiven Ansichts-Apps. Der
-  // Datei-Browser ("Dateien") ist immer der erste Eintrag (Default-App).
-  const apps = $derived(sichtbareApps());
+  // Schmale Leiste unter dem Kopf: Dateien oder Medien. Die Medienansicht gibt es
+  // dort, wo Medien liegen können; anderswo ist ihr Knopf gesperrt und sagt warum.
+  const eintraege: { id: HauptAnsicht; label: string; icon: string }[] = [
+    { id: "dateien", label: "Dateien", icon: "fa-solid fa-folder" },
+    { id: "medien", label: "Medien", icon: "fa-solid fa-photo-film" },
+  ];
+  const medienMoeglich = $derived(MEDIEN_BEREICHE.includes(haupt.bereich));
 </script>
 
-{#if apps.length > 1}
-  <div class="app-leiste">
-    {#each apps as app (app.id)}
-      <button
-        type="button"
-        class="app-knopf"
-        class:aktiv={appZustand.aktivId === app.id}
-        title={app.label}
-        onclick={() => waehleApp(app.id)}
-      >
-        <i class={app.icon}></i>
-        <span>{app.label}</span>
-      </button>
-    {/each}
-  </div>
-{/if}
+<div class="app-leiste">
+  {#each eintraege as e (e.id)}
+    {@const gesperrt = e.id === "medien" && !medienMoeglich}
+    <button
+      type="button"
+      class="app-knopf"
+      class:aktiv={ansicht.aktiv === e.id}
+      disabled={gesperrt}
+      title={gesperrt ? "Medien gibt es in Meine Dateien, Favoriten und Geteilt" : e.label}
+      onclick={() => waehleAnsicht(e.id)}
+    >
+      <i class={e.icon}></i>
+      <span>{e.label}</span>
+    </button>
+  {/each}
+</div>
 
 <style>
   .app-leiste {
@@ -47,6 +52,11 @@
   .app-knopf:hover {
     background: var(--flaeche-3);
     color: var(--text-1);
+  }
+  .app-knopf:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: transparent;
   }
   .app-knopf.aktiv {
     background: var(--akzent-weich);

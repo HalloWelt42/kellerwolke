@@ -1,16 +1,18 @@
 <script lang="ts">
   // Durchgehende Player-Leiste am unteren Rand - eigene Optik (kein natives
-  // <audio controls>). Wird einmalig von App.svelte gerendert und ueberlebt so
+  // <audio controls>). Wird einmalig von App.svelte gerendert und überlebt so
   // jede Navigation.
   import { onMount } from "svelte";
   import {
     player, aktuelleSpur, spurWeiter, spurZurueck, playerBeenden,
     beiEnde, wiederholungWeiter, zustandLaden, zustandSpeichern,
-    audioElement, umschalten, springen,
+    audioElement, umschalten, springen, spurUrl,
   } from "./player.svelte";
   import NowPlaying from "./NowPlaying.svelte";
-  import { haupt } from "./zustand.svelte";
-  import { waehleApp } from "../plugins/appzustand.svelte";
+  import { zumOrdner as zumOrdnerGehen } from "./medien/oeffnen";
+  import { ursache } from "./medien/adressen";
+  import { vollansichtOffen } from "./vorschau.svelte";
+  import { auth } from "./auth.svelte";
 
   let audioEl: HTMLAudioElement;
   let geladeneUrl = "";
@@ -19,17 +21,18 @@
   const spur = $derived(aktuelleSpur());
 
   // Reload-Persistenz synchron beim Init einlesen (vor dem ersten Effekt).
-  let startSekunde = zustandLaden();
+  let startSekunde = zustandLaden(auth.benutzer?.id ?? "");
   let autoAbspielen = player.index < 0; // wiederhergestellte Spur NICHT automatisch starten
 
   // Nur bei echtem Spurwechsel neu laden. Wiederhergestellte erste Spur nicht auto.
   $effect(() => {
     const s = spur;
     if (!audioEl) return;
-    if (s && s.url !== geladeneUrl) {
-      geladeneUrl = s.url;
+    const url = s ? spurUrl(s) : "";
+    if (s && url !== geladeneUrl) {
+      geladeneUrl = url;
       fehler = "";
-      audioEl.src = s.url;
+      audioEl.src = url;
       if (autoAbspielen) audioEl.play().catch(() => {});
       autoAbspielen = true;
     } else if (!s) {
@@ -39,7 +42,7 @@
     }
   });
 
-  // Lautstaerke/Stumm auf das Element spiegeln.
+  // Lautstärke/Stumm auf das Element spiegeln.
   $effect(() => {
     if (audioEl) {
       audioEl.volume = player.lautstaerke;
@@ -67,7 +70,7 @@
     }
   });
 
-  // Strukturzustand sichern, sobald er sich aendert (Position kommt zusaetzlich
+  // Strukturzustand sichern, sobald er sich ändert (Position kommt zusätzlich
   // beim Verlassen der Seite dazu - kein Speichern im Sekundentakt).
   $effect(() => {
     player.index;
@@ -81,7 +84,7 @@
     audioElement(audioEl);
     const sichern = () => zustandSpeichern();
     window.addEventListener("beforeunload", sichern);
-    // Media Session: Betriebssystem-/Kopfhoerer-/Sperrbildschirm-Steuerung.
+    // Media Session: Betriebssystem-/Kopfhörer-/Sperrbildschirm-Steuerung.
     if ("mediaSession" in navigator) {
       const ms = navigator.mediaSession;
       ms.setActionHandler("play", () => umschalten());
@@ -114,9 +117,12 @@
     return `${m}:${r.toString().padStart(2, "0")}`;
   }
   function zumOrdner() {
-    if (!spur?.pfad) return;
-    haupt.oeffnePfad(spur.pfad, spur.id);
-    waehleApp("dateien");
+    if (spur?.pfad) zumOrdnerGehen(spur.pfad, spur.id);
+  }
+  async function beiFehler() {
+    laden = false;
+    player.laeuft = false;
+    fehler = await ursache(geladeneUrl);
   }
   function amEnde() {
     const was = beiEnde();
@@ -128,7 +134,7 @@
     } else if (was === "stopp") {
       player.laeuft = false;
     }
-    // "weiter": Index wurde geaendert -> der Lade-Effekt spielt die naechste Spur
+    // "weiter": Index wurde geändert -> der Lade-Effekt spielt die nächste Spur
   }
   function beiMetadaten() {
     player.dauer = audioEl.duration;
@@ -143,7 +149,7 @@
   // sitzt. Bewusst nur Leertaste (Play/Pause) und m (Stumm) - Pfeile bleiben den
   // Ansichten (z.B. Bild-Lightbox); Seek/Sprung kommt in die Now-Playing-Ansicht.
   function tastatur(e: KeyboardEvent) {
-    if (!spur) return;
+    if (!spur || vollansichtOffen()) return; // die offene Vollansicht hat Vorrang
     const z = e.target as HTMLElement | null;
     if (z && (z.tagName === "INPUT" || z.tagName === "TEXTAREA" || z.tagName === "SELECT" || z.isContentEditable)) return;
     if (e.key === " ") {
@@ -166,7 +172,7 @@
   onwaiting={() => (laden = true)}
   onplaying={() => { laden = false; fehler = ""; }}
   oncanplay={() => (laden = false)}
-  onerror={() => { laden = false; fehler = "Format wird hier nicht unterstützt"; player.laeuft = false; }}
+  onerror={beiFehler}
   onended={amEnde}
 ></audio>
 
@@ -223,7 +229,7 @@
 
 <style>
   audio { display: none; }
-  /* Eigene, letzte Rasterzeile im .app-Grid - hebt die Ansicht an statt zu ueberlagern. */
+  /* Eigene, letzte Rasterzeile im .app-Grid - hebt die Ansicht an statt zu überlagern. */
   .spieler { grid-column: 1 / -1; grid-row: 3; height: 78px; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(320px, 1.6fr) minmax(160px, 1fr); align-items: center; gap: var(--a4); padding: 0 var(--a4); background: var(--flaeche); border-top: 1px solid var(--rand); }
   .s-jetzt { display: flex; align-items: center; gap: var(--a3); min-width: 0; }
   .s-cover { width: 48px; height: 48px; border-radius: var(--r2); display: grid; place-items: center; color: #fff; font-size: 1.1rem; flex: none; background: linear-gradient(135deg, #6d5efc, #3b82f6); }

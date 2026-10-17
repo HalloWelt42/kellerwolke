@@ -1,5 +1,4 @@
 import type {
-  App,
   AppZugang,
   AppZugangNeu,
   AuthStatus,
@@ -8,7 +7,8 @@ import type {
   Freigabe,
   Knoten,
   Konto,
-  PluginInfo,
+  Medium,
+  Pfadteil,
   PoolAufraeumen,
   PoolPruefung,
   Recht,
@@ -18,9 +18,9 @@ import type {
   Vorgang,
 } from "./types";
 
-// Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl fuer
+// Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl für
 // eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
-// Das Frontend nutzt nirgends @html, die XSS-Flaeche ist entsprechend klein.
+// Das Frontend nutzt nirgends @html, die XSS-Fläche ist entsprechend klein.
 const SCHLUESSEL = "kw_sitzung";
 
 export class ApiFehler extends Error {
@@ -40,11 +40,20 @@ export function setzeToken(wert: string): void {
   else localStorage.removeItem(SCHLUESSEL);
 }
 
+// Wer reagiert, wenn der Server die Sitzung nicht mehr kennt (abgelaufen, gesperrt, anderswo abgemeldet):
+// die Anmeldung meldet sich hier an und zeigt dann wieder den Anmeldeschirm.
+let beiSitzungsende: (() => void) | null = null;
+export function sitzungsendeMelden(fn: () => void): void {
+  beiSitzungsende = fn;
+}
+function sitzungVorbei(): ApiFehler {
+  setzeToken("");
+  beiSitzungsende?.();
+  return new ApiFehler(401, "Anmeldung erforderlich");
+}
+
 async function pruefe(antwort: Response): Promise<Response> {
-  if (antwort.status === 401) {
-    setzeToken("");
-    throw new ApiFehler(401, "Anmeldung erforderlich");
-  }
+  if (antwort.status === 401) throw sitzungVorbei();
   if (!antwort.ok) {
     let text = antwort.statusText;
     try {
@@ -101,9 +110,86 @@ export async function version(): Promise<string> {
   return daten.version;
 }
 
-// Aenderungs-Journal des Nutzers ab einer Sequenznummer (fuer Live-Abgleich).
+// Änderungs-Journal des Nutzers ab einer Sequenznummer (für Live-Abgleich).
 export function journalSeit(seit: number): Promise<{ seq: number }[]> {
   return hole<{ seq: number }[]>(`/v1/sync/journal?seit=${seit}`);
+}
+
+// Letzte vergebene Journal-Nummer: Startpunkt des Live-Abgleichs (nichts nachladen, nichts verpassen).
+export async function journalStand(): Promise<number> {
+  return (await hole<{ seq: number }>("/v1/sync/stand")).seq;
+}
+
+// --- Lesezugang für Inhaltsadressen (Vorschau, Wiedergabe, Herunterladen) ---------------------------
+// <img>, <audio>, <video> und Download-Links können keinen Kopf setzen. Der Server legt dafür ein
+// Cookie nur für /api/v1/inhalt an (für Skripte unlesbar, an die Sitzung gebunden).
+
+export function lesezugangEinrichten(): Promise<void> {
+  return hole<void>("/v1/inhalt/zugang", { method: "POST" });
+}
+
+export async function lesezugangBeenden(): Promise<void> {
+  try {
+    await fetch("/api/v1/inhalt/zugang", { method: "DELETE" });
+  } catch {
+    // egal - mit der Sitzung endet er ohnehin
+  }
+}
+
+// Lädt über einen unsichtbaren Link: der Browser holt direkt aus dem Strom, mit Fortschritt und ohne
+// die Datei im Speicher der Seite zu halten.
+function ueberLink(url: string, name: string): void {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+export function herunterladen(knoten: Knoten): void {
+  ueberLink(`/api/v1/inhalt/datei/${knoten.id}`, knoten.name);
+}
+
+export function externHerunterladen(knotenId: string, unterpfad: string, name: string): void {
+  ueberLink(`/api/v1/inhalt/extern/${knotenId}?unterpfad=${encodeURIComponent(unterpfad)}`, name);
+}
+
+// ZIP: erst die Auswahl prüfen (Fehler wie "zu gross" kommen so als Meldung), dann als Formular in einen
+// unsichtbaren Rahmen abschicken - eine lange Auswahl passt in keine Adresse.
+export async function zipHerunterladen(ids: string[], dateiname: string): Promise<void> {
+  await hole<{ eintraege: number }>("/v1/dateien/zip/plan", { method: "POST", body: JSON.stringify({ ids }) });
+  let rahmen = document.querySelector<HTMLIFrameElement>("iframe[name=kw-download]");
+  if (!rahmen) {
+    rahmen = document.createElement("iframe");
+    rahmen.name = "kw-download";
+    rahmen.hidden = true;
+    document.body.appendChild(rahmen);
+  }
+  const formular = document.createElement("form");
+  formular.method = "POST";
+  formular.action = "/api/v1/inhalt/zip";
+  formular.target = "kw-download";
+  formular.hidden = true;
+  for (const [schluessel, wert] of [...ids.map((id) => ["ids", id]), ["name", dateiname]]) {
+    const feld = document.createElement("input");
+    feld.type = "hidden";
+    feld.name = schluessel;
+    feld.value = wert;
+    formular.appendChild(feld);
+  }
+  document.body.appendChild(formular);
+  formular.submit();
+  formular.remove();
+}
+
+export function pfadVon(id: string): Promise<Pfadteil[]> {
+  return hole<Pfadteil[]>(`/v1/dateien/${id}/pfad`);
+}
+
+export function alleMedien(): Promise<Medium[]> {
+  return hole<Medium[]>("/v1/medien/alle");
 }
 
 // --- Dateien ----------------------------------------------------------------
@@ -154,22 +240,6 @@ export function geteiltKinder(id: string): Promise<Knoten[]> {
   return hole<Knoten[]>(`/v1/dateien/geteilt/${id}`);
 }
 
-export async function geteiltHerunterladen(knoten: Knoten): Promise<void> {
-  const antwort = await fetch(`/api/v1/dateien/geteilt/${knoten.id}/inhalt`, {
-    headers: { "X-Kellerwolke-Sitzung": token() },
-  });
-  await pruefe(antwort);
-  const blob = await antwort.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = knoten.name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 export function papierkorbLeeren(): Promise<void> {
   return hole<void>("/v1/dateien/papierkorb", { method: "DELETE" });
 }
@@ -201,7 +271,7 @@ export interface UploadGriff {
   abbrechen: () => void;
 }
 
-// Upload ueber XMLHttpRequest, damit der echte Sende-Fortschritt verfolgt und
+// Upload über XMLHttpRequest, damit der echte Sende-Fortschritt verfolgt und
 // abgebrochen werden kann (fetch liefert keinen Upload-Fortschritt).
 export function hochladen(
   datei: File,
@@ -218,15 +288,14 @@ export function hochladen(
     };
     xhr.onload = () => {
       if (xhr.status === 401) {
-        setzeToken("");
-        reject(new ApiFehler(401, "Anmeldung erforderlich"));
+        reject(sitzungVorbei());
         return;
       }
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText) as Knoten);
         } catch {
-          reject(new ApiFehler(xhr.status, "Ungueltige Antwort"));
+          reject(new ApiFehler(xhr.status, "Ungültige Antwort"));
         }
       } else {
         let text = xhr.statusText;
@@ -246,40 +315,6 @@ export function hochladen(
     if (parentId) formular.append("parent_id", parentId);
     xhr.send(formular);
   });
-}
-
-export async function herunterladen(knoten: Knoten): Promise<void> {
-  const antwort = await fetch(`/api/v1/dateien/${knoten.id}/inhalt`, {
-    headers: { "X-Kellerwolke-Sitzung": token() },
-  });
-  await pruefe(antwort);
-  const blob = await antwort.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = knoten.name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-export async function zipHerunterladen(ids: string[], dateiname: string): Promise<void> {
-  const antwort = await fetch("/api/v1/dateien/zip", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Kellerwolke-Sitzung": token() },
-    body: JSON.stringify({ ids }),
-  });
-  await pruefe(antwort);
-  const blob = await antwort.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = dateiname;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 export function umbenennen(id: string, name: string): Promise<Knoten> {
@@ -326,56 +361,6 @@ export function externAuflisten(knotenId: string, unterpfad: string): Promise<Ex
   );
 }
 
-export async function externHerunterladen(
-  knotenId: string,
-  unterpfad: string,
-  name: string,
-): Promise<void> {
-  const antwort = await fetch(
-    `/api/v1/dateien/extern/${knotenId}/inhalt?unterpfad=${encodeURIComponent(unterpfad)}`,
-    { headers: { "X-Kellerwolke-Sitzung": token() } },
-  );
-  await pruefe(antwort);
-  const blob = await antwort.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-export function externOrdnerAnlegen(
-  knotenId: string,
-  unterpfad: string,
-  name: string,
-): Promise<void> {
-  return hole<void>(`/v1/dateien/extern/${knotenId}/ordner`, {
-    method: "POST",
-    body: JSON.stringify({ name, unterpfad }),
-  });
-}
-
-export async function externHochladen(
-  knotenId: string,
-  unterpfad: string,
-  datei: File,
-): Promise<void> {
-  const formular = new FormData();
-  formular.append("datei", datei);
-  formular.append("unterpfad", unterpfad);
-  const antwort = await fetch(`/api/v1/dateien/extern/${knotenId}/upload`, {
-    method: "POST",
-    headers: { "X-Kellerwolke-Sitzung": token() },
-    body: formular,
-  });
-  await pruefe(antwort);
-}
-
-// --- Admin ------------------------------------------------------------------
-
 export function listeBenutzer(): Promise<Benutzer[]> {
   return hole<Benutzer[]>("/v1/admin/benutzer");
 }
@@ -419,68 +404,6 @@ export function poolPruefung(tief = false): Promise<PoolPruefung> {
 
 export function poolAufraeumen(): Promise<PoolAufraeumen> {
   return hole<PoolAufraeumen>("/v1/admin/pool-aufraeumen", { method: "POST" });
-}
-
-// --- Plugins / Apps ---------------------------------------------------------
-
-export function aktiveApps(): Promise<App[]> {
-  return hole<App[]>("/v1/plugins");
-}
-
-export function pluginListe(): Promise<PluginInfo[]> {
-  return hole<PluginInfo[]>("/v1/admin/plugins");
-}
-
-export function pluginAktivSetzen(id: string, aktiv: boolean): Promise<void> {
-  return hole<void>(`/v1/admin/plugins/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ aktiv }),
-  });
-}
-
-export function pluginDeinstallieren(id: string, daten: "loeschen" | "behalten"): Promise<void> {
-  return hole<void>(`/v1/admin/plugins/${id}?daten=${daten}`, { method: "DELETE" });
-}
-
-export async function pluginHochladen(datei: File): Promise<PluginInfo> {
-  const formular = new FormData();
-  formular.append("archiv", datei);
-  const antwort = await fetch("/api/v1/admin/plugins/upload", {
-    method: "POST",
-    headers: { "X-Kellerwolke-Sitzung": token() },
-    body: formular,
-  });
-  await pruefe(antwort);
-  return (await antwort.json()) as PluginInfo;
-}
-
-// Startet den Backend-Prozess neu (damit Plugin-Aenderungen wirken).
-export function pluginNeustart(): Promise<void> {
-  return hole<void>("/v1/admin/neustart", { method: "POST" });
-}
-
-// Selbstschutz: meldet ein nicht ladendes/renderndes Plugin als defekt; es wird
-// serverseitig deaktiviert (jeder angemeldete Nutzer darf das ausloesen).
-export function pluginMeldeDefekt(id: string, grund: string): Promise<void> {
-  return hole<void>(`/v1/plugins/${id}/melde-defekt`, {
-    method: "POST",
-    body: JSON.stringify({ grund }),
-  });
-}
-
-// Wartet, bis das Backend nach dem Neustart wieder antwortet.
-export async function warteAufGesundheit(maxMs = 30000): Promise<boolean> {
-  const bis = Date.now() + maxMs;
-  while (Date.now() < bis) {
-    try {
-      const r = await fetch("/api/health", { cache: "no-store" });
-      if (r.ok) return true;
-    } catch {
-      // Backend noch unten - weiter warten
-    }
-    await new Promise((r) => setTimeout(r, 600));
-  }
-  return false;
 }
 
 export function externeQuelleAnlegen(

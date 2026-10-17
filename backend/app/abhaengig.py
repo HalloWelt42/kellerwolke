@@ -63,7 +63,7 @@ async def lese_benutzer(request: Request) -> dict:
 async def aktueller_admin(request: Request) -> dict:
     benutzer = await aktueller_benutzer(request)
     if benutzer["rolle"] != "admin":
-        raise HTTPException(status_code=403, detail="Nur fuer Admins")
+        raise HTTPException(status_code=403, detail="Nur für Admins")
     return benutzer
 
 

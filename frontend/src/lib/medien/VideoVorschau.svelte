@@ -1,23 +1,16 @@
 <script lang="ts">
-  import type { Browser } from "../../lib/browser.svelte";
-  import type { Knoten } from "../../lib/types";
-  import { formatKuerzel, thumbUrl } from "./medien";
+  import { formatKuerzel, vorschauUrl } from "./adressen";
 
-  // Passive Cover-Kachel, genau wie die Bild-Vorschau: sie ZEIGT nur.
-  //
-  // Das Oeffnen der Vollansicht ist Sache des Kerns (Doppelklick in der Liste,
-  // Klick auf die Vorschauflaeche im Detail-Pane). Ein eigener Knopf mit eigenem
-  // Oeffnen sass im Detail-Pane in einem Knopf und liess die Vollansicht an zwei
-  // Stellen gleichzeitig aufgehen - das Video lief dann doppelt.
-  interface Props { knoten: Knoten; browser?: Browser; }
-  let { knoten }: Props = $props();
-
-  // Standbild aus dem Video (ffmpeg, serverseitig gecacht). Fehlt ffmpeg oder
-  // mag es das Format nicht, antwortet der Server mit einem Fehler - dann bleibt
-  // es beim Film-Symbol, statt eine kaputte Grafik zu zeigen.
+  // Standbild eines Videos mit Abspielzeichen; ohne Standbild (kein ffmpeg) das Film-Symbol.
+  // Sie zeigt nur - geöffnet wird über die Ansicht (Doppelklick, Klick im Detail).
+  interface Props {
+    m: { id: string; etag: string | null; name: string };
+  }
+  let { m }: Props = $props();
   let kaputt = $state(false);
   $effect(() => {
-    void knoten.id;
+    void m.id;
+    void m.etag;
     kaputt = false;
   });
 </script>
@@ -26,17 +19,10 @@
   {#if kaputt}
     <i class="vv-film fa-solid fa-film"></i>
   {:else}
-    <img
-      class="vv-bild"
-      src={thumbUrl(knoten.id, 480)}
-      alt={knoten.name}
-      loading="lazy"
-      onerror={() => (kaputt = true)}
-    />
+    <img class="vv-bild" src={vorschauUrl(m)} alt={m.name} loading="lazy" onerror={() => (kaputt = true)} />
   {/if}
-  <span class="vv-format">{formatKuerzel(knoten.name)}</span>
-  <!-- Dauerhaft sichtbar: so ist auf einen Blick klar, dass es ein Video ist
-       und kein Bild - das Standbild allein sieht sonst wie ein Foto aus. -->
+  <span class="vv-format">{formatKuerzel(m.name)}</span>
+  <!-- Dauerhaft sichtbar: so ist klar, dass es ein Video ist und kein Bild. -->
   <span class="vv-play"><i class="fa-solid fa-play"></i></span>
 </div>
 

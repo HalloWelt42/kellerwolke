@@ -121,7 +121,7 @@ class FilesystemBlobStore:
                     # Grenze WAEHREND des Lesens durchsetzen: sonst muesste erst
                     # alles ankommen, nur um es dann abzulehnen.
                     if max_bytes and groesse > max_bytes:
-                        raise DateiZuGross(f"Datei groesser als {max_bytes} Bytes")
+                        raise DateiZuGross(f"Datei größer als {max_bytes} Bytes")
                     hasher.update(brocken)
                     f.write(brocken)
                 f.flush()

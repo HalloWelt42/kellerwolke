@@ -1,56 +1,58 @@
 <script lang="ts">
-  import { haupt } from "./zustand.svelte";
+  import type { Browser } from "./browser.svelte";
   import { symbol, groesseText, datum, typLabel } from "./format";
   import type { Knoten } from "./types";
-  import { vorschauFuer, vollansichtFuer } from "../plugins/registry.svelte";
-  import { oeffneVollansicht } from "./vorschau.svelte";
+  import BildVorschau from "./medien/BildVorschau.svelte";
+  import VideoVorschau from "./medien/VideoVorschau.svelte";
+  import AudioVorschau from "./medien/AudioVorschau.svelte";
 
+  // Details der gewählten Datei. Öffnen (Vollansicht oder Wiedergabe) geht über
+  // die Ansicht, damit Blättern und Titelliste dieselben Nachbarn haben.
   interface Props {
+    browser: Browser;
     k: Knoten;
     onTeilen?: (k: Knoten) => void;
+    onOeffnen?: (k: Knoten) => void;
   }
-  let { k, onTeilen }: Props = $props();
+  let { browser, k, onTeilen, onOeffnen }: Props = $props();
 
   const sym = $derived(symbol(k));
-  // Datei-Faehigkeiten aktiver Plugins (z.B. Bild-Vorschau/Vollbild der Galerie).
-  const vorschau = $derived(k.typ === "datei" ? vorschauFuer(k) : null);
-  const vollF = $derived(k.typ === "datei" ? vollansichtFuer(k) : null);
-  // Geoeffnet wird die ZENTRALE Vollansicht (App.svelte rendert sie einmalig).
-  // Eine eigene Kopie hier hatte zur Folge, dass beide gleichzeitig aufgingen -
-  // bei Video liefen dann zwei Player uebereinander.
+  const art = $derived(k.typ === "datei" ? (k.medienart ?? null) : null);
+  const vollansicht = $derived(art === "bild" || art === "video");
   const pfadText = $derived(
-    "/" + haupt.pfad.slice(1).map((t) => t.name).join("/") || "/",
+    browser.bereich === "geteilt"
+      ? ["Geteilt", ...browser.geteiltPfad.map((t) => t.name)].join(" / ")
+      : browser.detailPfad === null
+        ? "-"
+        : ["Meine Dateien", ...browser.detailPfad.map((t) => t.name)].join(" / "),
   );
   const groesse = $derived(
-    k.groesse ?? (haupt.detailVersionen.length ? haupt.detailVersionen[0].groesse : null),
+    k.groesse ?? (browser.detailVersionen.length ? browser.detailVersionen[0].groesse : null),
   );
 </script>
 
 <aside class="detail">
   <div class="detail-kopf">
     <h2>Details</h2>
-    <button class="icon-knopf" aria-label="Schliessen" onclick={() => haupt.schliesseDetail()}>
+    <button class="icon-knopf" aria-label="Schließen" onclick={() => browser.schliesseDetail()}>
       <i class="fa-solid fa-xmark"></i>
     </button>
   </div>
 
-  <div class="detail-vorschau" class:ordner={k.typ !== "datei"} class:bild={!!vorschau}>
-    {#if vorschau?.vorschau}
-      {@const Vorschau = vorschau.vorschau}
-      {#if vollF}
-        <button class="vorschau-flaeche" title="Vollansicht" onclick={() => oeffneVollansicht(k)}>
-          <Vorschau knoten={k} browser={haupt} />
-        </button>
-      {:else}
-        <Vorschau knoten={k} browser={haupt} />
-      {/if}
+  <div class="detail-vorschau" class:ordner={k.typ !== "datei"} class:bild={!!art}>
+    {#if art === "audio"}
+      <AudioVorschau m={k} spielen={() => onOeffnen?.(k)} />
+    {:else if vollansicht}
+      <button class="vorschau-flaeche" title="Vollansicht" onclick={() => onOeffnen?.(k)}>
+        {#if art === "bild"}<BildVorschau m={k} />{:else}<VideoVorschau m={k} />{/if}
+      </button>
     {:else}
       <i class="fa-solid {sym.icon}"></i>
     {/if}
   </div>
 
-  {#if vollF?.vollansicht}
-    <button class="knopf still detail-vollknopf" onclick={() => oeffneVollansicht(k)}>
+  {#if vollansicht}
+    <button class="knopf still detail-vollknopf" onclick={() => onOeffnen?.(k)}>
       <i class="fa-solid fa-expand"></i> Vollansicht
     </button>
   {/if}
@@ -73,11 +75,11 @@
   {#if k.typ === "datei"}
     <div class="detail-block">
       <h3>Versionen</h3>
-      {#if haupt.detailVersionen.length === 0}
+      {#if browser.detailVersionen.length === 0}
         <p class="fehler" style="color: var(--text-3);">Keine Versionsdaten.</p>
       {:else}
         <ul class="versionsliste">
-          {#each haupt.detailVersionen as v, i (v.id)}
+          {#each browser.detailVersionen as v, i (v.id)}
             <li>
               <i class="fa-solid fa-clock-rotate-left"></i>
               <span class="v-datum">{datum(v.erstellt_am)}</span>
@@ -91,10 +93,10 @@
 
     <div class="detail-block" style="margin-top: auto;">
       <div style="display: flex; gap: var(--a2);">
-        <button class="knopf primaer" style="flex: 1;" onclick={() => haupt.herunterladen(k)}>
+        <button class="knopf primaer" style="flex: 1;" onclick={() => browser.herunterladen(k)}>
           <i class="fa-solid fa-download"></i> Herunterladen
         </button>
-        {#if haupt.istSchreibbar}
+        {#if browser.rechte.teilen}
           <button class="knopf" style="flex: 1;" onclick={() => onTeilen?.(k)}>
             <i class="fa-solid fa-share-nodes"></i> Teilen
           </button>
@@ -105,7 +107,7 @@
 </aside>
 
 <style>
-  /* Vorschau-Box auf Bild umstellen: Plugin-Vorschau fuellt den Rahmen. */
+  /* Vorschau-Box auf Bild umstellen: Plugin-Vorschau füllt den Rahmen. */
   .detail-vorschau.bild {
     padding: 0;
     overflow: hidden;

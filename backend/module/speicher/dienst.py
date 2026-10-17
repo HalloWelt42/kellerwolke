@@ -336,7 +336,7 @@ class SpeicherDienst:
         tief beschaedigte Bloecke. Laeuft ueber die Platte -> im Thread, der
         Event-Loop bleibt frei."""
         if not await self.speicher_erreichbar():
-            raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Pruefung abgebrochen")
+            raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Prüfung abgebrochen")
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             soll = await repo.alle_blobs()
@@ -349,7 +349,7 @@ class SpeicherDienst:
         damit ein zwischenzeitlich (durch einen gleichzeitigen Upload) wieder
         referenzierter Block nie geloescht wird."""
         if not await self.speicher_erreichbar():
-            raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Aufraeumen abgebrochen")
+            raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Aufräumen abgebrochen")
         bericht = await self.pool_pruefen()
         entfernt, bytes_frei = 0, 0
         async with self.pool.connection() as conn:
@@ -510,7 +510,7 @@ class SpeicherDienst:
             groesse = await asyncio.to_thread(_pool_groesse, quelle)
             frei = await asyncio.to_thread(lambda: shutil.disk_usage(ziel).free)
             if frei < groesse:
-                raise ValueError(f"Zu wenig Platz am Ziel ({groesse} benoetigt, {frei} frei)")
+                raise ValueError(f"Zu wenig Platz am Ziel ({groesse} benötigt, {frei} frei)")
 
             # 1. Bestand kopieren (Quelle bleibt waehrenddessen aktiv).
             await asyncio.to_thread(_kopiere_pool, quelle, ziel, fort)
@@ -567,7 +567,7 @@ class SpeicherDienst:
         Nur erlaubt fuer eigene, bereits geloeschte Knoten. Gleiche GC-Logik wie
         beim Leeren, aber nur fuer diese eine Wurzel. Liefert True bei Erfolg."""
         if not await self.speicher_erreichbar():
-            raise SpeicherNichtVerfuegbar("Knoten kann nicht endgueltig geloescht werden")
+            raise SpeicherNichtVerfuegbar("Knoten kann nicht endgültig gelöscht werden")
         verwaiste = []
         async with self.pool.connection() as conn:
             async with conn.transaction():

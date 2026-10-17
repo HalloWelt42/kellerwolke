@@ -18,15 +18,15 @@ export interface Knoten {
   geloescht: boolean;
   erstellt_am: string;
   geaendert_am: string;
-  // Groesse der aktuellen Version in Bytes; bei Ordnern/Externen null.
+  // Größe der aktuellen Version in Bytes; bei Ordnern/Externen null.
   groesse?: number | null;
-  // Anzahl nicht geloeschter Kinder (fuer den Ordner-Zaehler).
+  // Anzahl nicht gelöschter Kinder (für den Ordner-Zähler).
   kinder_anzahl?: number | null;
   // Vom Nutzer als Favorit markiert.
   favorit?: boolean;
   // Mit mindestens einer anderen Person geteilt (Kennzeichen in der Liste).
   geteilt?: boolean;
-  // Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
+  // Name des Eigentümers (nur in der Geteilt-Liste gesetzt).
   besitzer_name?: string | null;
   // Bild, Audio oder Video (vom Server bestimmt), sonst null.
   medienart?: Medienart | null;
@@ -71,7 +71,7 @@ export interface SpeicherStatus {
 }
 
 export interface Verschiebung {
-  status: string; // leer | laeuft | fertig | fehler
+  status: string; // leer | läuft | fertig | fehler
   kopiert: number;
   gesamt: number;
   ziel: string | null;
@@ -122,7 +122,7 @@ export interface Vorgang {
   id: string;
   art: string; // z.B. "indizierung"
   titel: string;
-  status: string; // laeuft | fertig | fehler | abgebrochen
+  status: string; // läuft | fertig | fehler | abgebrochen
   erledigt: number;
   gesamt: number; // 0 = unbestimmt
   fehler?: string | null;

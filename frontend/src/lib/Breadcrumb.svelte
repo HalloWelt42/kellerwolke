@@ -2,7 +2,7 @@
   import type { Browser } from "./browser.svelte";
 
   // Breadcrumb einer Browsing-Instanz (Einzelansicht oder Pane). Ebenen sind
-  // Ablageziele: zieht man eine Auswahl auf eine uebergeordnete Ebene, wandert
+  // Ablageziele: zieht man eine Auswahl auf eine übergeordnete Ebene, wandert
   // sie dorthin (Verschieben nach oben).
   interface Props {
     browser: Browser;
@@ -22,6 +22,7 @@
   }
   function fallen(e: DragEvent, zielId: string | null) {
     e.preventDefault();
+    e.stopPropagation(); // sonst verschiebt die Pane darunter dieselbe Auswahl ein zweites Mal
     zielIndex = null;
     const roh = e.dataTransfer?.getData("text/kellerwolke");
     const ids = (roh ?? "").split(",").filter(Boolean);
@@ -48,6 +49,8 @@
   </nav>
 {:else if browser.bereich === "extern" && browser.externBrowse}
   <nav class="breadcrumb">
+    <a onclick={() => browser.zeigeDateien()}>Meine Dateien</a>
+    <i class="fa-solid fa-chevron-right"></i>
     <a onclick={() => browser.externBreadcrumb(-1)}>Externe Quellen</a>
     <i class="fa-solid fa-chevron-right"></i>
     {#if browser.externBrowse.unterpfad.length === 0}
@@ -66,6 +69,8 @@
   </nav>
 {:else if browser.bereich === "extern"}
   <nav class="breadcrumb">
+    <a onclick={() => browser.zeigeDateien()}>Meine Dateien</a>
+    <i class="fa-solid fa-chevron-right"></i>
     <span class="aktuell">Externe Quellen</span>
   </nav>
 {:else if browser.bereich === "favoriten"}

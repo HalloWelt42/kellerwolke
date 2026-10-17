@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Knoten } from "./types";
-  import { symbol, groesseText, datum } from "./format";
+  import { symbol, groesseText, datum, ordnerInhalt } from "./format";
 
   export type RowAktion =
     | "herunterladen"
@@ -57,11 +57,7 @@
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
   const metaText = $derived(
     k.typ === "ordner"
-      ? k.kinder_anzahl == null
-        ? "-"
-        : k.kinder_anzahl === 0
-          ? "Leer"
-          : `${k.kinder_anzahl} ${k.kinder_anzahl === 1 ? "Datei" : "Dateien"}`
+      ? ordnerInhalt(k.kinder_anzahl, "-")
       : k.typ === "datei" && k.groesse != null
         ? groesseText(k.groesse)
         : "-",

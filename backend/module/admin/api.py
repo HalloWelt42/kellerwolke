@@ -37,7 +37,7 @@ async def verschiebung_stand(admin=Depends(aktueller_admin), speicher=Depends(ho
 async def verschieben(eingabe: VerschiebenEingabe, admin=Depends(aktueller_admin),
                       speicher=Depends(hole_speicher)):
     if speicher.verschiebung.get("status") == "laeuft":
-        raise HTTPException(status_code=409, detail="Eine Verschiebung laeuft bereits")
+        raise HTTPException(status_code=409, detail="Eine Verschiebung läuft bereits")
     # Im Hintergrund anstossen; der Fortschritt wird per GET abgefragt.
     asyncio.create_task(speicher.datenablage_verschieben(eingabe.ziel))
     return VerschiebungAus(status="laeuft", ziel=eingabe.ziel)

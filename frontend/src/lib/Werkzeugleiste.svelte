@@ -7,7 +7,7 @@
   }
   let { onNeuerOrdner, onPapierkorbLeeren }: Props = $props();
 
-  // Globale Werkzeugleiste fuer die Einzelansicht (haupt). Der Filter sitzt
+  // Globale Werkzeugleiste für die Einzelansicht (haupt). Der Filter sitzt
   // jetzt je Ansicht/Pane in der Dateiliste; im Splitscreen liegen Anlegen/
   // Hochladen je Pane.
   const istSplit = $derived(zustand.split && haupt.bereich === "dateien");
@@ -33,7 +33,7 @@
 
   {#if istSplit}
     <!-- Anlegen/Hochladen sitzen im Splitscreen je Pane -->
-  {:else if haupt.istSchreibbar}
+  {:else if haupt.rechte.anlegen}
     <button class="knopf primaer" onclick={onNeuerOrdner}>
       <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
     </button>
@@ -42,13 +42,7 @@
       <input type="file" multiple onchange={aufDateiwahl} hidden />
     </label>
   {:else if haupt.bereich === "extern" && haupt.externBrowse}
-    <button class="knopf primaer" onclick={onNeuerOrdner}>
-      <i class="fa-solid fa-folder-plus"></i> Neuer Ordner
-    </button>
-    <label class="knopf">
-      <i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen
-      <input type="file" multiple onchange={aufDateiwahl} hidden />
-    </label>
+    <!-- Externe Quellen sind nur lesbar -->
     <button class="knopf" onclick={() => haupt.ladeExtern()}>
       <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
     </button>
@@ -62,7 +56,7 @@
 
   <div class="ansicht-umschalter">
     <button
-      class:aktiv={!zustand.split && haupt.ansicht === "liste"}
+      class:aktiv={!istSplit && haupt.ansicht === "liste"}
       title="Liste"
       onclick={() => {
         zustand.split = false;
@@ -72,7 +66,7 @@
       <i class="fa-solid fa-list"></i>
     </button>
     <button
-      class:aktiv={!zustand.split && haupt.ansicht === "grid"}
+      class:aktiv={!istSplit && haupt.ansicht === "grid"}
       title="Kacheln"
       onclick={() => {
         zustand.split = false;
@@ -82,7 +76,7 @@
       <i class="fa-solid fa-table-cells-large"></i>
     </button>
     <button
-      class:aktiv={zustand.split}
+      class:aktiv={istSplit}
       title="Splitscreen"
       onclick={() => (zustand.split = true)}
     >

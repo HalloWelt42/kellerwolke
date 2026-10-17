@@ -10,14 +10,14 @@
 
   const uploads = $derived(zustand.uploads);
   // Fertige Dateien haben prozent 100; ihr "geladen" wird nicht mehr
-  // nachgefuehrt, deshalb fuer die Summe die volle Groesse ansetzen.
+  // nachgeführt, deshalb für die Summe die volle Größe ansetzen.
   const gesamtBytes = $derived(uploads.reduce((s, u) => s + u.gesamt, 0));
   const geladenBytes = $derived(
     uploads.reduce((s, u) => s + (u.prozent >= 100 ? u.gesamt : u.geladen), 0),
   );
-  const fertig = $derived(uploads.filter((u) => u.prozent >= 100).length);
-  // Es laeuft immer nur eine Datei zur Zeit (sequenzielle Schleife).
-  const aktuell = $derived(uploads.find((u) => u.prozent < 100) ?? null);
+  const fertig = $derived(uploads.filter((u) => u.status === "fertig").length);
+  // Es läuft immer nur eine Datei zur Zeit (Warteschlange).
+  const aktuell = $derived(uploads.find((u) => u.status === "laeuft") ?? null);
   const gesamtProzent = $derived(
     gesamtBytes > 0 ? Math.round((geladenBytes / gesamtBytes) * 100) : 0,
   );
@@ -71,19 +71,22 @@
 
       {#if detailsOffen}
         <div class="up-liste">
-          {#each uploads as u (u.name)}
-            <div class="up-zeile" class:erledigt={u.prozent >= 100}>
+          {#each uploads as u (u.id)}
+            <div class="up-zeile" class:erledigt={u.status === "fertig"} class:gescheitert={u.status === "fehler"}>
               <i
-                class="fa-solid {u.prozent >= 100
+                class="fa-solid {u.status === 'fertig'
                   ? 'fa-circle-check'
-                  : u === aktuell
-                    ? 'fa-arrow-up-from-bracket'
-                    : 'fa-clock'}"
+                  : u.status === 'fehler'
+                    ? 'fa-triangle-exclamation'
+                    : u.status === 'laeuft'
+                      ? 'fa-arrow-up-from-bracket'
+                      : 'fa-clock'}"
               ></i>
-              <span class="up-name" title={u.name}>{u.name}</span>
+              <span class="up-name" title={u.fehler || u.name}>{u.name}</span>
               <span class="up-zpct">
-                {#if u.prozent >= 100}fertig
-                {:else if u === aktuell}{u.prozent} %
+                {#if u.status === "fertig"}fertig
+                {:else if u.status === "fehler"}nicht hochgeladen
+                {:else if u.status === "laeuft"}{u.prozent} %
                 {:else}{groesseText(u.gesamt)}{/if}
               </span>
             </div>
@@ -95,6 +98,9 @@
 </div>
 
 <style>
+  .up-zeile.gescheitert {
+    color: var(--gefahr);
+  }
   /* Feste Obergrenze: die Karte darf NIE mit der Dateianzahl mitwachsen. */
   .up-karte {
     position: absolute;
@@ -181,7 +187,7 @@
   .up-mehr:hover {
     color: var(--text-2);
   }
-  /* Die Einzelliste scrollt innerhalb der Karte, statt sie aufzublaehen. */
+  /* Die Einzelliste scrollt innerhalb der Karte, statt sie aufzublähen. */
   .up-liste {
     overflow-y: auto;
     min-height: 0;

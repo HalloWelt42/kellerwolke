@@ -15,7 +15,7 @@ def _sauberer_name(wert: str) -> str:
     if len(wert) > 255:
         raise ValueError("Name ist zu lang")
     if any(c in wert for c in "/\\\x00") or any(ord(c) < 32 for c in wert):
-        raise ValueError("Name enthaelt ungueltige Zeichen")
+        raise ValueError("Name enthält ungültige Zeichen")
     return wert
 
 

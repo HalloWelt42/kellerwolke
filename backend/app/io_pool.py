@@ -30,7 +30,7 @@ async def im_thread(fn, *args, timeout: float):
     try:
         return await asyncio.wait_for(loop.run_in_executor(_POOL, fn, *args), timeout=timeout)
     except asyncio.TimeoutError:
-        raise SpeicherNichtVerfuegbar("Speicher reagiert nicht (Zeitlimit ueberschritten)")
+        raise SpeicherNichtVerfuegbar("Speicher reagiert nicht (Zeitlimit überschritten)")
 
 
 def herunterfahren() -> None:

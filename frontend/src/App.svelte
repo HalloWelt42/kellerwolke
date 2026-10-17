@@ -6,13 +6,16 @@
     zustand,
     haupt,
     leerePapierkorb,
+    endgueltigLoeschen,
     ladeVersion,
     starteLiveAbgleich,
     stoppeLiveAbgleich,
     vorgaengeUmschalten,
-    hochladen,
-    strukturHochladen,
+    aktiveFlaeche,
+    ablegen,
+    hatDateien,
   } from "./lib/zustand.svelte";
+  import type { Browser } from "./lib/browser.svelte";
   import Login from "./lib/Login.svelte";
   import Navigation from "./lib/Navigation.svelte";
   import Werkzeugleiste from "./lib/Werkzeugleiste.svelte";
@@ -28,27 +31,24 @@
   import Logo from "./lib/Logo.svelte";
   import AppLeiste from "./lib/AppLeiste.svelte";
   import PlayerLeiste from "./lib/PlayerLeiste.svelte";
+  import Meldung from "./lib/Meldung.svelte";
+  import Medien from "./lib/medien/Medien.svelte";
+  import Vollansicht from "./lib/medien/Vollansicht.svelte";
+  import { knotenOeffnen } from "./lib/medien/oeffnen";
   import { aktuelleSpur } from "./lib/player.svelte";
-  import {
-    aktiveApp,
-    appZustand,
-    ladeAktiveApps,
-    waehleApp,
-    meldePluginDefekt,
-    vollansichtFuer,
-    DEFAULT_APP_ID,
-  } from "./plugins/registry.svelte";
-  import { vorschauZustand, schliesseVollansicht } from "./lib/vorschau.svelte";
+  import { ansicht, waehleAnsicht, medienEinstellung, MEDIEN_BEREICHE } from "./lib/ansicht.svelte";
   import type { Knoten } from "./lib/types";
 
   let verwaltungOffen = $state(false);
   let teilenKnoten = $state<Knoten | null>(null);
-  let endgueltigKnoten = $state<Knoten | null>(null);
+  let endgueltig = $state<{ ziel: Browser; knoten: Knoten[] } | null>(null);
   let nutzerMenuOffen = $state(false);
   let neuerOrdnerOffen = $state(false);
   let papierkorbLeerenOffen = $state(false);
   let ordnerName = $state("");
   let initialGeladen = $state(false);
+  // Das Suchfeld gehört dem Kopf; gesucht wird erst mit Enter.
+  let suchtext = $state("");
 
   onMount(ladeStatus);
 
@@ -57,7 +57,6 @@
       initialGeladen = true;
       haupt.zeigeDateien();
       ladeVersion();
-      ladeAktiveApps();
       starteLiveAbgleich();
     }
     if (!auth.angemeldet) {
@@ -66,44 +65,25 @@
     }
   });
 
-  const aktuelleApp = $derived(aktiveApp());
-  const istDefaultApp = $derived(aktuelleApp.id === DEFAULT_APP_ID);
-
-  // Selbstschutz: rendert eine Plugin-App fehlerhaft, wird sie nach kurzer Frist
-  // automatisch deaktiviert, damit sie die App nicht dauerhaft blockiert. Ein
-  // "Erneut versuchen" bricht die Frist ab.
-  let pluginAbschaltTimer: ReturnType<typeof setTimeout> | null = null;
-  function pluginFehler(id: string, e: unknown) {
-    console.error("Plugin-Fehler:", id, e);
-    if (pluginAbschaltTimer) clearTimeout(pluginAbschaltTimer);
-    pluginAbschaltTimer = setTimeout(
-      () => meldePluginDefekt(id, e instanceof Error ? e.message : String(e)),
-      8000,
-    );
-  }
-  function pluginErneut(reset: () => void) {
-    if (pluginAbschaltTimer) clearTimeout(pluginAbschaltTimer);
-    pluginAbschaltTimer = null;
-    reset();
-  }
-  // Erlaubt die aktive App den aktuellen Bereich? Sonst zurueck auf Dateien.
+  // Das Feld zeigt den Begriff der laufenden Suche und leert sich beim Verlassen.
   $effect(() => {
-    const erlaubt = aktuelleApp.bereiche;
-    if (!istDefaultApp && erlaubt && !erlaubt.includes(haupt.bereich)) {
-      waehleApp(DEFAULT_APP_ID);
-    }
+    suchtext = haupt.suchbegriff;
   });
 
-  const istSplit = $derived(zustand.split && haupt.bereich === "dateien" && istDefaultApp);
-  const mitDetail = $derived(
-    istDefaultApp && haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit,
-  );
+  const istMedien = $derived(ansicht.aktiv === "medien");
+  // Die Medienansicht gibt es nur dort, wo Medien liegen; sonst zurück zu den Dateien.
+  $effect(() => {
+    if (istMedien && !MEDIEN_BEREICHE.includes(haupt.bereich)) waehleAnsicht("dateien");
+  });
+
+  const istSplit = $derived(zustand.split && haupt.bereich === "dateien" && !istMedien);
+  const mitDetail = $derived(!istMedien && haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit);
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
   const laufendeVorgaenge = $derived(zustand.vorgaenge.filter((v) => v.status === "laeuft").length);
 
   function suchen(e: Event) {
     e.preventDefault();
-    haupt.starteSuche(haupt.suchbegriff);
+    haupt.starteSuche(suchtext);
   }
 
   function ordnerAnlegenBestaetigen() {
@@ -118,14 +98,13 @@
     el.focus();
   }
 
-  // --- Globales Drag-and-drop: Dateien lassen sich ueberall in der App ablegen
-  // (egal welche Ansicht/App aktiv ist) und landen im aktuellen Ordner. ---
+  // --- Ablegen aus dem Dateisystem: überall im Fenster, Ziel ist die aktive
+  // Fläche (Einzelansicht oder die zuletzt benutzte Pane). Liste und Panes
+  // nehmen ihre Ablage selbst an; was hier ankommt, kam daneben an. ---
   let zieheDatei = $state(false);
-  let ziehZaehler = 0; // dragenter/leave-Zaehler gegen Flackern beim Ueberfahren von Kindelementen
+  let ziehZaehler = 0; // dragenter/leave-Zähler gegen Flackern beim Überfahren von Kindelementen
+  const ablageZiel = $derived(aktiveFlaeche());
 
-  function hatDateien(e: DragEvent): boolean {
-    return Array.from(e.dataTransfer?.types ?? []).includes("Files");
-  }
   function aufDragEnter(e: DragEvent) {
     if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
     e.preventDefault();
@@ -134,34 +113,28 @@
   }
   function aufDragOver(e: DragEvent) {
     if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
-    e.preventDefault(); // erlaubt das Ablegen ueberall im Fenster
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = ablageZiel.istSchreibbar ? "copy" : "none";
   }
   function aufDragLeave(e: DragEvent) {
     if (!hatDateien(e)) return;
     ziehZaehler--;
-    if (ziehZaehler <= 0) { ziehZaehler = 0; zieheDatei = false; }
+    if (ziehZaehler <= 0) {
+      ziehZaehler = 0;
+      zieheDatei = false;
+    }
   }
   function aufDrop(e: DragEvent) {
     ziehZaehler = 0;
     zieheDatei = false;
     if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
     e.preventDefault();
-    // Ganze Ordner? Eintraege synchron einsammeln (dataTransfer gilt nur waehrend
-    // des Ereignisses); enthaelt die Ablage einen Ordner, Struktur erhalten.
-    const posten = e.dataTransfer?.items;
-    if (posten && posten.length && typeof posten[0].webkitGetAsEntry === "function") {
-      const eintraege: FileSystemEntry[] = [];
-      for (const p of Array.from(posten)) {
-        const en = p.webkitGetAsEntry?.();
-        if (en) eintraege.push(en);
-      }
-      if (eintraege.some((en) => en.isDirectory)) {
-        strukturHochladen(eintraege);
-        return;
-      }
-    }
-    const dateien = e.dataTransfer?.files;
-    if (dateien && dateien.length) hochladen(dateien);
+    ablegen(e, ablageZiel);
+  }
+  // Ende eines Ziehens, das innerhalb einer Liste abgelegt wurde (dort endet das Ereignis).
+  function aufDragEnd() {
+    ziehZaehler = 0;
+    zieheDatei = false;
   }
 </script>
 
@@ -170,6 +143,8 @@
   ondragover={aufDragOver}
   ondragleave={aufDragLeave}
   ondrop={aufDrop}
+  ondragend={aufDragEnd}
+  ondropcapture={aufDragEnd}
 />
 
 {#if !auth.geladen}
@@ -180,11 +155,17 @@
   <Einstellungen schliessen={() => (verwaltungOffen = false)} />
 {:else}
   {#if zieheDatei}
-    <div class="global-drop" role="presentation">
+    <div class="global-drop" class:gesperrt={!ablageZiel.istSchreibbar} role="presentation">
       <div class="global-drop-karte">
-        <i class="fa-solid fa-cloud-arrow-up"></i>
-        <strong>Dateien und Ordner hier ablegen</strong>
-        <span>Sie landen im aktuellen Ordner - Ordner mit ihrer Struktur.</span>
+        {#if ablageZiel.istSchreibbar}
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <strong>Dateien und Ordner hier ablegen</strong>
+          <span>Sie landen in "{ablageZiel.zielName}" - Ordner mit ihrer Struktur.</span>
+        {:else}
+          <i class="fa-solid fa-ban"></i>
+          <strong>Hier kann nichts abgelegt werden</strong>
+          <span>Zum Hochladen einen Ordner in "Meine Dateien" öffnen.</span>
+        {/if}
       </div>
     </div>
   {/if}
@@ -193,7 +174,7 @@
       <div class="marke"><Logo size={22} /> Kellerwolke</div>
       <form class="kopf-suche" onsubmit={suchen}>
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" placeholder="In allen Dateien suchen ..." bind:value={haupt.suchbegriff} />
+        <input type="text" enterkeyhint="search" placeholder="In allen Dateien suchen ..." bind:value={suchtext} />
         {#if haupt.bereich === "suche"}
           <button
             type="button"
@@ -258,7 +239,7 @@
         </div>
       {/if}
       <AppLeiste />
-      {#if istDefaultApp}
+      {#if !istMedien}
         <Werkzeugleiste
           onNeuerOrdner={() => (neuerOrdnerOffen = true)}
           onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
@@ -266,59 +247,41 @@
         {#if istSplit}
           <Splitscreen
             onTeilen={(k) => (teilenKnoten = k)}
-            onEndgueltig={(k) => (endgueltigKnoten = k)}
+            onEndgueltig={(knoten) => (endgueltig = { ziel: aktiveFlaeche(), knoten })}
           />
         {:else}
           <Breadcrumb browser={haupt} />
-          {#if haupt.fehler}
-            <div class="fehlerstreifen">{haupt.fehler}</div>
-          {/if}
+          <Meldung browser={haupt} />
           <Dateiliste
             browser={haupt}
             onTeilen={(k) => (teilenKnoten = k)}
-            onEndgueltig={(k) => (endgueltigKnoten = k)}
+            onEndgueltig={(knoten) => (endgueltig = { ziel: haupt, knoten })}
           />
         {/if}
       {:else}
-        {@const PluginAnsicht = aktuelleApp.ansicht}
-        <Breadcrumb browser={haupt} />
-        {#if haupt.fehler}
-          <div class="fehlerstreifen">{haupt.fehler}</div>
+        {#if medienEinstellung.quelle === "alle"}
+          <nav class="breadcrumb"><i class="fa-solid fa-layer-group"></i> <span class="aktuell">Alle Medien</span></nav>
+        {:else}
+          <Breadcrumb browser={haupt} />
         {/if}
-        <svelte:boundary onerror={(e) => pluginFehler(aktuelleApp.id, e)}>
-          <PluginAnsicht browser={haupt} />
-          {#snippet failed(error, reset)}
-            <div class="plugin-fehler" role="alert">
-              <i class="fa-solid fa-triangle-exclamation"></i>
-              <h3>Die App "{aktuelleApp.label}" ist auf einen Fehler gestoßen</h3>
-              <p>Der Rest von Kellerwolke läuft normal weiter. Bleibt der Fehler, wird die App gleich automatisch deaktiviert.</p>
-              <pre>{(error as Error)?.message ?? String(error)}</pre>
-              <div class="pf-knoepfe">
-                <button class="knopf" onclick={() => pluginErneut(reset)}>Erneut versuchen</button>
-                <button class="knopf" onclick={() => meldePluginDefekt(aktuelleApp.id, (error as Error)?.message ?? String(error))}>Jetzt deaktivieren</button>
-                <button class="knopf primaer" onclick={() => waehleApp(DEFAULT_APP_ID)}>Zu den Dateien</button>
-              </div>
-            </div>
-          {/snippet}
-        </svelte:boundary>
+        <Meldung browser={haupt} />
+        <Medien browser={haupt} />
       {/if}
     </section>
 
     {#if mitDetail && haupt.detail}
-      <DetailPane k={haupt.detail} onTeilen={(k) => (teilenKnoten = k)} />
+      <DetailPane
+        browser={haupt}
+        k={haupt.detail}
+        onTeilen={(k) => (teilenKnoten = k)}
+        onOeffnen={(k) => knotenOeffnen(haupt, k)}
+      />
     {/if}
 
     <PlayerLeiste />
 
-    <!-- Zentrale Vollansicht: per Doppelklick/Detail-Pane geoeffnet, gerendert
-         ueber die Vollansicht-Faehigkeit des aktiven Plugins (z.B. Bild-Lightbox). -->
-    {#if vorschauZustand.knoten}
-      {@const vf = vollansichtFuer(vorschauZustand.knoten)}
-      {#if vf?.vollansicht}
-        {@const Voll = vf.vollansicht}
-        <Voll knoten={vorschauZustand.knoten} browser={haupt} schliessen={schliesseVollansicht} />
-      {/if}
-    {/if}
+    <!-- Die eine Vollansicht für Bilder und Videos, von überall geöffnet. -->
+    <Vollansicht />
   </div>
 
   {#if zustand.uploads.length > 0}
@@ -350,18 +313,20 @@
     <Teilen knoten={teilenKnoten} schliessen={() => (teilenKnoten = null)} />
   {/if}
 
-  {#if endgueltigKnoten}
-    <Modal titel="Endgültig löschen" schliessen={() => (endgueltigKnoten = null)}>
+  {#if endgueltig}
+    {@const n = endgueltig.knoten.length}
+    <Modal titel="Endgültig löschen" schliessen={() => (endgueltig = null)}>
       <p style="margin: 0; color: var(--text-2);">
-        "{endgueltigKnoten.name}" wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.
+        {n === 1 ? `"${endgueltig.knoten[0].name}" wird` : `${n} Objekte werden`} endgültig gelöscht. Das lässt sich
+        nicht rückgängig machen.
       </p>
       <div class="modal-knoepfe">
-        <button class="knopf still" onclick={() => (endgueltigKnoten = null)}>Abbrechen</button>
+        <button class="knopf still" onclick={() => (endgueltig = null)}>Abbrechen</button>
         <button
           class="knopf primaer"
           onclick={() => {
-            if (endgueltigKnoten) haupt.endgueltigLoeschen([endgueltigKnoten.id]);
-            endgueltigKnoten = null;
+            if (endgueltig) endgueltigLoeschen(endgueltig.ziel, endgueltig.knoten.map((k) => k.id));
+            endgueltig = null;
           }}
         >
           <i class="fa-solid fa-trash"></i> Endgültig löschen
@@ -405,40 +370,6 @@
     justify-content: flex-end;
     gap: var(--a2);
   }
-  .plugin-fehler {
-    margin: var(--a5) auto;
-    max-width: 560px;
-    text-align: center;
-    color: var(--text-2);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--a3);
-  }
-  .plugin-fehler i {
-    font-size: 2.2rem;
-    color: var(--warn);
-  }
-  .plugin-fehler h3 {
-    margin: 0;
-    color: var(--text);
-  }
-  .plugin-fehler pre {
-    max-width: 100%;
-    overflow: auto;
-    text-align: left;
-    background: var(--flaeche-2);
-    border: 1px solid var(--rand);
-    border-radius: var(--r2);
-    padding: var(--a3);
-    font-size: 0.8rem;
-    color: var(--gefahr);
-    white-space: pre-wrap;
-  }
-  .pf-knoepfe {
-    display: flex;
-    gap: var(--a2);
-  }
   .global-drop {
     position: fixed;
     inset: 0;
@@ -469,5 +400,11 @@
   .global-drop-karte span {
     color: var(--text-2);
     font-size: 0.9rem;
+  }
+  .global-drop.gesperrt .global-drop-karte {
+    border-color: var(--warn);
+  }
+  .global-drop.gesperrt .global-drop-karte i {
+    color: var(--warn);
   }
 </style>
