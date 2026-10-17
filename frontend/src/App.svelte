@@ -24,6 +24,8 @@
   import Splitscreen from "./lib/Splitscreen.svelte";
   import DetailPane from "./lib/DetailPane.svelte";
   import Einstellungen from "./lib/Einstellungen.svelte";
+  import { verwaltung, verwaltungOeffnen } from "./lib/verwaltung.svelte";
+  import { adresseAnwenden, adresseStarten } from "./lib/adresse.svelte";
   import Vorgaenge from "./lib/Vorgaenge.svelte";
   import UploadKarte from "./lib/UploadKarte.svelte";
   import Teilen from "./lib/Teilen.svelte";
@@ -43,7 +45,6 @@
   import { ansicht, waehleAnsicht, medienEinstellung, MEDIEN_BEREICHE } from "./lib/ansicht.svelte";
   import type { Knoten } from "./lib/types";
 
-  let verwaltungOffen = $state(false);
   let teilenKnoten = $state<Knoten | null>(null);
   let endgueltig = $state<{ ziel: Browser; knoten: Knoten[] } | null>(null);
   let nutzerMenuOffen = $state(false);
@@ -54,12 +55,15 @@
   // Das Suchfeld gehört dem Kopf; gesucht wird erst mit Enter.
   let suchtext = $state("");
 
-  onMount(ladeStatus);
+  onMount(() => {
+    ladeStatus();
+    return adresseStarten();
+  });
 
   $effect(() => {
     if (auth.angemeldet && !initialGeladen) {
       initialGeladen = true;
-      haupt.zeigeDateien();
+      adresseAnwenden();
       ladeVersion();
       starteLiveAbgleich();
     }
@@ -110,13 +114,13 @@
   const ablageZiel = $derived(aktiveFlaeche());
 
   function aufDragEnter(e: DragEvent) {
-    if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
+    if (!auth.angemeldet || verwaltung.offen || !hatDateien(e)) return;
     e.preventDefault();
     ziehZaehler++;
     zieheDatei = true;
   }
   function aufDragOver(e: DragEvent) {
-    if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
+    if (!auth.angemeldet || verwaltung.offen || !hatDateien(e)) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = ablageZiel.istSchreibbar ? "copy" : "none";
   }
@@ -131,7 +135,7 @@
   function aufDrop(e: DragEvent) {
     ziehZaehler = 0;
     zieheDatei = false;
-    if (!auth.angemeldet || verwaltungOffen || !hatDateien(e)) return;
+    if (!auth.angemeldet || verwaltung.offen || !hatDateien(e)) return;
     e.preventDefault();
     ablegen(e, ablageZiel);
   }
@@ -159,8 +163,8 @@
   <!-- Telefon: eigene, reduzierte Oberfläche; Wiedergabe wie am Rechner -->
   <MobilApp />
   <PlayerKern />
-{:else if verwaltungOffen}
-  <Einstellungen schliessen={() => (verwaltungOffen = false)} />
+{:else if verwaltung.offen}
+  <Einstellungen />
 {:else}
   {#if zieheDatei}
     <div class="global-drop" class:gesperrt={!ablageZiel.istSchreibbar} role="presentation">
@@ -220,7 +224,7 @@
                 <i class="fa-solid {thema.aktuell === 'hell' ? 'fa-moon' : 'fa-sun'}"></i>
                 {thema.aktuell === "hell" ? "Dunkles Thema" : "Helles Thema"}
               </button>
-              <button role="menuitem" onclick={() => { nutzerMenuOffen = false; verwaltungOffen = true; }}>
+              <button role="menuitem" onclick={() => { nutzerMenuOffen = false; verwaltungOeffnen(); }}>
                 <i class="fa-solid fa-gear"></i> {auth.benutzer?.rolle === "admin" ? "Verwaltung" : "Zugänge"}
               </button>
               <div class="ktrenner"></div>

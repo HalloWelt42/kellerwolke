@@ -384,6 +384,12 @@ export class Browser {
     this.ladeExtern(false);
   };
 
+  // Eine externe Quelle gleich an einer tieferen Stelle öffnen (aus einer Adresse).
+  externOeffnenMit = (k: Knoten, unterpfad: string[]): void => {
+    this.externOeffnen(k);
+    if (unterpfad.length) this.externOrt(unterpfad);
+  };
+
   ladeExtern = async (still = true): Promise<void> => {
     const b = this.externBrowse;
     if (!b) return;

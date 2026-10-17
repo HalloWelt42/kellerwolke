@@ -3,6 +3,7 @@ import { playerZuruecksetzen } from "./player.svelte";
 import { kontoVerlassen } from "./zustand.svelte";
 import { schliesseVollansicht } from "./vorschau.svelte";
 import { waehleAnsicht } from "./ansicht.svelte";
+import { verwaltungSchliessen } from "./verwaltung.svelte";
 import type { Benutzer, GeraeteArt } from "./types";
 
 export const auth = $state<{
@@ -27,6 +28,7 @@ function aufraeumen(): void {
   schliesseVollansicht();
   kontoVerlassen();
   waehleAnsicht("dateien");
+  verwaltungSchliessen();
   api.lesezugangBeenden();
   auth.angemeldet = false;
   auth.benutzer = null;

@@ -1020,6 +1020,11 @@ textarea {
   background: var(--akzent-stark);
   border-color: var(--akzent-stark);
 }
+.knopf.klein {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 0.82rem;
+}
 .knopf.still {
   border-color: transparent;
   background: transparent;
@@ -1361,6 +1366,13 @@ select.feld {
 .so-haupt {
   flex: 1;
   min-width: 0;
+}
+/* Knöpfe einer Zeile (Speicherorte, Zugänge, Geräte): nebeneinander, die Zeile bleibt flach */
+.so-akt {
+  display: flex;
+  align-items: center;
+  gap: var(--a1);
+  flex: none;
 }
 .so-kopf {
   display: flex;
@@ -1755,6 +1767,13 @@ select.feld {
 }
 .recht i {
   font-size: 0.72rem;
+}
+a.recht {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.recht:hover {
+  border-color: var(--akzent);
 }
 .pfad-text {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;

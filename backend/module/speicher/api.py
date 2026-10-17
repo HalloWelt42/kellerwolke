@@ -5,7 +5,7 @@ Versionen. Jede Route prueft die Eigentuemerschaft des Knotens (Isolation).
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from psycopg.errors import UniqueViolation
 
@@ -28,6 +28,7 @@ from module.speicher.modelle import (
     KnotenAus,
     KontoAus,
     OrdnerEingabe,
+    PfadAus,
     PfadteilAus,
     SpeicherStatusAus,
     TeilenEingabe,
@@ -59,6 +60,17 @@ async def auflisten(parent_id: UUID | None = None, benutzer=Depends(aktueller_be
     if parent_id and not await speicher.lebender_knoten(benutzer["id"], parent_id):
         raise HTTPException(status_code=404, detail="Ordner nicht gefunden")
     return [KnotenAus.model_validate(k) for k in await speicher.kinder(benutzer["id"], parent_id)]
+
+
+@router.get("/aufloesen", response_model=PfadAus)
+async def aufloesen(pfad: str = Query(min_length=1, max_length=4000), benutzer=Depends(aktueller_benutzer),
+                    speicher=Depends(hole_speicher)):
+    """Ein Pfad im eigenen Baum zu Knoten und Ordnerkette (für Adressen wie /dateien/Apps/Probe in der Oberfläche)."""
+    gefunden = await speicher.pfad_aufloesen(benutzer["id"], pfad)
+    if gefunden is None:
+        raise HTTPException(status_code=404, detail=f"{pfad} gibt es nicht (mehr)")
+    kette, knoten = gefunden
+    return PfadAus(kette=kette, id=knoten["id"], name=knoten["name"], typ=knoten["typ"])
 
 
 @router.get("/papierkorb", response_model=list[KnotenAus])

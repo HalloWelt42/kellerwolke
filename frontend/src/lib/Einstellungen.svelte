@@ -5,19 +5,18 @@
   import Modal from "./Modal.svelte";
   import Geraete from "./Geraete.svelte";
   import Zugaenge from "./Zugaenge.svelte";
+  import { verwaltung, verwaltungSchliessen, verwaltungsSeite } from "./verwaltung.svelte";
   import type { Benutzer, SpeicherStatus } from "./types";
   import { groesseText } from "./format";
   import { auth } from "./auth.svelte";
 
-  interface Props {
-    schliessen: () => void;
-  }
-  let { schliessen }: Props = $props();
 
-  type Seite = "konten" | "extern" | "speicher" | "zugaenge" | "geraete";
+
+
   // Verwaltung des Hauses nur für Admins; die eigenen Zugänge verwaltet jedes Konto selbst.
   const istAdmin = auth.benutzer?.rolle === "admin";
-  let seite = $state<Seite>(istAdmin ? "konten" : "zugaenge");
+  // Gewählte Seite in der gemeinsamen Verwaltung, damit die Adresse sie zeigt (/einstellungen/zugaenge).
+  const seite = $derived(verwaltungsSeite(istAdmin));
   let fehler = $state("");
 
   // --- Konten ---------------------------------------------------------------
@@ -210,7 +209,7 @@
       <i class="fa-solid fa-gear"></i> <span class="aktuell">Einstellungen</span>
     </nav>
     <div class="kopf-rechts">
-      <button class="knopf still" onclick={schliessen}>
+      <button class="knopf still" onclick={verwaltungSchliessen}>
         <i class="fa-solid fa-arrow-left"></i> Zu den Dateien
       </button>
     </div>
@@ -219,24 +218,24 @@
   <nav class="einst-nav">
     <div class="nav-titel">Einstellungen</div>
     {#if istAdmin}
-    <button class="einst-eintrag" class:aktiv={seite === "konten"} onclick={() => (seite = "konten")}>
+    <button class="einst-eintrag" class:aktiv={seite === "konten"} onclick={() => (verwaltung.seite = "konten")}>
       <i class="fa-solid fa-users"></i> Konten
     </button>
     <button
       class="einst-eintrag"
       class:aktiv={seite === "speicher"}
-      onclick={() => (seite = "speicher")}
+      onclick={() => (verwaltung.seite = "speicher")}
     >
       <i class="fa-solid fa-hard-drive"></i> Speicherorte
     </button>
-    <button class="einst-eintrag" class:aktiv={seite === "extern"} onclick={() => (seite = "extern")}>
+    <button class="einst-eintrag" class:aktiv={seite === "extern"} onclick={() => (verwaltung.seite = "extern")}>
       <i class="fa-solid fa-folder-tree"></i> Externe Quellen
     </button>
     {/if}
-    <button class="einst-eintrag" class:aktiv={seite === "zugaenge"} onclick={() => (seite = "zugaenge")}>
+    <button class="einst-eintrag" class:aktiv={seite === "zugaenge"} onclick={() => (verwaltung.seite = "zugaenge")}>
       <i class="fa-solid fa-key"></i> Zugänge
     </button>
-    <button class="einst-eintrag" class:aktiv={seite === "geraete"} onclick={() => (seite = "geraete")}>
+    <button class="einst-eintrag" class:aktiv={seite === "geraete"} onclick={() => (verwaltung.seite = "geraete")}>
       <i class="fa-solid fa-mobile-screen"></i> Geräte
     </button>
   </nav>

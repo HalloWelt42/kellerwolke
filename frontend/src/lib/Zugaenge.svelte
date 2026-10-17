@@ -5,6 +5,7 @@
   import { datum } from "./format";
   import Modal from "./Modal.svelte";
   import { kopieren, markieren } from "./zwischenablage";
+  import { dateienAdresse, navigiere } from "./adresse.svelte";
   import OrdnerWahl from "./OrdnerWahl.svelte";
   import type { AppRecht, AppZugang, Recht } from "./types";
 
@@ -175,9 +176,11 @@
         {:else}
           <div class="rechte">
             {#each z.rechte as r (r.knoten_id)}
-              <span class="recht {r.recht}" title={r.recht === "schreiben" ? "lesen und schreiben" : "nur lesen"}>
+              <a class="recht {r.recht}" href={dateienAdresse(r.pfad)}
+                 title="{r.recht === 'schreiben' ? 'lesen und schreiben' : 'nur lesen'}; öffnet den Ordner"
+                 onclick={(e) => { e.preventDefault(); navigiere(dateienAdresse(r.pfad)); }}>
                 <i class="fa-solid {r.recht === 'schreiben' ? 'fa-pen' : 'fa-eye'}"></i> {r.pfad}
-              </span>
+              </a>
             {:else}
               <span class="zg-zeit">keine Rechte: die App sieht nichts</span>
             {/each}

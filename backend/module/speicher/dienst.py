@@ -1075,6 +1075,27 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             return (await PostgresMetadataRepository(conn).journal_grenzen(besitzer_id))[1]
 
+    async def pfad_aufloesen(self, besitzer_id, pfad: str) -> tuple[list[dict], dict] | None:
+        """Ein Pfad im eigenen Baum ("Apps/Probe/notiz.txt", Groß- und Kleinschreibung egal wie bei den Namen) zu
+        (Ordnerkette darüber als {id, name}, Knoten). None, wenn ein Teil fehlt oder unterwegs kein Ordner ist."""
+        teile = [t for t in pfad.split("/") if t]
+        if not teile:
+            return None
+        kette: list[dict] = []
+        eltern = None
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            for i, name in enumerate(teile):
+                knoten = await repo.knoten_finden(besitzer_id, eltern, name)
+                if knoten is None:
+                    return None
+                if i < len(teile) - 1:
+                    if knoten["typ"] != "ordner":
+                        return None
+                    kette.append({"id": knoten["id"], "name": knoten["name"]})
+                eltern = knoten["id"]
+        return kette, knoten
+
     async def ahnen(self, besitzer_id, knoten_id) -> list[dict] | None:
         """Ordnerkette über einem eigenen Knoten, von oben bis zum Elternordner ({id, name}) - None, wenn er nicht
         dem Konto gehört."""

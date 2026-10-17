@@ -121,6 +121,15 @@ class PfadteilAus(BaseModel):
     name: str
 
 
+class PfadAus(BaseModel):
+    """Ein aufgelöster Pfad: die Ordnerkette darüber (ohne "Meine Dateien") und der Knoten selbst."""
+
+    kette: list[PfadteilAus]
+    id: UUID
+    name: str
+    typ: str
+
+
 class ZipEingabe(BaseModel):
     ids: list[UUID]
 

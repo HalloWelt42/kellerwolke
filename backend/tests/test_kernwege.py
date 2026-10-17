@@ -64,3 +64,23 @@ async def test_pfad_eines_knotens(umgebung):
     await app.state.auth.benutzer_anlegen("fremd", "geheim3")
     hf = await _anmelden(client, "fremd", "geheim3")
     assert (await client.get(f"/api/v1/dateien/{x['id']}/pfad", headers=hf)).status_code == 404
+
+
+async def test_pfad_aufloesen(umgebung):
+    client, app = umgebung
+    h = await _anmelden(client)
+    a = (await client.post("/api/v1/dateien/ordner", json={"name": "Apps"}, headers=h)).json()
+    b = (await client.post("/api/v1/dateien/ordner", json={"name": "Meine App", "parent_id": a["id"]}, headers=h)).json()
+    x = (await client.post("/api/v1/dateien/upload", data={"parent_id": b["id"]},
+                           files={"datei": ("notiz.txt", b"x", "text/plain")}, headers=h)).json()
+    r = (await client.get("/api/v1/dateien/aufloesen", params={"pfad": "apps/MEINE APP/"}, headers=h)).json()
+    assert r == {"kette": [{"id": a["id"], "name": "Apps"}], "id": b["id"], "name": "Meine App", "typ": "ordner"}
+    r = (await client.get("/api/v1/dateien/aufloesen", params={"pfad": "Apps/Meine App/notiz.txt"}, headers=h)).json()
+    assert r["id"] == x["id"] and r["typ"] == "datei" and [k["name"] for k in r["kette"]] == ["Apps", "Meine App"]
+    for falsch in ("Apps/gibtsnicht", "Apps/Meine App/notiz.txt/weiter", "/"):
+        assert (await client.get("/api/v1/dateien/aufloesen", params={"pfad": falsch}, headers=h)).status_code == 404
+    await client.delete(f"/api/v1/dateien/{b['id']}", headers=h)
+    assert (await client.get("/api/v1/dateien/aufloesen", params={"pfad": "Apps/Meine App"}, headers=h)).status_code == 404
+    await app.state.auth.benutzer_anlegen("fremd", "geheim3")
+    hf = await _anmelden(client, "fremd", "geheim3")
+    assert (await client.get("/api/v1/dateien/aufloesen", params={"pfad": "Apps"}, headers=hf)).status_code == 404
