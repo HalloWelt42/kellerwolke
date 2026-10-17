@@ -553,6 +553,8 @@ class SpeicherDienst:
                 await repo.knoten_hart_loeschen(wurzeln)
                 for h in verwaiste:
                     await repo.blob_zeile_loeschen(besitzer_id, h)
+                for w in wurzeln:
+                    await repo.journal_anhaengen(besitzer_id, w, "entfernt")
                 anzahl = len(wurzeln)
         # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
         for h in verwaiste:
@@ -580,6 +582,7 @@ class SpeicherDienst:
                 await repo.knoten_hart_loeschen(wurzeln)
                 for h in verwaiste:
                     await repo.blob_zeile_loeschen(besitzer_id, h)
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "entfernt")
         # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
         for h in verwaiste:
             await self.blob_delete(str(besitzer_id), h)
@@ -1055,6 +1058,18 @@ class SpeicherDienst:
                 await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name, ziel)
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "erstellt")
                 return await repo.knoten_holen(knoten_id)
+
+    async def journal_stand(self, besitzer_id) -> int:
+        async with self.pool.connection() as conn:
+            return (await PostgresMetadataRepository(conn).journal_grenzen(besitzer_id))[1]
+
+    async def ahnen(self, besitzer_id, knoten_id) -> list[dict] | None:
+        """Ordnerkette über einem eigenen Knoten, von oben bis zum Elternordner ({id, name}) - None, wenn er nicht
+        dem Konto gehört."""
+        if not await self.knoten_des_nutzers(besitzer_id, knoten_id):
+            return None
+        async with self.pool.connection() as conn:
+            return await PostgresMetadataRepository(conn).ahnen(knoten_id)
 
     async def journal_seit(self, besitzer_id, seit_seq=0, anzahl: int = 1000):
         async with self.pool.connection() as conn:

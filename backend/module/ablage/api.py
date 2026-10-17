@@ -74,7 +74,7 @@ class HerkunftAus(BaseModel):
 class AenderungAus(BaseModel):
     seq: int
     knoten_id: UUID
-    typ: str                                   # erstellt, geaendert, verschoben, geloescht
+    typ: str                                   # erstellt, geaendert, verschoben, geloescht, entfernt
     version_id: UUID | None = None
     von_parent_id: UUID | None = None          # beim Verschieben: der alte Elternordner
     zeit: datetime

@@ -410,6 +410,18 @@ class PostgresMetadataRepository:
         )
         return [z["name"] for z in zeilen]
 
+    async def ahnen(self, knoten_id) -> list[dict]:
+        """Ordner über dem Knoten, von der Wurzel abwärts bis zum Elternordner, als {id, name}."""
+        zeilen = await self._alle(
+            "WITH RECURSIVE kette AS ("
+            "  SELECT parent_id, 0 AS tiefe FROM knoten WHERE id=%s "
+            "  UNION ALL "
+            "  SELECT k.parent_id, kette.tiefe + 1 FROM knoten k JOIN kette ON k.id = kette.parent_id"
+            ") SELECT k.id, k.name FROM kette JOIN knoten k ON k.id = kette.parent_id ORDER BY kette.tiefe DESC",
+            (knoten_id,),
+        )
+        return [{"id": str(z["id"]), "name": z["name"]} for z in zeilen]
+
     async def kinder_seite(self, parent_id, ab: int, anzahl: int):
         """Eine Seite der lebenden Kinder eines Ordners in fester Reihenfolge (Ordner vor Dateien, Name, Kennung),
         mit Größe der aktuellen Version. Der Zugriff auf den Ordner ist vorher geprüft."""

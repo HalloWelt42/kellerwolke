@@ -27,6 +27,7 @@ from module.speicher.modelle import (
     KnotenAus,
     KontoAus,
     OrdnerEingabe,
+    PfadteilAus,
     SpeicherStatusAus,
     TeilenEingabe,
     UmbenennenEingabe,
@@ -212,6 +213,15 @@ async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer),
 async def herunterladen(knoten_id: UUID, request: Request, benutzer=Depends(aktueller_benutzer),
                         speicher=Depends(hole_speicher)):
     return await _datei_ausliefern(request, speicher, await speicher.eigene_datei(benutzer["id"], knoten_id))
+
+
+@router.get("/{knoten_id}/pfad", response_model=list[PfadteilAus])
+async def pfad(knoten_id: UUID, benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    """Ordnerkette über einem eigenen Knoten (ohne "Meine Dateien" und ohne den Knoten selbst)."""
+    kette = await speicher.ahnen(benutzer["id"], knoten_id)
+    if kette is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return kette
 
 
 @router.get("/{knoten_id}/versionen", response_model=list[VersionAus])

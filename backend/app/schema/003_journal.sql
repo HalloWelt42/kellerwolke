@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS aenderung (
     seq         bigserial PRIMARY KEY,
     besitzer_id uuid NOT NULL REFERENCES benutzer(id) ON DELETE CASCADE,
     knoten_id   uuid NOT NULL,
-    typ         text NOT NULL,   -- 'erstellt' | 'geaendert' | 'verschoben' | 'geloescht'
+    typ         text NOT NULL,   -- 'erstellt' | 'geaendert' | 'verschoben' | 'geloescht' | 'entfernt' (endgültig)
     version_id  uuid,
     zeit        timestamptz NOT NULL DEFAULT now()
 );

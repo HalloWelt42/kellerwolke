@@ -10,6 +10,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -20,6 +21,7 @@ from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
 from .melder import JournalMelder
 from .ports import SpeicherNichtVerfuegbar
+from .validierung import validierung_behandeln
 from module.ablage.api import router as ablage_router
 from module.ablage.dienst import AblageDienst
 from module.admin.api import router as admin_router
@@ -110,6 +112,8 @@ def app_bauen() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_exception_handler(RequestValidationError, validierung_behandeln)
+
     @app.exception_handler(SpeicherNichtVerfuegbar)
     async def _speicher_nicht_verfuegbar(request: Request, exc: SpeicherNichtVerfuegbar):
         # Objekt-Pool gerade nicht erreichbar (Laufwerk abgehaengt): nichts geht
@@ -117,7 +121,7 @@ def app_bauen() -> FastAPI:
         return JSONResponse(
             status_code=503,
             headers={"Retry-After": "30"},
-            content={"detail": "Speicher nicht verfuegbar - bitte spaeter erneut versuchen"},
+            content={"detail": "Speicher nicht verfügbar - bitte später erneut versuchen"},
         )
 
     @app.get("/api/health")

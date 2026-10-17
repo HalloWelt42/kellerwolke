@@ -1,22 +1,14 @@
 """Volltextsuche ueber PostgreSQL (tsvector, deutsche Konfiguration).
 
-Indexiert Name und (sofern extrahierbar) Inhalt je Knoten. Die Suche ist streng
+Findet Namen (am Knoten selbst) und den Inhalt (sofern extrahierbar). Die Suche ist streng
 pro Nutzer gefiltert - niemand findet fremde Inhalte. Nutzereingaben laufen ueber
 websearch_to_tsquery (robust, kein Syntaxfehler bei beliebiger Eingabe) und sind
 durchgaengig parametrisiert (keine SQL-Injektion).
 """
 
-import re
-
 from psycopg.rows import dict_row
 
 from module.suche.extraktion import inhalt_noetig, text_extrahieren
-
-
-def _name_tokens(name: str) -> str:
-    # Trennzeichen zu Leerzeichen, damit "rechnung.txt" als 'rechnung' 'txt' indexiert.
-    # NUL-Bytes entfernen - PostgreSQL-Textfelder lehnen sie ab (wie beim Inhalt).
-    return re.sub(r"[._/\\-]+", " ", name).replace("\x00", " ")
 
 
 class SuchDienst:
@@ -32,36 +24,43 @@ class SuchDienst:
     async def indexieren(self, besitzer_id, knoten_id, name, daten) -> None:
         # besitzer_id kommt aus dem Knoten selbst, und es wird nur indexiert,
         # wenn der Knoten dem angegebenen Nutzer gehoert. So kann der Eigentuemer-
-        # Stempel nicht vergiftet oder umgestempelt werden (Isolation).
+        # Stempel nicht vergiftet oder umgestempelt werden (Isolation). Der Name
+        # braucht keinen Index-Eintrag: er steht am Knoten selbst (name_tsv).
         inhalt = text_extrahieren(name, daten)
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await conn.execute(
-                    "INSERT INTO such_index (knoten_id, besitzer_id, name_tsv, inhalt_tsv) "
-                    "SELECT k.id, k.besitzer_id, to_tsvector('german', %s), "
-                    "       to_tsvector('german', %s) "
+                    "INSERT INTO such_index (knoten_id, besitzer_id, inhalt_tsv) "
+                    "SELECT k.id, k.besitzer_id, to_tsvector('german', %s) "
                     "FROM knoten k WHERE k.id = %s AND k.besitzer_id = %s "
-                    "ON CONFLICT (knoten_id) DO UPDATE SET "
-                    "name_tsv = EXCLUDED.name_tsv, inhalt_tsv = EXCLUDED.inhalt_tsv",
-                    (_name_tokens(name), inhalt, knoten_id, besitzer_id),
+                    "ON CONFLICT (knoten_id) DO UPDATE SET inhalt_tsv = EXCLUDED.inhalt_tsv",
+                    (inhalt, knoten_id, besitzer_id),
                 )
 
     async def suchen(self, besitzer_id, anfrage, grenze: int = 50):
+        """Treffer im Namen (Dateien und Ordner) oder im Inhalt, Name höher gewichtet; mit denselben Zusatzfeldern
+        wie die Ordnerliste (Favorit, geteilt, Kinderzahl). Beide Teilmengen kommen über ihren eigenen Index."""
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
-                    "SELECT k.*, v.groesse FROM such_index s "
-                    "JOIN knoten k ON k.id = s.knoten_id "
+                    "WITH q AS (SELECT websearch_to_tsquery('german', %s) AS q), "
+                    "treffer AS ("
+                    "  SELECT k.id FROM knoten k, q WHERE k.besitzer_id = %s AND NOT k.geloescht AND k.name_tsv @@ q.q "
+                    "  UNION "
+                    "  SELECT s.knoten_id FROM such_index s, q WHERE s.besitzer_id = %s AND s.inhalt_tsv @@ q.q"
+                    ") "
+                    "SELECT k.*, v.groesse, "
+                    "(SELECT count(*) FROM knoten c WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl, "
+                    "EXISTS(SELECT 1 FROM favorit f WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit, "
+                    "EXISTS(SELECT 1 FROM freigabe fr WHERE fr.knoten_id = k.id) AS geteilt "
+                    "FROM treffer t CROSS JOIN q "
+                    # Doppelter Eigentuemer-Filter als Defense-in-depth.
+                    "JOIN knoten k ON k.id = t.id AND k.besitzer_id = %s AND NOT k.geloescht "
+                    "LEFT JOIN such_index s ON s.knoten_id = k.id "
                     "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
-                    # Doppelter Eigentuemer-Filter (s und k) als Defense-in-depth.
-                    "WHERE s.besitzer_id = %s AND k.besitzer_id = %s AND NOT k.geloescht "
-                    "AND (s.name_tsv @@ websearch_to_tsquery('german', %s) "
-                    "     OR s.inhalt_tsv @@ websearch_to_tsquery('german', %s)) "
-                    # Namens- und Inhaltsrang kombiniert, Name hoeher gewichtet.
-                    "ORDER BY (ts_rank(s.name_tsv, websearch_to_tsquery('german', %s)) * 4 "
-                    "          + ts_rank(s.inhalt_tsv, websearch_to_tsquery('german', %s))) DESC, "
+                    "ORDER BY (ts_rank(k.name_tsv, q.q) * 4 + coalesce(ts_rank(s.inhalt_tsv, q.q), 0)) DESC, "
                     "         k.geaendert_am DESC "
                     "LIMIT %s",
-                    (besitzer_id, besitzer_id, anfrage, anfrage, anfrage, anfrage, grenze),
+                    (anfrage, besitzer_id, besitzer_id, besitzer_id, grenze),
                 )
                 return await cur.fetchall()

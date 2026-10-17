@@ -67,6 +67,7 @@ Das Plugin-System trug genau ein Plugin (Medien), dessen Code dreifach vorlag. E
 | Geteilt: Einfachklick lädt herunter | Einfachklick markiert und zeigt an, wie überall |
 | Anzeige: "1 Dateien", Unterordner als Dateien gezählt, falsche Leerzustände, Teilen-Kennzeichen spät, Splitscreen-Umschalter falsch aktiv, Fehler in Einstellungen im Erfolgsstil, Rollenauswahl zeigt Ungespeichertes, Datenablage-Abfrage läuft weiter | Einzeln behoben |
 | Filter, Bildlauf und Medien-Einstellungen gehen beim App-Wechsel verloren | Zustand liegt an der Fläche, nicht am Bauteil |
+| Kein iOS-Icon, kein Manifest: als PWA auf dem Telefon ohne Symbol | Vollständiger Satz (ico, PNG, apple-touch-icon 180, Manifest 192/512) |
 
 ### E4 Oberfläche Medien
 

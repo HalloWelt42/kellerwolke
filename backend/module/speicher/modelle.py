@@ -105,5 +105,10 @@ class VerschiebenEingabe(BaseModel):
     parent_id: UUID | None = None
 
 
+class PfadteilAus(BaseModel):
+    id: UUID
+    name: str
+
+
 class ZipEingabe(BaseModel):
     ids: list[UUID]
