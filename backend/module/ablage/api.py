@@ -15,11 +15,23 @@ from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
-from module.speicher.dienst import VorbedingungVerletzt
+from module.speicher.dienst import Gesperrt, VorbedingungVerletzt
 from module.appzugang.modelle import RechtAus
 from module.speicher.api import bereich_aus_kopf, dateiname_kopf
 
 router = APIRouter(prefix="/api/v1/ablage", tags=["ablage"])
+
+
+class SperreAus(BaseModel):
+    app: str
+    grund: str
+    seit: datetime
+    bis: datetime
+
+
+class SperreEingabe(BaseModel):
+    dauer_s: int = Field(ge=1, le=12 * 3600, description="so lange gilt die Sperre; erneuern, solange die Arbeit läuft")
+    grund: str = Field("", max_length=200)
 
 
 class AblageKnotenAus(BaseModel):
@@ -35,6 +47,7 @@ class AblageKnotenAus(BaseModel):
     inhaltstyp: str | None = None
     app: str | None = None                   # App, die zuletzt geschrieben hat
     felder: dict[str, Any] = Field(default_factory=dict)
+    sperre: SperreAus | None = None          # gültige Bearbeitungssperre einer App
     erstellt_am: datetime
     geaendert_am: datetime
 
@@ -84,12 +97,15 @@ def _fehler(f: Exception) -> HTTPException:
         return HTTPException(status_code=412, detail=str(f))
     if isinstance(f, VorbedingungFehlt):
         return HTTPException(status_code=428, detail=str(f))
+    if isinstance(f, Gesperrt):
+        return HTTPException(status_code=423, detail=str(f))
     if isinstance(f, DateiZuGross):
         return HTTPException(status_code=413, detail="Datei zu groß")
     return HTTPException(status_code=422, detail=str(f))
 
 
-_FEHLER = (Unsichtbar, KeinSchreibrecht, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross)
+_FEHLER = (Unsichtbar, KeinSchreibrecht, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross,
+           Gesperrt)
 
 
 def _bedingung(request: Request) -> tuple[str | None, bool]:
@@ -236,5 +252,22 @@ async def suche(eingabe: SucheEingabe, akteur=Depends(aktuelle_app), ablage=Depe
     """Dateien, deren Felder alle angegebenen Werte enthalten (soweit die App sie sehen darf)."""
     try:
         return await ablage.suchen(akteur, eingabe.felder, eingabe.anzahl)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.post("/knoten/{knoten_id}/sperre", response_model=SperreAus)
+async def sperren(knoten_id: UUID, eingabe: SperreEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Bearbeitungssperre setzen oder verlängern; andere Apps schreiben solange nicht (423), lesen bleibt frei."""
+    try:
+        return await ablage.sperren(akteur, knoten_id, eingabe.dauer_s, eingabe.grund)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.delete("/knoten/{knoten_id}/sperre", status_code=204)
+async def entsperren(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    try:
+        await ablage.entsperren(akteur, knoten_id)
     except _FEHLER as f:
         raise _fehler(f) from None

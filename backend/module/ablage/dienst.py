@@ -11,7 +11,9 @@ from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.inhaltstyp import inhaltstyp_aus_kopf, inhaltstyp_aus_name
 from module.ablage import metadaten
 from module.appzugang.dienst import AppAkteur, AppZugangDienst
-from module.speicher.dienst import Bedingung
+from psycopg.rows import dict_row
+
+from module.speicher.dienst import Bedingung, Gesperrt
 
 MAX_SEITE = 500
 
@@ -58,6 +60,12 @@ def _meta_felder(knoten: dict, meta: dict | None) -> dict:
             "felder": (meta or {}).get("felder") or {}}
 
 
+async def _sperre_holen(conn, knoten_id) -> dict | None:
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute("SELECT app, grund, seit, bis FROM sperre WHERE knoten_id=%s AND bis > now()", (knoten_id,))
+        return await cur.fetchone()
+
+
 class AblageDienst:
     def __init__(self, pool, speicher, zugang: AppZugangDienst) -> None:
         self.pool = pool
@@ -81,7 +89,8 @@ class AblageDienst:
                 version = await repo.version_holen(knoten["aktuelle_version_id"])
                 groesse = version["groesse"] if version else None
             meta = (await metadaten.meta_holen(conn, [knoten["id"]])).get(knoten["id"])
-        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse, **_meta_felder(knoten, meta)}
+            sperre = await _sperre_holen(conn, knoten["id"])
+        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse, "sperre": sperre, **_meta_felder(knoten, meta)}
 
     async def knoten(self, akteur: AppAkteur, knoten_id) -> dict:
         return await self._ansicht(*await self.mit_recht(akteur, knoten_id))
@@ -157,7 +166,8 @@ class AblageDienst:
         if vorhanden and etag is None and not nur_neu:
             raise VorbedingungFehlt("Die Datei gibt es schon: überschreiben nur mit If-Match (zuletzt gelesener ETag)")
         knoten, blob_hash, groesse = await self.speicher.datei_hochladen_strom(
-            akteur.benutzer_id, eltern["id"], teile[-1], quelle, max_bytes, Bedingung(etag=etag, nur_neu=nur_neu))
+            akteur.benutzer_id, eltern["id"], teile[-1], quelle, max_bytes,
+            Bedingung(etag=etag, nur_neu=nur_neu, zugang_id=akteur.zugang_id))
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await metadaten.meta_schreiben(conn, knoten["id"], inhaltstyp_aus_kopf(inhaltstyp, teile[-1]), akteur.app)
@@ -169,8 +179,47 @@ class AblageDienst:
         knoten, recht = await self.mit_recht(akteur, knoten_id, "schreiben")
         async with self.pool.connection() as conn:
             async with conn.transaction():
+                fremd = await PostgresMetadataRepository(conn).fremde_sperre(knoten_id, akteur.zugang_id)
+                if fremd:
+                    raise Gesperrt(fremd)
                 await metadaten.felder_mischen(conn, knoten_id, aenderung, akteur.app)
         return await self._ansicht(knoten, recht)
+
+    # --- Bearbeitungssperre -----------------------------------------------------------------------------------
+
+    async def sperren(self, akteur: AppAkteur, knoten_id, dauer_s: int, grund: str = "") -> dict:
+        """Sperrt eine Datei für dauer_s Sekunden oder verlängert die eigene Sperre. Hält eine andere App eine gültige
+        Sperre, wird abgewiesen; eine abgelaufene fremde Sperre wird übernommen."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id, "schreiben")
+        if knoten["typ"] != "datei":
+            raise ValueError("Gesperrt werden nur Dateien")
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                async with conn.cursor(row_factory=dict_row) as cur:
+                    await cur.execute(
+                        "INSERT INTO sperre (knoten_id, zugang_id, app, grund, bis) "
+                        "VALUES (%s,%s,%s,%s, now() + make_interval(secs => %s)) "
+                        "ON CONFLICT (knoten_id) DO UPDATE SET zugang_id=EXCLUDED.zugang_id, app=EXCLUDED.app, "
+                        "grund=EXCLUDED.grund, bis=EXCLUDED.bis, "
+                        "seit=CASE WHEN sperre.zugang_id = EXCLUDED.zugang_id AND sperre.bis > now() THEN sperre.seit ELSE now() END "
+                        "WHERE sperre.zugang_id = EXCLUDED.zugang_id OR sperre.bis <= now() "
+                        "RETURNING app, grund, seit, bis",
+                        (knoten_id, akteur.zugang_id, akteur.app, grund, dauer_s))
+                    sperre = await cur.fetchone()
+                if sperre is None:
+                    raise Gesperrt(await _sperre_holen(conn, knoten_id))
+        return sperre
+
+    async def entsperren(self, akteur: AppAkteur, knoten_id) -> None:
+        """Gibt die eigene Sperre frei; ohne Sperre geschieht nichts, eine fremde gültige Sperre bleibt (423)."""
+        await self.mit_recht(akteur, knoten_id, "schreiben")
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await conn.execute("DELETE FROM sperre WHERE knoten_id=%s AND (zugang_id=%s OR bis <= now())",
+                                   (knoten_id, akteur.zugang_id))
+                fremd = await PostgresMetadataRepository(conn).fremde_sperre(knoten_id, akteur.zugang_id)
+        if fremd:
+            raise Gesperrt(fremd)
 
     async def herkunft_setzen(self, akteur: AppAkteur, zu_id, von_id, art: str) -> list[dict]:
         """zu entstand aus von (zum Beispiel ein Transkript aus einer Aufnahme). Schreibrecht auf zu, Leserecht auf von."""

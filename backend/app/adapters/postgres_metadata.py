@@ -351,6 +351,11 @@ class PostgresMetadataRepository:
         # ON DELETE CASCADE raeumt Kinder, Versionen und Chunks mit ab.
         await self.conn.execute("DELETE FROM knoten WHERE id = ANY(%s)", (wurzeln,))
 
+    async def fremde_sperre(self, knoten_id, zugang_id) -> dict | None:
+        """Gültige Bearbeitungssperre einer anderen App auf dem Knoten, sonst None."""
+        return await self._eine("SELECT app, grund, seit, bis FROM sperre WHERE knoten_id=%s AND bis > now() "
+                                "AND zugang_id <> %s", (knoten_id, zugang_id))
+
     async def inhaltstyp(self, knoten_id) -> str | None:
         """Gespeicherter Inhaltstyp einer Datei (von der schreibenden App) oder None."""
         zeile = await self._eine("SELECT inhaltstyp FROM datei_meta WHERE knoten_id=%s", (knoten_id,))

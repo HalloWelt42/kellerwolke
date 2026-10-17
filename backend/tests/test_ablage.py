@@ -344,3 +344,69 @@ async def test_herkunft_ueberlebt_umbenennen_und_bleibt_privat(umgebung):
     # entfernen
     r = await client.delete(f"/api/v1/ablage/knoten/{text['id']}/herkunft", params={"von_id": ton["id"], "art": "transkript_zu"}, headers=t)
     assert r.status_code == 204 and (await client.get(f"/api/v1/ablage/knoten/{text['id']}/herkunft", headers=t)).json() == []
+
+
+# --- K4b: Bearbeitungssperre für lange Arbeiten ------------------------------------------------------------------
+
+async def _gemeinsam(client, sitzung) -> tuple[dict, dict, str]:
+    """Zwei Apps mit Schreibrecht auf einen gemeinsamen Ordner und eine Datei darin."""
+    zt, t = await zugang(client, sitzung, "Tonbearbeitung")
+    zv, v = await zugang(client, sitzung, "Vertonung")
+    apps = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps"}, headers=t)).json()["id"]
+    gemeinsam = await ordner(client, sitzung, "Gemeinsam", apps)
+    for z in (zt, zv):
+        rechte = [{"knoten_id": r["knoten_id"], "recht": r["recht"]} for r in z["rechte"]] + [{"knoten_id": gemeinsam, "recht": "schreiben"}]
+        await client.put(f"/api/v1/app-zugaenge/{z['id']}/rechte", json={"rechte": rechte}, headers=sitzung)
+    d = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Gemeinsam/ton.wav"}, content=b"RIFF0", headers=t)).json()
+    return t, v, d["id"]
+
+
+async def test_sperre_haelt_andere_apps_vom_schreiben_ab(umgebung):
+    client, sitzung = umgebung
+    t, v, d = await _gemeinsam(client, sitzung)
+    r = await client.post(f"/api/v1/ablage/knoten/{d}/sperre", json={"dauer_s": 600, "grund": "schneiden"}, headers=t)
+    assert r.status_code == 200 and r.json()["app"] == "Tonbearbeitung"
+    k = (await client.get(f"/api/v1/ablage/knoten/{d}", headers=v)).json()
+    assert k["sperre"]["app"] == "Tonbearbeitung" and k["sperre"]["grund"] == "schneiden"
+    # die andere App: lesen ja, schreiben nein, sperren nein
+    assert (await client.get(f"/api/v1/ablage/knoten/{d}/inhalt", headers=v)).status_code == 200
+    r = await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Gemeinsam/ton.wav"}, content=b"x", headers={**v, "If-Match": k["etag"]})
+    assert r.status_code == 423 and "Tonbearbeitung" in r.json()["detail"]
+    assert (await client.patch(f"/api/v1/ablage/knoten/{d}/felder", json={"felder": {"a": 1}}, headers=v)).status_code == 423
+    assert (await client.post(f"/api/v1/ablage/knoten/{d}/sperre", json={"dauer_s": 60}, headers=v)).status_code == 423
+    assert (await client.delete(f"/api/v1/ablage/knoten/{d}/sperre", headers=v)).status_code == 423
+    # die sperrende App schreibt und gibt frei
+    r = await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Gemeinsam/ton.wav"}, content=b"geschnitten", headers={**t, "If-Match": k["etag"]})
+    assert r.status_code == 200
+    assert (await client.delete(f"/api/v1/ablage/knoten/{d}/sperre", headers=t)).status_code == 204
+    neu = (await client.get(f"/api/v1/ablage/knoten/{d}", headers=v)).json()
+    assert neu["sperre"] is None
+    assert (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Gemeinsam/ton.wav"}, content=b"v", headers={**v, "If-Match": neu["etag"]})).status_code == 200
+
+
+async def test_sperre_laeuft_ab_und_wird_erneuert(umgebung):
+    """Stürzt die sperrende App ab, läuft die Sperre von selbst ab; erneuern hält sie und behält den Beginn."""
+    import asyncio
+    client, sitzung = umgebung
+    t, v, d = await _gemeinsam(client, sitzung)
+    erst = (await client.post(f"/api/v1/ablage/knoten/{d}/sperre", json={"dauer_s": 1}, headers=t)).json()
+    weiter = (await client.post(f"/api/v1/ablage/knoten/{d}/sperre", json={"dauer_s": 1}, headers=t)).json()
+    assert weiter["seit"] == erst["seit"] and weiter["bis"] >= erst["bis"]
+    await asyncio.sleep(1.2)
+    k = (await client.get(f"/api/v1/ablage/knoten/{d}", headers=v)).json()
+    assert k["sperre"] is None
+    r = await client.post(f"/api/v1/ablage/knoten/{d}/sperre", json={"dauer_s": 60}, headers=v)        # abgelaufene übernehmen
+    assert r.status_code == 200 and r.json()["app"] == "Vertonung"
+    assert (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Gemeinsam/ton.wav"}, content=b"x",
+                             headers={**t, "If-Match": k["etag"]})).status_code == 423
+
+
+async def test_sperre_nur_mit_schreibrecht_und_nur_dateien(umgebung):
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    _, s = await zugang(client, sitzung, "Stimmenausgabe")
+    d = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/a.txt"}, content=b"x", headers=t)).json()
+    assert (await client.post(f"/api/v1/ablage/knoten/{d['id']}/sperre", json={"dauer_s": 60}, headers=s)).status_code == 403
+    eigen = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Transkription"}, headers=t)).json()["id"]
+    assert (await client.post(f"/api/v1/ablage/knoten/{eigen}/sperre", json={"dauer_s": 60}, headers=t)).status_code == 422
+    assert (await client.post(f"/api/v1/ablage/knoten/{d['id']}/sperre", json={"dauer_s": 0}, headers=t)).status_code == 422

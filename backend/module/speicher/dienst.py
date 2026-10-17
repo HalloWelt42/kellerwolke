@@ -169,6 +169,14 @@ class VorbedingungVerletzt(Exception):
     """Der Stand der Datei passt nicht zur Bedingung des Schreibers (If-Match oder If-None-Match)."""
 
 
+class Gesperrt(Exception):
+    """Eine andere App hält die Bearbeitungssperre der Datei."""
+
+    def __init__(self, sperre: dict) -> None:
+        super().__init__(f"Gesperrt von {sperre['app']} bis {sperre['bis']:%H:%M:%S}" + (f" ({sperre['grund']})" if sperre["grund"] else ""))
+        self.sperre = sperre
+
+
 @dataclass(frozen=True)
 class Bedingung:
     """Bedingung für das Schreiben einer Datei, geprüft unter Zeilensperre in derselben Transaktion wie das
@@ -179,6 +187,7 @@ class Bedingung:
 
     etag: str | None = None
     nur_neu: bool = False
+    zugang_id: str | None = None      # schreibende App: eine Bearbeitungssperre einer anderen App weist ab
 
 
 class SpeicherDienst:
@@ -644,6 +653,10 @@ class SpeicherDienst:
                         raise VorbedingungVerletzt("Die Datei gibt es schon")
                     if bedingung and bedingung.etag is not None and (war_neu or knoten["etag"] != bedingung.etag):
                         raise VorbedingungVerletzt("Die Datei wurde inzwischen geändert")
+                    if bedingung and bedingung.zugang_id and not war_neu:
+                        fremd = await repo.fremde_sperre(knoten["id"], bedingung.zugang_id)
+                        if fremd:
+                            raise Gesperrt(fremd)
                     # Idempotenz: identischer Inhalt wie aktuelle Version -> No-Op.
                     if not war_neu and knoten["aktuelle_version_id"]:
                         aktuell = await repo.version_holen(knoten["aktuelle_version_id"])
