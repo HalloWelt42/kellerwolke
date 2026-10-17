@@ -1071,8 +1071,10 @@ class SpeicherDienst:
                     # Verschieben in sich selbst oder einen eigenen Nachkommen verbieten.
                     if await repo.ist_im_teilbaum(knoten_id, neuer_parent):
                         raise ValueError("Zyklus: Ziel liegt im eigenen Teilbaum")
+                alt = await repo.knoten_holen(knoten_id)
                 await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben",
+                                             von_parent_id=alt["parent_id"] if alt else None)
                 return await repo.knoten_holen(knoten_id)
 
     async def umziehen(self, besitzer_id, knoten_id, neuer_parent, neuer_name):
@@ -1095,7 +1097,7 @@ class SpeicherDienst:
                     await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
                 if neuer_parent != knoten["parent_id"]:
                     await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben", von_parent_id=knoten["parent_id"])
                 return await repo.knoten_holen(knoten_id)
 
     async def loeschen(self, besitzer_id, knoten_id):
@@ -1120,7 +1122,23 @@ class SpeicherDienst:
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "erstellt")
                 return await repo.knoten_holen(knoten_id)
 
-    async def journal_seit(self, besitzer_id, seit_seq=0):
+    async def journal_seit(self, besitzer_id, seit_seq=0, anzahl: int = 1000):
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
-            return await repo.journal_seit(besitzer_id, seit_seq)
+            return await repo.journal_seit(besitzer_id, seit_seq, anzahl)
+
+    async def journal_im_ordner(self, besitzer_id, ordner_id, seit_seq: int, anzahl: int) -> dict:
+        """Änderungen unter einem Ordner seit seq, dazu bis (letzte gelieferte oder aktuelle seq) und luecke (das
+        Journal reicht nicht mehr bis seit zurück: der Beobachter muss den Ordner neu lesen)."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            kleinste, groesste = await repo.journal_grenzen(besitzer_id)
+            eintraege = await repo.journal_im_ordner(besitzer_id, ordner_id, seit_seq, anzahl)
+        luecke = 0 < seit_seq < kleinste - 1
+        bis = eintraege[-1]["seq"] if len(eintraege) == anzahl else max(seit_seq, groesste)
+        return {"eintraege": eintraege, "bis": bis, "luecke": luecke}
+
+    async def journal_aufraeumen(self, tage: int) -> int:
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                return await PostgresMetadataRepository(conn).journal_aufraeumen(tage)

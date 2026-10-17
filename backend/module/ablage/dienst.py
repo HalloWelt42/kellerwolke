@@ -289,6 +289,28 @@ class AblageDienst:
         """Nur nach datei_kopf aufrufen (dort ist das Recht geprüft)."""
         return self.speicher.datei_stroemen(akteur.benutzer_id, knoten_id, start, laenge)
 
+    # --- Änderungen beobachten --------------------------------------------------------------------------------
+
+    async def aenderungen(self, akteur: AppAkteur, ordner_id, seit: int, anzahl: int = 500) -> dict:
+        ordner, _ = await self.mit_recht(akteur, ordner_id)
+        if ordner["typ"] != "ordner":
+            raise ValueError("Kein Ordner")
+        return await self.speicher.journal_im_ordner(akteur.benutzer_id, ordner_id, seit, max(1, min(anzahl, MAX_SEITE)))
+
+    async def ereignisse(self, akteur: AppAkteur, ordner_id, seit: int, melder, verbunden, takt_s: float = 15.0):
+        """Liefert Stände (wie aenderungen), sobald sich unter dem Ordner etwas ändert; None als Lebenszeichen nach
+        jedem ruhigen Takt. Das Recht wird bei jeder Runde neu geprüft (ein entzogenes Recht beendet den Strom)."""
+        while await verbunden():
+            ereignis = melder.ereignis(akteur.benutzer_id)
+            stand = await self.aenderungen(akteur, ordner_id, seit)
+            if stand["eintraege"] or stand["luecke"]:
+                seit = stand["bis"]
+                yield stand
+                continue
+            seit = stand["bis"]
+            if not await melder.warten(ereignis, takt_s):
+                yield None
+
     async def ich(self, akteur: AppAkteur) -> dict:
         zugang = await self.zugang.zugang(akteur.benutzer_id, akteur.zugang_id)
         return {"app": akteur.app, "konto": akteur.benutzer["name"], "rechte": zugang["rechte"] if zugang else []}

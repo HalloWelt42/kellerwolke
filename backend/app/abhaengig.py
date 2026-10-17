@@ -32,6 +32,10 @@ def hole_ablage(request: Request):
     return request.app.state.ablage
 
 
+def hole_melder(request: Request):
+    return request.app.state.melder
+
+
 async def aktueller_benutzer(request: Request) -> dict:
     token = request.headers.get("x-kellerwolke-sitzung", "")
     benutzer = await request.app.state.auth.sitzung_pruefen(token)

@@ -5,6 +5,8 @@ Strikte Trennung: hier entsteht ausschliesslich die REST-API. Die Oberflaeche
 (Svelte) ist eine eigenstaendige Anwendung und spricht nur diese API.
 """
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -16,6 +18,7 @@ from . import io_pool
 from . import plugins as plugin_lader
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
+from .melder import JournalMelder
 from .ports import SpeicherNichtVerfuegbar
 from module.ablage.api import router as ablage_router
 from module.ablage.dienst import AblageDienst
@@ -47,6 +50,20 @@ async def _admin_seed(auth: AuthDienst) -> None:
     )
 
 
+async def _journal_pflegen(speicher) -> None:
+    """Räumt alte Journal-Einträge beim Start und dann täglich auf (Grenze KELLERWOLKE_JOURNAL_TAGE)."""
+    while True:
+        try:
+            weg = await speicher.journal_aufraeumen(EINSTELLUNGEN.journal_tage)
+            if weg:
+                logging.getLogger("kellerwolke").info("Journal: %d alte Einträge aufgeräumt", weg)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger("kellerwolke").exception("Journal aufräumen fehlgeschlagen")
+        await asyncio.sleep(24 * 3600)
+
+
 @asynccontextmanager
 async def lebenszyklus(app: FastAPI):
     await db.starten()
@@ -63,6 +80,9 @@ async def lebenszyklus(app: FastAPI):
     app.state.vorgaenge = VorgangRegistry()
     app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
     app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
+    app.state.melder = JournalMelder(EINSTELLUNGEN.dsn)
+    app.state.melder.starten()
+    journal_pflege = asyncio.create_task(_journal_pflegen(app.state.speicher), name="journal-pflege")
     await _admin_seed(app.state.auth)
     # Plugins entdecken + aktive einbinden (jedes isoliert; ein defektes Plugin
     # deaktiviert nur sich selbst, der Kern startet weiter).
@@ -71,6 +91,8 @@ async def lebenszyklus(app: FastAPI):
         yield
     finally:
         await plugin_lader.plugins_stoppen(app)
+        journal_pflege.cancel()
+        await app.state.melder.stoppen()
         await app.state.vorgaenge.stoppen()
         io_pool.herunterfahren()
         await db.stoppen()

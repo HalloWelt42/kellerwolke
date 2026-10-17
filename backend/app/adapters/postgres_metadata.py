@@ -453,16 +453,43 @@ class PostgresMetadataRepository:
 
     # --- Journal (Sync-Vorbereitung) ------------------------------------------
 
-    async def journal_anhaengen(self, besitzer_id, knoten_id, typ, version_id=None):
+    async def journal_anhaengen(self, besitzer_id, knoten_id, typ, version_id=None, von_parent_id=None):
+        """Eintrag ins Journal und Benachrichtigung der Beobachter. NOTIFY wird erst beim Festschreiben der
+        Transaktion zugestellt: wer geweckt wird, sieht den Eintrag auch."""
         row = await self._eine(
-            "INSERT INTO aenderung (besitzer_id, knoten_id, typ, version_id) "
-            "VALUES (%s,%s,%s,%s) RETURNING seq",
-            (besitzer_id, knoten_id, typ, version_id),
+            "INSERT INTO aenderung (besitzer_id, knoten_id, typ, version_id, von_parent_id) "
+            "VALUES (%s,%s,%s,%s,%s) RETURNING seq",
+            (besitzer_id, knoten_id, typ, version_id, von_parent_id),
         )
+        await self.conn.execute("SELECT pg_notify('kellerwolke_journal', %s)", (str(besitzer_id),))
         return row["seq"]
 
-    async def journal_seit(self, besitzer_id, seit_seq):
+    async def journal_seit(self, besitzer_id, seit_seq, anzahl: int = 1000):
         return await self._alle(
-            "SELECT * FROM aenderung WHERE besitzer_id=%s AND seq > %s ORDER BY seq",
-            (besitzer_id, seit_seq),
+            "SELECT * FROM aenderung WHERE besitzer_id=%s AND seq > %s ORDER BY seq LIMIT %s",
+            (besitzer_id, seit_seq, anzahl),
         )
+
+    async def journal_im_ordner(self, besitzer_id, ordner_id, seit_seq, anzahl: int):
+        """Einträge seit seq für alles unter einem Ordner (auch Herausverschobenes über den alten Elternordner)."""
+        return await self._alle(
+            "WITH RECURSIVE baum AS ("
+            "  SELECT id FROM knoten WHERE id=%s "
+            "  UNION ALL "
+            "  SELECT k.id FROM knoten k JOIN baum ON k.parent_id = baum.id"
+            ") SELECT a.seq, a.knoten_id, a.typ, a.version_id, a.von_parent_id, a.zeit FROM aenderung a "
+            "WHERE a.besitzer_id=%s AND a.seq > %s "
+            "AND (a.knoten_id IN (SELECT id FROM baum) OR a.von_parent_id IN (SELECT id FROM baum)) "
+            "ORDER BY a.seq LIMIT %s",
+            (ordner_id, besitzer_id, seit_seq, anzahl),
+        )
+
+    async def journal_grenzen(self, besitzer_id) -> tuple[int, int]:
+        """(kleinste, größte) vorhandene seq des Kontos; (0, 0) ohne Einträge."""
+        row = await self._eine("SELECT coalesce(min(seq),0) AS a, coalesce(max(seq),0) AS b FROM aenderung WHERE besitzer_id=%s",
+                               (besitzer_id,))
+        return row["a"], row["b"]
+
+    async def journal_aufraeumen(self, tage: int) -> int:
+        cur = await self.conn.execute("DELETE FROM aenderung WHERE zeit < now() - make_interval(days => %s)", (tage,))
+        return cur.rowcount

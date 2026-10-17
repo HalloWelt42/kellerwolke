@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.abhaengig import aktuelle_app, hole_ablage, hole_suche, hole_vorgaenge
+from app.abhaengig import aktuelle_app, hole_ablage, hole_melder, hole_suche, hole_vorgaenge
 from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
@@ -69,6 +69,21 @@ class HerkunftAus(BaseModel):
     art: str
     app: str | None = None
     erstellt_am: datetime
+
+
+class AenderungAus(BaseModel):
+    seq: int
+    knoten_id: UUID
+    typ: str                                   # erstellt, geaendert, verschoben, geloescht
+    version_id: UUID | None = None
+    von_parent_id: UUID | None = None          # beim Verschieben: der alte Elternordner
+    zeit: datetime
+
+
+class AenderungenAus(BaseModel):
+    eintraege: list[AenderungAus]
+    bis: int                                   # beim nächsten Mal als seit angeben
+    luecke: bool                               # das Journal reicht nicht mehr so weit zurück: Ordner neu lesen
 
 
 class SucheEingabe(BaseModel):
@@ -271,3 +286,39 @@ async def entsperren(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depen
         await ablage.entsperren(akteur, knoten_id)
     except _FEHLER as f:
         raise _fehler(f) from None
+
+
+@router.get("/aenderungen", response_model=AenderungenAus)
+async def aenderungen(ordner: UUID, seit: int = Query(0, ge=0), anzahl: int = Query(500, ge=1, le=500),
+                      akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Änderungen unter einem Ordner seit einer Journal-Nummer (seit=0: alles, was das Journal noch kennt)."""
+    try:
+        return await ablage.aenderungen(akteur, ordner, seit, anzahl)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/ereignisse")
+async def ereignisse(request: Request, ordner: UUID, seit: int = Query(0, ge=0), akteur=Depends(aktuelle_app),
+                     ablage=Depends(hole_ablage), melder=Depends(hole_melder)):
+    """Ereignisstrom (text/event-stream): ein Ereignis "aenderungen" je neuem Stand, sonst alle 15 s ein Lebenszeichen."""
+    try:
+        await ablage.aenderungen(akteur, ordner, seit, 1)          # Recht und Ordner vorab prüfen: Fehler als echter Status
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+    async def verbunden() -> bool:
+        return not await request.is_disconnected()
+
+    async def strom():
+        try:
+            async for stand in ablage.ereignisse(akteur, ordner, seit, melder, verbunden):
+                if stand is None:
+                    yield ": lebt\n\n"
+                else:
+                    daten = AenderungenAus.model_validate(stand).model_dump_json()
+                    yield f"id: {stand['bis']}\nevent: aenderungen\ndata: {daten}\n\n"
+        except _FEHLER as f:
+            yield f"event: ende\ndata: {str(f)}\n\n"
+
+    return StreamingResponse(strom(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

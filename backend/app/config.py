@@ -76,6 +76,8 @@ class Einstellungen:
     # Pfad noch auf der Systemplatte liegt (Mount fehlt) - schuetzt davor, den
     # Pool still auf die Root-Platte zu saeen. Auf dem Entwickler-Mac aus.
     pool_muss_extern: bool = _bool("KELLERWOLKE_POOL_MUSS_EXTERN", False)
+    # So lange bleiben Einträge im Änderungs-Journal; wer länger nicht gefragt hat, bekommt "luecke" und liest neu.
+    journal_tage: int = _zahl("KELLERWOLKE_JOURNAL_TAGE", 90)
 
     @property
     def dsn(self) -> str:

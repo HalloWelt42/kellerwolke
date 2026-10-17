@@ -8,12 +8,14 @@ import httpx
 import pytest
 
 from app.main import app_bauen
+from app.melder import JournalMelder
 from module.ablage.dienst import AblageDienst
 from module.appzugang.dienst import AppZugangDienst
 from module.auth.dienst import AuthDienst
 from module.speicher.dienst import SpeicherDienst
 from module.suche.dienst import SuchDienst
 from module.vorgaenge.dienst import VorgangRegistry
+from tests.conftest import TEST_DB, _dsn
 from tests.hilfen import markierter_blobstore
 
 
@@ -27,6 +29,7 @@ async def umgebung(pool, tmp_path):
     app.state.vorgaenge = VorgangRegistry()
     app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
     app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
+    app.state.melder = JournalMelder(_dsn(TEST_DB))                    # nicht gestartet; Tests, die wecken, starten einen eigenen
     await app.state.auth.benutzer_anlegen("chef", "geheim", rolle="admin")
     await app.state.auth.benutzer_anlegen("gast", "geheim")
     transport = httpx.ASGITransport(app=app)
@@ -410,3 +413,95 @@ async def test_sperre_nur_mit_schreibrecht_und_nur_dateien(umgebung):
     eigen = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Transkription"}, headers=t)).json()["id"]
     assert (await client.post(f"/api/v1/ablage/knoten/{eigen}/sperre", json={"dauer_s": 60}, headers=t)).status_code == 422
     assert (await client.post(f"/api/v1/ablage/knoten/{d['id']}/sperre", json={"dauer_s": 0}, headers=t)).status_code == 422
+
+
+# --- K5: Änderungen je Ordner und Ereignisstrom ------------------------------------------------------------------
+
+async def test_aenderungen_im_ordner_auch_herausverschoben(umgebung, pool):
+    client, sitzung = umgebung
+    z, t = await zugang(client, sitzung, "Transkription")
+    eigen = next(r["knoten_id"] for r in z["rechte"] if r["recht"] == "schreiben")
+    privat = await ordner(client, sitzung, "Privat")
+    await datei(client, sitzung, "draussen.txt", b"x", privat)                           # außerhalb: nie sichtbar
+    a = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/a.json"}, content=b"1", headers=t)).json()
+    stand = (await client.get("/api/v1/ablage/aenderungen", params={"ordner": eigen, "seit": 0}, headers=t)).json()
+    # der Ordner selbst (beim Ausstellen des Schlüssels angelegt) und die neue Datei
+    assert [(e["knoten_id"], e["typ"]) for e in stand["eintraege"]] == [(eigen, "erstellt"), (a["id"], "erstellt")]
+    assert not stand["luecke"]
+    bis = stand["bis"]
+    leer = (await client.get("/api/v1/ablage/aenderungen", params={"ordner": eigen, "seit": bis}, headers=t)).json()
+    assert leer["eintraege"] == [] and leer["bis"] >= bis
+    # neue Version und Herausverschieben durch den Nutzer: beides sieht der Ordner
+    await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/a.json"}, content=b"2", headers={**t, "If-Match": a["etag"]})
+    geaendert = (await client.get("/api/v1/ablage/aenderungen", params={"ordner": eigen, "seit": bis}, headers=t)).json()
+    assert [e["typ"] for e in geaendert["eintraege"]] == ["geaendert"]
+    assert (await client.patch(f"/api/v1/dateien/{a['id']}/ort", json={"parent_id": privat}, headers=sitzung)).status_code == 200
+    # nach dem Herausverschieben gehört die Datei nicht mehr dazu: der Ordner sieht genau das (mit altem Elternordner)
+    neu = (await client.get("/api/v1/ablage/aenderungen", params={"ordner": eigen, "seit": bis}, headers=t)).json()
+    assert [e["typ"] for e in neu["eintraege"]] == ["verschoben"]
+    assert neu["eintraege"][0]["von_parent_id"] == eigen
+    # Lücke: das Journal reicht nicht mehr so weit zurück
+    async with pool.connection() as conn:
+        await conn.execute("DELETE FROM aenderung WHERE seq <= %s", (neu["bis"] - 1,))
+    assert (await client.get("/api/v1/ablage/aenderungen", params={"ordner": eigen, "seit": 1}, headers=t)).json()["luecke"]
+    # nur lesbare Ordner
+    assert (await client.get("/api/v1/ablage/aenderungen", params={"ordner": privat, "seit": 0}, headers=t)).status_code == 404
+    assert (await client.get("/api/v1/ablage/ereignisse", params={"ordner": privat, "seit": 0}, headers=t)).status_code == 404
+
+
+async def test_melder_weckt_nach_dem_festschreiben(pool):
+    import asyncio
+    from app.adapters.postgres_metadata import PostgresMetadataRepository
+    from app.melder import JournalMelder
+    from tests.conftest import TEST_DB, _dsn
+    from module.auth.dienst import AuthDienst
+    konto = (await AuthDienst(pool).benutzer_anlegen("melder", "x"))["id"]
+    melder = JournalMelder(_dsn(TEST_DB))
+    melder.starten()
+    try:
+        await asyncio.sleep(0.3)                                                        # LISTEN steht
+        ereignis = melder.ereignis(konto)
+        async with pool.connection() as conn:
+            async with conn.transaction():
+                await PostgresMetadataRepository(conn).journal_anhaengen(konto, konto, "erstellt")
+                await asyncio.sleep(0.2)
+                assert not ereignis.is_set()                                            # vor dem Festschreiben nicht
+        assert await JournalMelder.warten(ereignis, 3)
+        assert not await JournalMelder.warten(melder.ereignis(konto), 0.2)              # neues Ereignis, ruhig
+    finally:
+        await melder.stoppen()
+
+
+async def test_ereignisstrom_liefert_neue_aenderung(umgebung, pool):
+    import asyncio
+    from app.melder import JournalMelder
+    from tests.conftest import TEST_DB, _dsn
+    client, sitzung = umgebung
+    z, t = await zugang(client, sitzung, "Transkription")
+    eigen = next(r["knoten_id"] for r in z["rechte"] if r["recht"] == "schreiben")
+    ablage = client._transport.app.state.ablage
+    akteur = await client._transport.app.state.appzugang.pruefen(t["Authorization"][7:])
+    seit = (await client.get("/api/v1/ablage/aenderungen", params={"ordner": eigen, "seit": 0}, headers=t)).json()["bis"]
+    melder = JournalMelder(_dsn(TEST_DB))
+    melder.starten()
+    await asyncio.sleep(0.3)
+    runden = {"n": 0}
+
+    async def verbunden():
+        runden["n"] += 1
+        return runden["n"] < 10
+
+    async def erstes_stand():
+        async for stand in ablage.ereignisse(akteur, eigen, seit, melder, verbunden, takt_s=5):
+            if stand:
+                return stand
+
+    try:
+        warten = asyncio.create_task(erstes_stand())
+        await asyncio.sleep(0.3)
+        assert not warten.done()                                                        # ruhig: es wartet
+        neu = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/n.txt"}, content=b"n", headers=t)).json()
+        stand = await asyncio.wait_for(warten, 3)                                      # geweckt, nicht erst nach dem Takt
+        assert [str(e["knoten_id"]) for e in stand["eintraege"]] == [neu["id"]]
+    finally:
+        await melder.stoppen()

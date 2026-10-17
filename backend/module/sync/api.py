@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
 
 @router.get("/journal", response_model=list[AenderungAus])
-async def journal(seit: int = Query(0, ge=0), benutzer=Depends(aktueller_benutzer),
-                  speicher=Depends(hole_speicher)):
-    eintraege = await speicher.journal_seit(benutzer["id"], seit)
+async def journal(seit: int = Query(0, ge=0), anzahl: int = Query(1000, ge=1, le=5000),
+                  benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    eintraege = await speicher.journal_seit(benutzer["id"], seit, anzahl)
     return [AenderungAus.model_validate(e) for e in eintraege]
