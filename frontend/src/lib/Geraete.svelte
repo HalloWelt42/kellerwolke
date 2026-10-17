@@ -182,6 +182,7 @@
             <span class="so-name">{g.name}</span>
             {#if g.id === neuId}<span class="marke-neu">gerade gekoppelt</span>{/if}
             {#if g.dieses}<span class="marke-std">dieses Gerät</span>{/if}
+            {#if g.app}<span class="marke-std" title="Gilt nur zur Anmeldung an {g.app}, nicht für deine Dateien">für {g.app}</span>{/if}
             {#if alt}<span class="marke-ro">lange nicht gesehen</span>{/if}
             <span class="zg-zeit">{zuletztText(g)}</span>
           </div>

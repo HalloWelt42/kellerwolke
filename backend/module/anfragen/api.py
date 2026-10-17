@@ -12,7 +12,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.abhaengig import aktuelle_app, aktueller_benutzer, hole_ablage, hole_anfragen
+from app.abhaengig import aktuelle_app, aktueller_benutzer, app_mit_anmeldung, hole_ablage, hole_anfragen, hole_speicher
+from app.inhaltstyp import inhaltstyp_aus_name
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar
 from module.anfragen.dienst import AktionPasstNicht, AnfrageUngueltig, OhneAdresse
 from module.anfragen.modelle import (
@@ -23,6 +24,8 @@ from module.anfragen.modelle import (
     AnfrageEingabe,
     AnfrageNeuAus,
     StandEingabe,
+    WahlEingabe,
+    WahlSeite,
     WeitergabeEingabe,
 )
 
@@ -132,6 +135,35 @@ async def weitergeben(eingabe: WeitergabeEingabe, akteur=Depends(aktuelle_app), 
             raise Unsichtbar(f"Keine App {eingabe.app}")
         anfrage, ziel = await anfragen.stellen(akteur.benutzer_id, zugang_id, eingabe.aktion, eingabe.knoten_id,
                                                von=akteur.app)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+    return {"anfrage": anfrage, "ziel": ziel}
+
+
+# --- Dateiwahl in einer App -------------------------------------------------------------------------------------
+# Mit App-Schlüssel UND der Anmeldung des Menschen an dieser App: blättern zeigt nur Namen und Eckdaten, die Wahl
+# stellt eine Anfrage; erst dann darf die App die Datei lesen (und nur sie, solange die Anfrage offen ist).
+
+@router_app.get("/wahl", response_model=WahlSeite)
+async def wahl(ordner: UUID | None = None, akteur=Depends(app_mit_anmeldung), speicher=Depends(hole_speicher)):
+    benutzer_id = akteur.benutzer_id
+    kette = [{"id": None, "name": "Meine Dateien"}]
+    if ordner is not None:
+        knoten = await speicher.lebender_knoten(benutzer_id, ordner)
+        if not knoten or knoten["typ"] != "ordner":
+            raise HTTPException(status_code=404, detail="Ordner nicht gefunden")
+        kette += [{"id": a["id"], "name": a["name"]} for a in (await speicher.ahnen(benutzer_id, ordner) or [])]
+        kette.append({"id": knoten["id"], "name": knoten["name"]})
+    eintraege = [{**k, "inhaltstyp": inhaltstyp_aus_name(k["name"]) if k["typ"] == "datei" else None}
+                 for k in await speicher.kinder(benutzer_id, ordner) if k["typ"] in ("ordner", "datei")]
+    return {"kette": kette, "eintraege": eintraege}
+
+
+@router_app.post("/wahl", response_model=AnfrageNeuAus)
+async def gewaehlt(eingabe: WahlEingabe, akteur=Depends(app_mit_anmeldung), anfragen=Depends(hole_anfragen)):
+    """Der Mensch hat in der App eine Datei gewählt: Anfrage an diese App für die Aktion."""
+    try:
+        anfrage, ziel = await anfragen.stellen(akteur.benutzer_id, akteur.zugang_id, eingabe.aktion, eingabe.knoten_id)
     except _FEHLER as f:
         raise _fehler(f) from None
     return {"anfrage": anfrage, "ziel": ziel}

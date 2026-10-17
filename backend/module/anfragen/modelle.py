@@ -103,3 +103,34 @@ class AnfrageAus(BaseModel):
 class AnfrageNeuAus(BaseModel):
     anfrage: AnfrageAus
     ziel: str | None = None   # bei Aktionen zum Öffnen: Adresse in der App
+
+
+class WahlEintrag(BaseModel):
+    """Ein Eintrag der Dateiwahl: nur Name und Eckdaten, nie Inhalt."""
+
+    model_config = ConfigDict(extra="ignore")
+    id: UUID
+    name: str
+    typ: str
+    groesse: int | None = None
+    inhaltstyp: str | None = None
+    geaendert_am: datetime
+    kinder_anzahl: int | None = None
+    haupt_id: UUID | None = None
+    rolle: str | None = None
+    begleiter_anzahl: int = 0
+
+
+class WahlOrt(BaseModel):
+    id: UUID | None
+    name: str
+
+
+class WahlSeite(BaseModel):
+    kette: list[WahlOrt]          # vom Konto bis zum gezeigten Ordner
+    eintraege: list[WahlEintrag]
+
+
+class WahlEingabe(BaseModel):
+    knoten_id: UUID
+    aktion: str = Field(pattern=KENNUNG)

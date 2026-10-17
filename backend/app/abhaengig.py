@@ -77,12 +77,19 @@ async def token_beenden(request: Request, token: str) -> None:
         await request.app.state.auth.abmelden(token)
 
 
+def _nur_kellerwolke(benutzer: dict) -> dict:
+    """Eine Anmeldung an einer eigenen App gilt nur dort (Erkennung, Dateiwahl), nie für die Dateien des Kontos."""
+    if benutzer.get("anmeldung_app"):
+        raise HTTPException(status_code=403, detail=f"Diese Anmeldung gilt nur für {benutzer['anmeldung_app']}")
+    return benutzer
+
+
 async def aktueller_benutzer(request: Request) -> dict:
     token = request.headers.get("x-kellerwolke-sitzung", "")
     benutzer = await benutzer_zum_token(request, token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
-    return benutzer
+    return _nur_kellerwolke(benutzer)
 
 
 async def lese_benutzer(request: Request) -> dict:
@@ -91,7 +98,7 @@ async def lese_benutzer(request: Request) -> dict:
     benutzer = await benutzer_zum_token(request, token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
-    return benutzer
+    return _nur_kellerwolke(benutzer)
 
 
 async def aktueller_admin(request: Request) -> dict:
@@ -118,6 +125,19 @@ async def aktuelle_app(request: Request):
         if anfrage is None:
             raise HTTPException(status_code=403, detail="Diese Anfrage ist nicht (mehr) offen")
         akteur = replace(akteur, anfrage=anfrage)
+    return akteur
+
+
+async def app_mit_anmeldung(request: Request):
+    """Dateiwahl einer App: ihr App-Schlüssel und die Anmeldung des Menschen an genau dieser App (im Kopf
+    X-Kellerwolke-Sitzung), beide für dasselbe Konto. So wählt nur, wer in der App angemeldet ist."""
+    akteur = await aktuelle_app(request)
+    benutzer = await benutzer_zum_token(request, request.headers.get("x-kellerwolke-sitzung", ""))
+    if not benutzer:
+        raise HTTPException(status_code=401, detail="Anmeldung an der App erforderlich")
+    if (str(benutzer["id"]) != str(akteur.benutzer_id)
+            or (benutzer.get("anmeldung_app") or "").lower() != akteur.app.lower()):
+        raise HTTPException(status_code=403, detail=f"Diese Anmeldung gilt nicht für {akteur.app}")
     return akteur
 
 

@@ -208,6 +208,7 @@ export interface Geraet {
   gekoppelt_am: string;
   zuletzt_am: string | null;
   zuletzt_adresse: string | null;
+  app: string | null; // gekoppelt für eine eigene App: gilt nur dort zur Anmeldung, nicht für die Dateien
   dieses: boolean;
 }
 

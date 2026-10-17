@@ -135,8 +135,9 @@ class GeraeteDienst:
                 if cur.rowcount == 0:
                     raise GeraetNichtGefunden("Kopplung nicht gefunden")
 
-    async def koppeln(self, code: str, name: str, art: str, absender: str) -> tuple[dict, str, dict]:
-        """Löst einen Code ein. Liefert (Gerät, Schlüssel im Klartext, Konto)."""
+    async def koppeln(self, code: str, name: str, art: str, absender: str, app: str | None = None) -> tuple[dict, str, dict]:
+        """Löst einen Code ein. Liefert (Gerät, Schlüssel im Klartext, Konto). Mit app gilt der Schlüssel nur als
+        Anmeldung an dieser App (siehe Schema 021)."""
         self.bremse.pruefen(absender)
         name = geraetename_pruefen(name)
         if art not in ARTEN:
@@ -154,9 +155,9 @@ class GeraeteDienst:
                         self.bremse.fehlschlag(absender)
                         raise CodeUngueltig("Dieser Code gilt nicht (mehr)")
                     await cur.execute(
-                        "INSERT INTO geraet (benutzer_id, name, art, schluessel_hash, zuletzt_am, zuletzt_adresse) "
-                        "VALUES (%s,%s,%s,%s,now(),%s) RETURNING *",
-                        (kopplung["benutzer_id"], name, art, _hash(schluessel), absender))
+                        "INSERT INTO geraet (benutzer_id, name, art, schluessel_hash, zuletzt_am, zuletzt_adresse, app) "
+                        "VALUES (%s,%s,%s,%s,now(),%s,%s) RETURNING *",
+                        (kopplung["benutzer_id"], name, art, _hash(schluessel), absender, (app or "").strip() or None))
                     geraet = await cur.fetchone()
                     await cur.execute("UPDATE kopplung SET eingeloest_am=now(), geraet_id=%s WHERE id=%s",
                                       (geraet["id"], kopplung["id"]))
@@ -174,7 +175,7 @@ class GeraeteDienst:
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
-                    "SELECT b.*, g.id AS geraet_id, g.zuletzt_am AS geraet_zuletzt_am, "
+                    "SELECT b.*, g.id AS geraet_id, g.app AS anmeldung_app, g.zuletzt_am AS geraet_zuletzt_am, "
                     "g.zuletzt_adresse AS geraet_zuletzt_adresse "
                     "FROM geraet g JOIN benutzer b ON b.id = g.benutzer_id WHERE g.schluessel_hash=%s AND b.aktiv",
                     (_hash(schluessel),))

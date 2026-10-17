@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 @router.post("/login", response_model=LoginAntwort)
 async def login(eingabe: LoginEingabe, auth=Depends(hole_auth)):
-    token = await auth.anmelden(eingabe.kennung, eingabe.passwort)
+    token = await auth.anmelden(eingabe.kennung, eingabe.passwort, eingabe.fuer_app)
     if not token:
         raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
     benutzer = await auth.sitzung_pruefen(token)
@@ -26,5 +26,5 @@ async def logout(request: Request):
 async def status(request: Request):
     benutzer = await benutzer_zum_token(request, request.headers.get("x-kellerwolke-sitzung", ""))
     if benutzer:
-        return AuthStatus(angemeldet=True, benutzer=BenutzerAus.model_validate(benutzer))
+        return AuthStatus(angemeldet=True, benutzer=BenutzerAus.model_validate(benutzer), app=benutzer.get("anmeldung_app"))
     return AuthStatus(angemeldet=False)

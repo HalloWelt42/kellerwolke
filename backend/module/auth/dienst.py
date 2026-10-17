@@ -96,7 +96,8 @@ class AuthDienst:
             async with conn.transaction():
                 await conn.execute(f"UPDATE benutzer SET {', '.join(felder)} WHERE id=%s", werte)
 
-    async def anmelden(self, kennung, klartext) -> str | None:
+    async def anmelden(self, kennung, klartext, app: str | None = None) -> str | None:
+        """Neue Sitzung bei passendem Passwort; mit app gilt sie nur als Anmeldung an dieser App."""
         async with self.pool.connection() as conn:
             # Abgelaufene Sitzungen beilaeufig aufraeumen.
             async with conn.transaction():
@@ -117,8 +118,8 @@ class AuthDienst:
             ablauf = datetime.now(timezone.utc) + timedelta(days=_GUELTIG_TAGE)
             async with conn.transaction():
                 await conn.execute(
-                    "INSERT INTO sitzung (token_hash, benutzer_id, ablauf) VALUES (%s,%s,%s)",
-                    (_token_hash(token), benutzer["id"], ablauf),
+                    "INSERT INTO sitzung (token_hash, benutzer_id, ablauf, app) VALUES (%s,%s,%s,%s)",
+                    (_token_hash(token), benutzer["id"], ablauf, (app or "").strip() or None),
                 )
             return token
 
@@ -162,7 +163,7 @@ class AuthDienst:
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
-                    "SELECT b.* FROM sitzung s JOIN benutzer b ON b.id = s.benutzer_id "
+                    "SELECT b.*, s.app AS anmeldung_app FROM sitzung s JOIN benutzer b ON b.id = s.benutzer_id "
                     "WHERE s.token_hash=%s AND s.ablauf > now() AND b.aktiv",
                     (_token_hash(token),),
                 )

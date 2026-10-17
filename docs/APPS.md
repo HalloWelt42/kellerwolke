@@ -84,3 +84,21 @@ Hauptdatei.
 
 **Fristen:** im Hintergrund 24 Stunden, zum Öffnen 12 Stunden. Wer innerhalb von 90 Sekunden abgeholt hat, gilt als
 erreichbar; sonst zeigt die Oberfläche, dass die Anfrage auf die App wartet.
+
+## Anmeldung an Apps und Dateiwahl
+
+Apps haben keine eigenen Konten; der Mensch meldet sich in einer App mit seinem Kellerwolke-Konto an (Passwort oder
+gekoppeltes Gerät). Diese Anmeldung gilt nur zur Erkennung (Entscheidung 17.10.2026, kein Dauerrecht über das Konto):
+
+- `POST /api/v1/auth/login` mit `fuer_app` und `POST /api/v1/geraete/koppeln` mit `fuer_app` liefern eine Sitzung
+  oder einen Geräteschlüssel, der den Namen der App trägt. `GET /api/v1/auth/status` nennt ihn in `app`.
+- Mit einer solchen Anmeldung gibt es keine Dateien, keine Zugänge, keine Verwaltung (403); Status und Abmelden gehen.
+- Die Geräteliste der Kellerwolke zeigt, für welche App ein Gerät gekoppelt ist.
+
+**Dateiwahl:** In der App wählt der Mensch eine Datei aus seinem ganzen Konto. Dafür schickt die App ihren
+App-Schlüssel und die Anmeldung des Menschen an genau dieser App (`X-Kellerwolke-Sitzung`) zusammen:
+
+| Weg | Zweck |
+|---|---|
+| `GET /api/v1/ablage/wahl?ordner=<id>` | Ordnerkette und Einträge (nur Name, Typ, Größe, Inhaltstyp, Datum, Begleiter), ohne Ordner das ganze Konto von oben |
+| `POST /api/v1/ablage/wahl` mit `{knoten_id, aktion}` | die Wahl stellt eine Anfrage an diese App; ab dann gilt das Recht je Anfrage |

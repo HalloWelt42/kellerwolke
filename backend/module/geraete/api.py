@@ -12,7 +12,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.abhaengig import absender, aktueller_benutzer, hole_geraete
 from module.auth.modelle import BenutzerAus
@@ -30,6 +30,7 @@ class GeraetAus(BaseModel):
     gekoppelt_am: datetime
     zuletzt_am: datetime | None
     zuletzt_adresse: str | None
+    app: str | None = None   # gekoppelt für eine eigene App (gilt nur dort zur Anmeldung)
     dieses: bool = False  # das Gerät, das gerade fragt
 
 
@@ -45,6 +46,7 @@ class KoppelnEingabe(BaseModel):
     code: str
     name: str
     art: GeraeteArt
+    fuer_app: str | None = Field(None, min_length=1, max_length=60)   # Gerät koppelt eine eigene App, nicht die Kellerwolke
 
     @field_validator("name")
     @classmethod
@@ -70,7 +72,7 @@ class UmbenennenEingabe(BaseModel):
 def _geraet(zeile: dict, benutzer: dict | None = None) -> GeraetAus:
     dieses = benutzer is not None and str(benutzer.get("geraet_id") or "") == str(zeile["id"])
     return GeraetAus(**{k: zeile[k] for k in ("id", "name", "art", "gekoppelt_am", "zuletzt_am", "zuletzt_adresse")},
-                     dieses=dieses)
+                     app=zeile.get("app"), dieses=dieses)
 
 
 def _kopplung(zeile: dict, geraet: dict | None, code: str | None = None) -> KopplungAus:
@@ -125,7 +127,7 @@ async def koppeln(eingabe: KoppelnEingabe, request: Request, geraete=Depends(hol
     """Ohne Anmeldung: der Code ist der Nachweis."""
     try:
         geraet, schluessel, benutzer = await geraete.koppeln(eingabe.code, eingabe.name, eingabe.art,
-                                                             absender(request) or "")
+                                                             absender(request) or "", eingabe.fuer_app)
     except ZuVieleVersuche as f:
         raise HTTPException(status_code=429, detail=str(f), headers={"Retry-After": str(f.sekunden)})
     except CodeUngueltig:
