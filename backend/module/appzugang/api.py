@@ -45,8 +45,15 @@ async def erneuern(zugang_id: UUID, benutzer=Depends(aktueller_benutzer), dienst
 async def aktiv_setzen(zugang_id: UUID, eingabe: AktivEingabe, benutzer=Depends(aktueller_benutzer),
                        dienst=Depends(hole_appzugang)):
     try:
-        return await dienst.aktiv_setzen(benutzer["id"], zugang_id, eingabe.aktiv)
-    except FileNotFoundError as f:
+        if eingabe.app is not None:
+            await dienst.umbenennen(benutzer["id"], zugang_id, eingabe.app)
+        if eingabe.aktiv is not None:
+            return await dienst.aktiv_setzen(benutzer["id"], zugang_id, eingabe.aktiv)
+        zugang = await dienst.zugang(benutzer["id"], zugang_id)
+        if zugang is None:
+            raise FileNotFoundError("Zugang nicht gefunden")
+        return zugang
+    except (FileNotFoundError, FileExistsError, ValueError) as f:
         raise _fehler(f) from None
 
 

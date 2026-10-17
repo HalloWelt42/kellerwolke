@@ -568,3 +568,26 @@ async def test_versionen_lesen_und_ich_mit_konto(umgebung):
     ich = (await client.get("/api/v1/ablage/ich", headers=t)).json()
     konto = (await client.get("/api/v1/auth/status", headers=sitzung)).json()["benutzer"]
     assert ich["konto"] == "chef" and ich["konto_id"] == str(konto["id"])
+
+
+async def test_zugang_umbenennen_mit_ordner(umgebung):
+    """Ein nach dem Gerät benannter Zugang wird nach seiner App benannt: Ordner zieht mit, Schlüssel und Rechte bleiben."""
+    client, sitzung = umgebung
+    z, t = await zugang(client, sitzung, "TransScript Mac M4")
+    erst = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/TransScript Mac M4/notiz.txt"}, content=b"x", headers=t)).json()
+    r = await client.patch(f"/api/v1/app-zugaenge/{z['id']}", json={"app": "Transkription"}, headers=sitzung)
+    assert r.status_code == 200, r.text
+    assert r.json()["app"] == "Transkription" and r.json()["aktiv"]
+    assert {(x["pfad"], x["recht"]) for x in r.json()["rechte"]} == {("Apps", "lesen"), ("Apps/Transkription", "schreiben")}
+    ich = (await client.get("/api/v1/ablage/ich", headers=t)).json()        # derselbe Schlüssel gilt weiter
+    assert ich["app"] == "Transkription"
+    assert (await client.get(f"/api/v1/ablage/knoten/{erst['id']}", headers=t)).json()["pfad"] == "Apps/Transkription/notiz.txt"
+    # Konflikte: Name eines anderen Zugangs, Ordner unter Apps schon belegt
+    await zugang(client, sitzung, "Vertonung")
+    assert (await client.patch(f"/api/v1/app-zugaenge/{z['id']}", json={"app": "vertonung"}, headers=sitzung)).status_code == 409
+    apps = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps"}, headers=t)).json()["id"]
+    await ordner(client, sitzung, "Belegt", apps)
+    assert (await client.patch(f"/api/v1/app-zugaenge/{z['id']}", json={"app": "Belegt"}, headers=sitzung)).status_code == 409
+    assert (await client.get("/api/v1/ablage/ich", headers=t)).json()["app"] == "Transkription"
+    # Sperren geht weiter wie bisher
+    assert (await client.patch(f"/api/v1/app-zugaenge/{z['id']}", json={"aktiv": False}, headers=sitzung)).json()["aktiv"] is False

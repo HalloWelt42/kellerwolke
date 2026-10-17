@@ -453,6 +453,10 @@ export function zugangAktiv(id: string, aktiv: boolean): Promise<AppZugang> {
   return hole<AppZugang>(`/v1/app-zugaenge/${id}`, { method: "PATCH", body: JSON.stringify({ aktiv }) });
 }
 
+export function zugangUmbenennen(id: string, app: string): Promise<AppZugang> {
+  return hole<AppZugang>(`/v1/app-zugaenge/${id}`, { method: "PATCH", body: JSON.stringify({ app }) });
+}
+
 export function zugangRechte(id: string, rechte: { knoten_id: string; recht: Recht }[]): Promise<AppZugang> {
   return hole<AppZugang>(`/v1/app-zugaenge/${id}/rechte`, { method: "PUT", body: JSON.stringify({ rechte }) });
 }

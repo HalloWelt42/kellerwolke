@@ -1842,3 +1842,7 @@ a.recht:hover {
   font-size: 0.82rem;
   color: var(--text-2);
 }
+
+/* Zugang umbenennen: Feld an Stelle des Namens */
+.umbenennen { display: flex; gap: var(--a1); align-items: center; flex-wrap: wrap; flex: 1; min-width: 0; }
+.umbenennen .feld { flex: 1 1 200px; min-width: 0; }

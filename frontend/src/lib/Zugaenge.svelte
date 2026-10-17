@@ -1,6 +1,7 @@
 <script lang="ts">
   // Zugänge für eigene Apps: Schlüssel je App, Rechte je Ordner (gemeinsame Arbeitsordner für mehrere Apps),
-  // Schlüssel nur einmal sichtbar, sperren, erneuern, entfernen. Entwurf: mockups/zugaenge.html.
+  // Schlüssel nur einmal sichtbar, sperren, erneuern, umbenennen (Ordner zieht mit), entfernen.
+  // Entwurf: mockups/zugaenge.html.
   import * as api from "./api";
   import { datum } from "./format";
   import Modal from "./Modal.svelte";
@@ -18,6 +19,7 @@
   let bearbeiten = $state<{ id: string; rechte: AppRecht[] } | null>(null);
   let ordnerWahlOffen = $state(false);
   let entfernen = $state<AppZugang | null>(null);
+  let umbenennen = $state<{ id: string; name: string } | null>(null);
   let schluesselFeld = $state<HTMLElement>();
 
   const SYMBOL: Record<string, string> = {
@@ -67,6 +69,15 @@
       neuerSchluessel = { app: neu.zugang.app, schluessel: neu.schluessel };
       kopiert = false;
       neuApp = "";
+    });
+  }
+
+  function umbenennenSpeichern() {
+    const u = umbenennen;
+    if (!u || !u.name.trim()) return;
+    tun(async () => {
+      await api.zugangUmbenennen(u.id, u.name.trim());
+      umbenennen = null;
     });
   }
 
@@ -145,7 +156,15 @@
       <div class="so-icon"><i class="fa-solid {symbol(z.app)}"></i></div>
       <div class="so-haupt">
         <div class="so-kopf">
-          <span class="so-name">{z.app}</span>
+          {#if umbenennen?.id === z.id}
+            <form class="umbenennen" onsubmit={(e) => { e.preventDefault(); umbenennenSpeichern(); }}>
+              <input class="feld" type="text" maxlength="60" list="app-namen" bind:value={umbenennen.name} aria-label="Neuer Name der App" />
+              <button class="knopf primaer klein" type="submit" disabled={!umbenennen.name.trim()}>Umbenennen</button>
+              <button class="knopf still klein" type="button" onclick={() => (umbenennen = null)}>Abbrechen</button>
+            </form>
+          {:else}
+            <span class="so-name">{z.app}</span>
+          {/if}
           {#if z.aktiv}<span class="marke-std">aktiv</span>{:else}<span class="marke-ro">gesperrt</span>{/if}
           <span class="zg-zeit">{genutzt(z)}</span>
         </div>
@@ -194,6 +213,10 @@
                     onclick={() => (bearbeiten = { id: z.id, rechte: z.rechte.map((r) => ({ ...r })) })}>
               <i class="fa-solid fa-folder-tree"></i>
             </button>
+            <button class="icon-knopf" title="Umbenennen (der Ordner unter Apps zieht mit, der Schlüssel bleibt gültig)"
+                    onclick={() => (umbenennen = { id: z.id, name: z.app })}>
+              <i class="fa-solid fa-pen"></i>
+            </button>
             <button class="icon-knopf" title="Neuen Schlüssel ausstellen (der alte gilt sofort nicht mehr)" onclick={() => erneuern(z)}>
               <i class="fa-solid fa-rotate"></i>
             </button>
@@ -214,9 +237,12 @@
   {/each}
 
   <form class="formzeile" onsubmit={anlegen}>
-    <input class="feld" type="text" maxlength="60" placeholder="Name der App (zugleich ihr Ordner unter Apps)" bind:value={neuApp} />
+    <input class="feld" type="text" maxlength="60" list="app-namen" placeholder="Name der App, etwa Transkription" bind:value={neuApp} />
     <button class="knopf primaer" type="submit" disabled={!neuApp.trim()}><i class="fa-solid fa-key"></i> Schlüssel ausstellen</button>
   </form>
+  <p class="karte-unter">Der Name ist der der App, nicht der des Geräts: er wird zugleich ihr Ordner unter Apps. Ein Zugang je
+    App genügt, auch wenn sie auf mehreren Rechnern läuft.</p>
+  <datalist id="app-namen">{#each Object.keys(SYMBOL) as n (n)}<option value={n.charAt(0).toUpperCase() + n.slice(1)}></option>{/each}</datalist>
 </div>
 
 {#if ordnerWahlOffen}

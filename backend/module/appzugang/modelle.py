@@ -35,7 +35,10 @@ class ZugangEingabe(BaseModel):
 
 
 class AktivEingabe(BaseModel):
-    aktiv: bool
+    """Sperren oder freigeben (`aktiv`) und umbenennen (`app`: Name des Zugangs und seines Ordners unter Apps)."""
+
+    aktiv: bool | None = None
+    app: str | None = Field(None, min_length=1, max_length=60)
 
 
 class RechtEingabe(BaseModel):

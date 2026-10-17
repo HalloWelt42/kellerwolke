@@ -89,6 +89,35 @@ class AppZugangDienst:
                                           [(zugang["id"], eigen["id"], "schreiben"), (zugang["id"], apps["id"], "lesen")])
         return await self.zugang(benutzer_id, zugang["id"]), schluessel
 
+    async def umbenennen(self, benutzer_id, zugang_id, neu: str) -> dict:
+        """Neuer Name eines Zugangs; sein Ordner Apps/<Name> heißt danach ebenso. Schlüssel und Rechte bleiben (Rechte
+        hängen an Ordnerkennungen). Gibt es den neuen Namen schon als Zugang oder als Ordner unter Apps, bleibt alles,
+        wie es ist."""
+        neu = app_name_pruefen(neu)
+        zugang = await self.zugang(benutzer_id, zugang_id)
+        if zugang is None:
+            raise FileNotFoundError("Zugang nicht gefunden")
+        alt = zugang["app"]
+        if alt == neu:
+            return zugang
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT 1 FROM app_zugang WHERE benutzer_id=%s AND lower(app)=lower(%s) AND id<>%s",
+                                  (benutzer_id, neu, zugang_id))
+                if await cur.fetchone():
+                    raise FileExistsError(f"Für {neu} gibt es schon einen Zugang")
+            repo = PostgresMetadataRepository(conn)
+            apps = await repo.knoten_finden(benutzer_id, None, APPS_ORDNER)
+            ordner = await repo.knoten_finden(benutzer_id, apps["id"], alt) if apps else None
+            belegt = await repo.knoten_finden(benutzer_id, apps["id"], neu) if apps else None
+        if belegt and (not ordner or belegt["id"] != ordner["id"]):
+            raise FileExistsError(f"Unter Apps gibt es schon {neu}; erst dort aufräumen")
+        if ordner:
+            await self.speicher.umbenennen(benutzer_id, ordner["id"], neu)
+        async with self.pool.connection() as conn:
+            await conn.execute("UPDATE app_zugang SET app=%s WHERE id=%s AND benutzer_id=%s", (neu, zugang_id, benutzer_id))
+        return await self.zugang(benutzer_id, zugang_id)
+
     async def erneuern(self, benutzer_id, zugang_id) -> str:
         """Neuer Schlüssel für einen bestehenden Zugang; der alte gilt sofort nicht mehr."""
         schluessel = _neuer_schluessel()
