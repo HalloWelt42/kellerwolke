@@ -78,6 +78,12 @@ async def test_recht_gilt_nur_waehrend_der_anfrage(umgebung):
     r = await client.put(f"/api/v1/ablage/knoten/{ton}/begleiter/transkript", params={"zusatz": ".transkript.json"},
                          content=b'{"v":2}', headers={**mit, "Content-Type": "application/json", "If-Match": transkript["etag"]})
     assert r.status_code == 200, r.text
+    # eine neue Version per Kennung zählt das Recht an der Datei selbst (nicht im Ordner)
+    r = await client.put(f"/api/v1/ablage/knoten/{transkript['id']}/inhalt", content=b'{"v":3}',
+                         headers={**mit, "Content-Type": "application/json", "If-Match": r.json()["etag"]})
+    assert r.status_code == 200, r.text
+    assert (await client.put(f"/api/v1/ablage/knoten/{text}/inhalt", content=b"x",
+                             headers={**mit, "If-Match": "egal"})).status_code == 404
     r = await client.put(f"/api/v1/ablage/knoten/{text}/begleiter/sprache", params={"zusatz": ".sprache.mp3"},
                          content=b"x", headers=mit)
     assert r.status_code == 404

@@ -251,10 +251,14 @@ async def inhalt_schreiben(knoten_id: UUID, request: Request, akteur=Depends(akt
                            suche=Depends(hole_suche), vorgaenge=Depends(hole_vorgaenge)):
     """Neue Version einer vorhandenen Datei per Kennung; braucht If-Match."""
     try:
-        if not request.headers.get("if-match"):
+        etag, _ = _bedingung(request)
+        if not etag:
             raise VorbedingungFehlt("Überschreiben nur mit If-Match (zuletzt gelesener ETag)")
-        pfad = await ablage.pfad_von(akteur, knoten_id)
-        return await _schreiben(request, pfad, akteur, ablage, suche, vorgaenge)
+        quelle = StromLeser(request.stream(), asyncio.get_running_loop())
+        knoten, _, _ = await ablage.neue_version(akteur, knoten_id, quelle, EINSTELLUNGEN.max_upload, etag,
+                                                 request.headers.get("content-type"))
+        indizierung_starten(vorgaenge, suche, ablage.speicher, akteur.benutzer_id, knoten)
+        return knoten
     except _FEHLER as f:
         raise _fehler(f) from None
 

@@ -417,6 +417,17 @@ class AblageDienst:
                 break
         return aus
 
+    async def neue_version(self, akteur: AppAkteur, knoten_id, quelle, max_bytes: int, etag: str | None,
+                           inhaltstyp: str | None = None) -> tuple[dict, str, int]:
+        """Neue Version einer Datei per Kennung: es zählt das Recht an der Datei selbst (so darf eine App mit einer
+        offenen Anfrage die Begleiter der angefragten Datei überschreiben, ohne Recht im Ordner)."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id, "schreiben")
+        if knoten["typ"] != "datei" or knoten["parent_id"] is None:
+            raise Unsichtbar("Keine Datei")
+        async with self.pool.connection() as conn:
+            eltern = await PostgresMetadataRepository(conn).knoten_holen(knoten["parent_id"])
+        return await self._in_ordner_schreiben(akteur, eltern, knoten["name"], quelle, max_bytes, etag, False, inhaltstyp)
+
     async def pfad_von(self, akteur: AppAkteur, knoten_id) -> str:
         """Pfad einer Datei, auf die die App schreiben darf (für Schreiben per Kennung)."""
         knoten, _ = await self.mit_recht(akteur, knoten_id, "schreiben")
