@@ -137,6 +137,7 @@ async def geteilt_inhalt(knoten_id: UUID, request: Request,
     if ergebnis is None:
         raise HTTPException(status_code=404, detail="Nicht gefunden")
     knoten, gesamt = ergebnis
+    typ = await speicher.inhaltstyp(knoten)
     kopf = {
         "Content-Disposition": dateiname_kopf(knoten["name"]),
         "Accept-Ranges": "bytes",
@@ -146,13 +147,13 @@ async def geteilt_inhalt(knoten_id: UUID, request: Request,
         kopf["Content-Length"] = str(gesamt)
         return StreamingResponse(
             speicher.geteilt_datei_stroemen(benutzer["id"], knoten_id),
-            media_type="application/octet-stream", headers=kopf,
+            media_type=typ, headers=kopf,
         )
     kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
     kopf["Content-Length"] = str(ende - start + 1)
     return StreamingResponse(
         speicher.geteilt_datei_stroemen(benutzer["id"], knoten_id, start, ende - start + 1),
-        status_code=206, media_type="application/octet-stream", headers=kopf,
+        status_code=206, media_type=typ, headers=kopf,
     )
 
 
@@ -296,6 +297,7 @@ async def herunterladen(knoten_id: UUID, request: Request,
     if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
         raise HTTPException(status_code=404, detail="Datei nicht gefunden")
     gesamt = await speicher.datei_groesse(benutzer["id"], knoten_id)
+    typ = await speicher.inhaltstyp(knoten)
     kopf = {
         "Content-Disposition": dateiname_kopf(knoten["name"]),
         "ETag": knoten["etag"] or "",
@@ -310,13 +312,13 @@ async def herunterladen(knoten_id: UUID, request: Request,
         kopf["Content-Length"] = str(gesamt)
         return StreamingResponse(
             speicher.datei_stroemen(benutzer["id"], knoten_id),
-            media_type="application/octet-stream", headers=kopf,
+            media_type=typ, headers=kopf,
         )
     kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
     kopf["Content-Length"] = str(ende - start + 1)
     return StreamingResponse(
         speicher.datei_stroemen(benutzer["id"], knoten_id, start, ende - start + 1),
-        status_code=206, media_type="application/octet-stream", headers=kopf,
+        status_code=206, media_type=typ, headers=kopf,
     )
 
 

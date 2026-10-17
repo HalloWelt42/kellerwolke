@@ -351,6 +351,11 @@ class PostgresMetadataRepository:
         # ON DELETE CASCADE raeumt Kinder, Versionen und Chunks mit ab.
         await self.conn.execute("DELETE FROM knoten WHERE id = ANY(%s)", (wurzeln,))
 
+    async def inhaltstyp(self, knoten_id) -> str | None:
+        """Gespeicherter Inhaltstyp einer Datei (von der schreibenden App) oder None."""
+        zeile = await self._eine("SELECT inhaltstyp FROM datei_meta WHERE knoten_id=%s", (knoten_id,))
+        return zeile["inhaltstyp"] if zeile else None
+
     async def pfad_namen(self, knoten_id) -> list[str]:
         """Namen vom Wurzelordner bis zum Knoten, für Pfadangaben (leer, wenn es den Knoten nicht gibt)."""
         zeilen = await self._alle(

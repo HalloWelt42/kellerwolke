@@ -277,3 +277,70 @@ async def test_grosser_strom_und_grenze(umgebung, tmp_path, monkeypatch):
     assert r.status_code == 413
     assert sorted(p.name for p in tmp_path.rglob("*") if p.is_file()) == vorher                # keine Reste im Pool
     assert (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Transkription/zu-gross.bin"}, headers=t)).status_code == 404
+
+
+# --- K4: Metadaten (Inhaltstyp, App, Felder) und Herkunft --------------------------------------------------------
+
+async def test_inhaltstyp_app_und_felder(umgebung):
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    r = await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/a.vtt"}, content=b"WEBVTT", headers=t)
+    k = r.json()
+    assert k["inhaltstyp"] == "text/vtt" and k["app"] == "Transkription" and k["felder"] == {}       # aus dem Namen
+    r = await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/roh"}, content=b"{}",
+                         headers={**t, "Content-Type": "application/json; charset=utf-8"})
+    assert r.json()["inhaltstyp"] == "application/json"                                                # vom Schreiber
+    inhalt = await client.get(f"/api/v1/ablage/knoten/{k['id']}/inhalt", headers=t)
+    assert inhalt.headers["content-type"].startswith("text/vtt")
+    browser = await client.get(f"/api/v1/dateien/{k['id']}/inhalt", headers=sitzung)
+    assert browser.headers["content-type"].startswith("text/vtt")                                     # auch im Browser
+    r = await client.patch(f"/api/v1/ablage/knoten/{k['id']}/felder", json={"felder": {"sprache": "de", "dauer_s": 52.4}}, headers=t)
+    assert r.status_code == 200 and r.json()["felder"] == {"sprache": "de", "dauer_s": 52.4}
+    r = await client.patch(f"/api/v1/ablage/knoten/{k['id']}/felder", json={"felder": {"dauer_s": None, "modell": "w"}}, headers=t)
+    assert r.json()["felder"] == {"sprache": "de", "modell": "w"}                                      # null entfernt
+    kinder = (await client.get(f"/api/v1/ablage/knoten/{k['parent_id']}/kinder", headers=t)).json()
+    assert next(x for x in kinder if x["id"] == k["id"])["felder"]["sprache"] == "de"
+    # zu groß
+    r = await client.patch(f"/api/v1/ablage/knoten/{k['id']}/felder", json={"felder": {"x": "a" * 70000}}, headers=t)
+    assert r.status_code == 422
+
+
+async def test_felder_nur_mit_schreibrecht_und_suche_nur_im_sichtbaren(umgebung, pool):
+    client, sitzung = umgebung
+    privat = await ordner(client, sitzung, "Privat")
+    _, t = await zugang(client, sitzung, "Transkription")
+    _, s = await zugang(client, sitzung, "Stimmenausgabe")
+    a = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/a.json"}, content=b"{}", headers=t)).json()
+    await client.patch(f"/api/v1/ablage/knoten/{a['id']}/felder", json={"felder": {"sprache": "de"}}, headers=t)
+    assert (await client.patch(f"/api/v1/ablage/knoten/{a['id']}/felder", json={"felder": {"x": 1}}, headers=s)).status_code == 403
+    # eine Datei mit passendem Feld, die keine App sehen darf
+    geheim = await datei(client, sitzung, "geheim.json", b"{}", privat)
+    from module.ablage import metadaten
+    async with pool.connection() as conn:                                                              # Feld direkt setzen
+        await metadaten.felder_mischen(conn, geheim, {"sprache": "de"}, "Konto")
+    treffer = (await client.post("/api/v1/ablage/suche", json={"felder": {"sprache": "de"}}, headers=s)).json()
+    assert [x["id"] for x in treffer] == [a["id"]]
+    assert (await client.post("/api/v1/ablage/suche", json={"felder": {"sprache": "en"}}, headers=s)).json() == []
+
+
+async def test_herkunft_ueberlebt_umbenennen_und_bleibt_privat(umgebung):
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    _, v = await zugang(client, sitzung, "Vertonung")
+    ton = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Vertonung/video.wav"}, content=b"RIFF", headers=v)).json()
+    text = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/video.json"}, content=b"{}", headers=t)).json()
+    r = await client.post(f"/api/v1/ablage/knoten/{text['id']}/herkunft", json={"von_id": ton["id"], "art": "transkript_zu"}, headers=t)
+    assert r.status_code == 200 and r.json()[0]["art"] == "transkript_zu" and r.json()[0]["app"] == "Transkription"
+    # Vertonung sieht den Bezug von ihrer Seite aus (sie darf Apps lesen)
+    bezuege = (await client.get(f"/api/v1/ablage/knoten/{ton['id']}/herkunft", headers=v)).json()
+    assert [(b["von_id"], b["zu_id"]) for b in bezuege] == [(ton["id"], text["id"])]
+    # Umbenennen ändert nichts am Bezug
+    await client.patch(f"/api/v1/dateien/{ton['id']}/name", json={"name": "neu.wav"}, headers=sitzung)
+    assert len((await client.get(f"/api/v1/ablage/knoten/{text['id']}/herkunft", headers=t)).json()) == 1
+    # Rechte: Bezug nur mit Schreibrecht auf die neue Datei, Art nur in der erlaubten Form, nicht auf sich selbst
+    assert (await client.post(f"/api/v1/ablage/knoten/{ton['id']}/herkunft", json={"von_id": text["id"], "art": "x"}, headers=t)).status_code == 403
+    assert (await client.post(f"/api/v1/ablage/knoten/{text['id']}/herkunft", json={"von_id": ton["id"], "art": "Transkript"}, headers=t)).status_code == 422
+    assert (await client.post(f"/api/v1/ablage/knoten/{text['id']}/herkunft", json={"von_id": text["id"], "art": "x"}, headers=t)).status_code == 422
+    # entfernen
+    r = await client.delete(f"/api/v1/ablage/knoten/{text['id']}/herkunft", params={"von_id": ton["id"], "art": "transkript_zu"}, headers=t)
+    assert r.status_code == 204 and (await client.get(f"/api/v1/ablage/knoten/{text['id']}/herkunft", headers=t)).json() == []

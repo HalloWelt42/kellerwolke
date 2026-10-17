@@ -8,6 +8,8 @@ Dateiarbeit erledigt der Speicherdienst des Kerns.
 from __future__ import annotations
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
+from app.inhaltstyp import inhaltstyp_aus_kopf, inhaltstyp_aus_name
+from module.ablage import metadaten
 from module.appzugang.dienst import AppAkteur, AppZugangDienst
 from module.speicher.dienst import Bedingung
 
@@ -47,6 +49,15 @@ def _hoeher(a: str | None, b: str | None) -> str | None:
     return None
 
 
+def _meta_felder(knoten: dict, meta: dict | None) -> dict:
+    """Inhaltstyp, App und Felder für die Ansicht; ohne gespeicherten Typ aus dem Namen."""
+    typ = (meta or {}).get("inhaltstyp")
+    if knoten["typ"] == "datei" and not typ:
+        typ = inhaltstyp_aus_name(knoten["name"])
+    return {"inhaltstyp": typ if knoten["typ"] == "datei" else None, "app": (meta or {}).get("app"),
+            "felder": (meta or {}).get("felder") or {}}
+
+
 class AblageDienst:
     def __init__(self, pool, speicher, zugang: AppZugangDienst) -> None:
         self.pool = pool
@@ -69,7 +80,8 @@ class AblageDienst:
             if knoten["typ"] == "datei" and knoten["aktuelle_version_id"]:
                 version = await repo.version_holen(knoten["aktuelle_version_id"])
                 groesse = version["groesse"] if version else None
-        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse}
+            meta = (await metadaten.meta_holen(conn, [knoten["id"]])).get(knoten["id"])
+        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse, **_meta_felder(knoten, meta)}
 
     async def knoten(self, akteur: AppAkteur, knoten_id) -> dict:
         return await self._ansicht(*await self.mit_recht(akteur, knoten_id))
@@ -92,13 +104,15 @@ class AblageDienst:
             repo = PostgresMetadataRepository(conn)
             basis = "/".join(await repo.pfad_namen(ordner["id"]))
             kinder = await repo.kinder_seite(ordner["id"], max(0, ab), anzahl)
+            metas = await metadaten.meta_holen(conn, [k["id"] for k in kinder])
             eigene = {}
             if kinder:
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT knoten_id, recht FROM app_recht WHERE zugang_id=%s AND knoten_id = ANY(%s)",
                                       (akteur.zugang_id, [k["id"] for k in kinder]))
                     eigene = {k: r for k, r in await cur.fetchall()}
-        return [{**k, "pfad": f"{basis}/{k['name']}", "recht": _hoeher(recht, eigene.get(k["id"]))} for k in kinder]
+        return [{**k, "pfad": f"{basis}/{k['name']}", "recht": _hoeher(recht, eigene.get(k["id"])), **_meta_felder(k, metas.get(k["id"]))}
+                for k in kinder]
 
     async def ordner_anlegen(self, akteur: AppAkteur, pfad: str) -> dict:
         """Legt fehlende Ordner entlang des Pfads an (wie mkdir -p). Anlegen braucht Schreibrecht im jeweiligen
@@ -122,7 +136,8 @@ class AblageDienst:
         return await self.knoten(akteur, aktuell)
 
     async def datei_schreiben(self, akteur: AppAkteur, pfad: str, quelle, max_bytes: int,
-                              etag: str | None = None, nur_neu: bool = False) -> tuple[dict, str, int]:
+                              etag: str | None = None, nur_neu: bool = False,
+                              inhaltstyp: str | None = None) -> tuple[dict, str, int]:
         """Legt eine Datei an oder schreibt eine neue Version. Der Elternordner muss existieren und beschreibbar sein.
         Eine vorhandene Datei überschreibt eine App nur mit dem zuletzt gelesenen Stand (etag) oder gar nicht
         (nur_neu); geprüft wird endgültig im Speicherkern unter Sperre. Liefert (Knoten, Blob-Hash, Größe)."""
@@ -143,7 +158,66 @@ class AblageDienst:
             raise VorbedingungFehlt("Die Datei gibt es schon: überschreiben nur mit If-Match (zuletzt gelesener ETag)")
         knoten, blob_hash, groesse = await self.speicher.datei_hochladen_strom(
             akteur.benutzer_id, eltern["id"], teile[-1], quelle, max_bytes, Bedingung(etag=etag, nur_neu=nur_neu))
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await metadaten.meta_schreiben(conn, knoten["id"], inhaltstyp_aus_kopf(inhaltstyp, teile[-1]), akteur.app)
         return await self._ansicht(knoten, "schreiben"), blob_hash, groesse
+
+    # --- Metadaten und Herkunft -------------------------------------------------------------------------------
+
+    async def felder_setzen(self, akteur: AppAkteur, knoten_id, aenderung: dict) -> dict:
+        knoten, recht = await self.mit_recht(akteur, knoten_id, "schreiben")
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await metadaten.felder_mischen(conn, knoten_id, aenderung, akteur.app)
+        return await self._ansicht(knoten, recht)
+
+    async def herkunft_setzen(self, akteur: AppAkteur, zu_id, von_id, art: str) -> list[dict]:
+        """zu entstand aus von (zum Beispiel ein Transkript aus einer Aufnahme). Schreibrecht auf zu, Leserecht auf von."""
+        await self.mit_recht(akteur, zu_id, "schreiben")
+        await self.mit_recht(akteur, von_id, "lesen")
+        if str(zu_id) == str(von_id):
+            raise ValueError("Eine Datei stammt nicht von sich selbst")
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await metadaten.herkunft_setzen(conn, von_id, zu_id, art, akteur.app)
+        return await self.herkunft(akteur, zu_id)
+
+    async def herkunft_entfernen(self, akteur: AppAkteur, zu_id, von_id, art: str) -> None:
+        await self.mit_recht(akteur, zu_id, "schreiben")
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                if not await metadaten.herkunft_entfernen(conn, von_id, zu_id, art):
+                    raise Unsichtbar("Diesen Bezug gibt es nicht")
+
+    async def herkunft(self, akteur: AppAkteur, knoten_id) -> list[dict]:
+        """Bezüge in beide Richtungen; der jeweils andere Knoten nur, wenn die App ihn sehen darf."""
+        await self.mit_recht(akteur, knoten_id)
+        async with self.pool.connection() as conn:
+            bezuege = await metadaten.herkunft_von(conn, knoten_id)
+        aus = []
+        for b in bezuege:
+            anderer = b["zu_id"] if str(b["von_id"]) == str(knoten_id) else b["von_id"]
+            _, recht = await self.zugang.recht(akteur, anderer)
+            if recht:
+                aus.append(b)
+        return aus
+
+    async def suchen(self, akteur: AppAkteur, bedingung: dict, anzahl: int = 100) -> list[dict]:
+        """Dateien, deren Felder die Bedingung enthalten, soweit die App sie sehen darf."""
+        if not bedingung:
+            raise ValueError("Bedingung fehlt")
+        anzahl = max(1, min(anzahl, MAX_SEITE))
+        async with self.pool.connection() as conn:
+            ids = await metadaten.suche_felder(conn, akteur.benutzer_id, bedingung, anzahl * 4)
+        aus = []
+        for i in ids:
+            knoten, recht = await self.zugang.recht(akteur, i)
+            if recht:
+                aus.append(await self._ansicht(knoten, recht))
+            if len(aus) >= anzahl:
+                break
+        return aus
 
     async def pfad_von(self, akteur: AppAkteur, knoten_id) -> str:
         """Pfad einer Datei, auf die die App schreiben darf (für Schreiben per Kennung)."""
@@ -154,10 +228,13 @@ class AblageDienst:
             return "/".join(await PostgresMetadataRepository(conn).pfad_namen(knoten_id))
 
     async def datei_kopf(self, akteur: AppAkteur, knoten_id) -> tuple[dict, int]:
-        knoten, _ = await self.mit_recht(akteur, knoten_id)
+        """Knoten (mit Inhaltstyp) und Größe einer lesbaren Datei."""
+        knoten, recht = await self.mit_recht(akteur, knoten_id)
         if knoten["typ"] != "datei":
             raise Unsichtbar("Keine Datei")
-        return knoten, await self.speicher.datei_groesse(akteur.benutzer_id, knoten_id)
+        async with self.pool.connection() as conn:
+            meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
+        return {**knoten, **_meta_felder(knoten, meta)}, await self.speicher.datei_groesse(akteur.benutzer_id, knoten_id)
 
     def datei_stroemen(self, akteur: AppAkteur, knoten_id, start: int = 0, laenge: int = -1):
         """Nur nach datei_kopf aufrufen (dort ist das Recht geprüft)."""

@@ -3,7 +3,7 @@
 
 import asyncio
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -32,8 +32,35 @@ class AblageKnotenAus(BaseModel):
     recht: Literal["lesen", "schreiben"]
     etag: str | None = None
     groesse: int | None = None
+    inhaltstyp: str | None = None
+    app: str | None = None                   # App, die zuletzt geschrieben hat
+    felder: dict[str, Any] = Field(default_factory=dict)
     erstellt_am: datetime
     geaendert_am: datetime
+
+
+class FelderEingabe(BaseModel):
+    """Felder einmischen; ein Feld mit null wird entfernt."""
+
+    felder: dict[str, Any]
+
+
+class HerkunftEingabe(BaseModel):
+    von_id: UUID
+    art: str = Field(pattern=r"^[a-z][a-z_]{0,39}$", description="etwa abgeleitet_von, transkript_zu, quelltext_zu")
+
+
+class HerkunftAus(BaseModel):
+    von_id: UUID
+    zu_id: UUID
+    art: str
+    app: str | None = None
+    erstellt_am: datetime
+
+
+class SucheEingabe(BaseModel):
+    felder: dict[str, Any] = Field(min_length=1)
+    anzahl: int = Field(100, ge=1, le=500)
 
 
 class IchAus(BaseModel):
@@ -75,7 +102,8 @@ def _bedingung(request: Request) -> tuple[str | None, bool]:
 async def _schreiben(request: Request, pfad: str, akteur, ablage, suche, vorgaenge) -> dict:
     etag, nur_neu = _bedingung(request)
     quelle = StromLeser(request.stream(), asyncio.get_running_loop())
-    knoten, blob_hash, groesse = await ablage.datei_schreiben(akteur, pfad, quelle, EINSTELLUNGEN.max_upload, etag, nur_neu)
+    knoten, blob_hash, groesse = await ablage.datei_schreiben(akteur, pfad, quelle, EINSTELLUNGEN.max_upload, etag, nur_neu,
+                                                              request.headers.get("content-type"))
 
     # Wie beim Hochladen im Browser: der Suchindex läuft als Hintergrund-Vorgang und liest den Inhalt nur, wenn die
     # Extraktion ihn nutzt.
@@ -138,11 +166,11 @@ async def inhalt(knoten_id: UUID, request: Request, akteur=Depends(aktuelle_app)
     start, ende = bereich_aus_kopf(request.headers.get("range"), gesamt)
     if start is None:
         kopf["Content-Length"] = str(gesamt)
-        return StreamingResponse(ablage.datei_stroemen(akteur, knoten_id), media_type="application/octet-stream", headers=kopf)
+        return StreamingResponse(ablage.datei_stroemen(akteur, knoten_id), media_type=knoten["inhaltstyp"], headers=kopf)
     kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
     kopf["Content-Length"] = str(ende - start + 1)
     return StreamingResponse(ablage.datei_stroemen(akteur, knoten_id, start, ende - start + 1), status_code=206,
-                             media_type="application/octet-stream", headers=kopf)
+                             media_type=knoten["inhaltstyp"], headers=kopf)
 
 
 @router.put("/datei", response_model=AblageKnotenAus)
@@ -165,5 +193,48 @@ async def inhalt_schreiben(knoten_id: UUID, request: Request, akteur=Depends(akt
             raise VorbedingungFehlt("Überschreiben nur mit If-Match (zuletzt gelesener ETag)")
         pfad = await ablage.pfad_von(akteur, knoten_id)
         return await _schreiben(request, pfad, akteur, ablage, suche, vorgaenge)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.patch("/knoten/{knoten_id}/felder", response_model=AblageKnotenAus)
+async def felder(knoten_id: UUID, eingabe: FelderEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    try:
+        return await ablage.felder_setzen(akteur, knoten_id, eingabe.felder)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/knoten/{knoten_id}/herkunft", response_model=list[HerkunftAus])
+async def herkunft(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    try:
+        return await ablage.herkunft(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.post("/knoten/{knoten_id}/herkunft", response_model=list[HerkunftAus])
+async def herkunft_setzen(knoten_id: UUID, eingabe: HerkunftEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Diese Datei (knoten_id) entstand aus von_id."""
+    try:
+        return await ablage.herkunft_setzen(akteur, knoten_id, eingabe.von_id, eingabe.art)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.delete("/knoten/{knoten_id}/herkunft", status_code=204)
+async def herkunft_entfernen(knoten_id: UUID, von_id: UUID, art: str = Query(pattern=r"^[a-z][a-z_]{0,39}$"),
+                             akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    try:
+        await ablage.herkunft_entfernen(akteur, knoten_id, von_id, art)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.post("/suche", response_model=list[AblageKnotenAus])
+async def suche(eingabe: SucheEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Dateien, deren Felder alle angegebenen Werte enthalten (soweit die App sie sehen darf)."""
+    try:
+        return await ablage.suchen(akteur, eingabe.felder, eingabe.anzahl)
     except _FEHLER as f:
         raise _fehler(f) from None

@@ -19,6 +19,7 @@ from app.adapters.externe_quelle import DateibaumQuelle
 from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.config import EINSTELLUNGEN
+from app.inhaltstyp import inhaltstyp_aus_name
 from app.io_pool import im_thread
 from app.ports import SpeicherNichtVerfuegbar
 
@@ -674,6 +675,12 @@ class SpeicherDienst:
                     except SpeicherNichtVerfuegbar:
                         pass
             raise
+
+    async def inhaltstyp(self, knoten) -> str:
+        """Inhaltstyp für die Auslieferung: gespeichert (von der schreibenden App) oder aus dem Namen."""
+        async with self.pool.connection() as conn:
+            typ = await PostgresMetadataRepository(conn).inhaltstyp(knoten["id"])
+        return typ or inhaltstyp_aus_name(knoten["name"])
 
     async def datei_groesse(self, besitzer_id, knoten_id) -> int:
         """Groesse der aktuellen Version, OHNE den Inhalt zu lesen. Der Range-
