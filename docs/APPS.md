@@ -11,6 +11,8 @@ sprechen die Ablage-Schnittstelle unter `/api/v1/ablage`.
 - Was außerhalb der Rechte liegt, gibt es für die App nicht (404). Lesen ja, schreiben nein: 403.
 - Überschreiben nur mit dem zuletzt gelesenen Stand (`If-Match`), sonst 428; `If-None-Match: *` legt nur neu an.
 - Löschen legt in den Papierkorb; endgültig löscht nur das Konto.
+- Verschieben und Umbenennen (`POST /api/v1/ablage/knoten/{id}/ort` mit `{ordner_id, name}`) gehen innerhalb der
+  Schreibrechte; Begleitdateien ziehen mit, ein freigegebener Ordner selbst bleibt stehen.
 
 ## Begleitdateien
 

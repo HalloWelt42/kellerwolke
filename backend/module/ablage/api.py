@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from psycopg.errors import UniqueViolation
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.abhaengig import aktuelle_app, hole_ablage, hole_melder, hole_suche, hole_vorgaenge
@@ -54,6 +55,11 @@ class AblageKnotenAus(BaseModel):
     rolle: str | None = None                 # ein Begleiter: seine Rolle (transkript, untertitel, sprache ...)
     erstellt_am: datetime
     geaendert_am: datetime
+
+
+class UmziehenEingabe(BaseModel):
+    ordner_id: UUID
+    name: str | None = Field(None, min_length=1, max_length=255, description="neuer Name; leer: bleibt")
 
 
 class AnhaengenEingabe(BaseModel):
@@ -249,6 +255,18 @@ async def inhalt_schreiben(knoten_id: UUID, request: Request, akteur=Depends(akt
             raise VorbedingungFehlt("Überschreiben nur mit If-Match (zuletzt gelesener ETag)")
         pfad = await ablage.pfad_von(akteur, knoten_id)
         return await _schreiben(request, pfad, akteur, ablage, suche, vorgaenge)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.post("/knoten/{knoten_id}/ort", response_model=AblageKnotenAus)
+async def umziehen(knoten_id: UUID, eingabe: UmziehenEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Verschieben und auf Wunsch umbenennen, innerhalb der Schreibrechte; Begleiter ziehen mit (eine Gruppe zieht
+    gemeinsam um), ein belegter Name ändert nichts (409)."""
+    try:
+        return await ablage.umziehen(akteur, knoten_id, eingabe.ordner_id, eingabe.name)
+    except UniqueViolation:
+        raise HTTPException(status_code=409, detail="Name im Zielordner bereits vergeben") from None
     except _FEHLER as f:
         raise _fehler(f) from None
 

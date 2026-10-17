@@ -303,6 +303,29 @@ class AblageDienst:
             raise Gesperrt(fremd)
         await self.speicher.loeschen(akteur.benutzer_id, knoten_id)
 
+    async def umziehen(self, akteur: AppAkteur, knoten_id, ordner_id, name: str | None = None) -> dict:
+        """Verschiebt (und benennt auf Wunsch um) innerhalb der Schreibrechte der App; eine Gruppe zieht gemeinsam um.
+        Ein freigegebener Ordner selbst und was eine andere App gesperrt hat, bleiben."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id, "schreiben")
+        ziel, _ = await self.mit_recht(akteur, ordner_id, "schreiben")
+        if ziel["typ"] != "ordner":
+            raise ValueError("Ziel ist kein Ordner")
+        if knoten["parent_id"] is not None:
+            await self.mit_recht(akteur, knoten["parent_id"], "schreiben")
+        neuer_name = name_pruefen(name) if name else None
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT 1 AS anker FROM app_recht WHERE knoten_id=%s LIMIT 1", (knoten_id,))
+                if await cur.fetchone():
+                    raise KeinSchreibrecht("Ein freigegebener Ordner lässt sich nur am Rechner verschieben")
+            fremd = await PostgresMetadataRepository(conn).fremde_sperre(knoten_id, akteur.zugang_id)
+        if fremd:
+            raise Gesperrt(fremd)
+        neu = await self.speicher.umziehen(akteur.benutzer_id, knoten_id, ordner_id, neuer_name)
+        if neu is None:
+            raise Unsichtbar("Nicht gefunden")
+        return await self._ansicht(neu, "schreiben")
+
     # --- Bearbeitungssperre -----------------------------------------------------------------------------------
 
     async def sperren(self, akteur: AppAkteur, knoten_id, dauer_s: int, grund: str = "") -> dict:

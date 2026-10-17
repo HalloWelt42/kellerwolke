@@ -253,3 +253,20 @@ async def test_papierkorb_leeren_nimmt_die_begleiter_mit(umgebung, pool):
     async with pool.connection() as conn:
         cur = await conn.execute("SELECT count(*) FROM knoten WHERE id = ANY(%s)", ([ton, t, s],))
         assert (await cur.fetchone())[0] == 0
+
+
+async def test_app_verschiebt_eine_gruppe_in_ihrem_zweig(umgebung):
+    client, sitzung = umgebung
+    kopf, eigen, unter, ton, t, s = await _gruppe(client, sitzung)
+    ziel = (await client.post("/api/v1/ablage/ordner", json={"pfad": "Apps/Transkription/Archiv"}, headers=kopf)).json()["id"]
+    r = await client.post(f"/api/v1/ablage/knoten/{t}/ort", json={"ordner_id": ziel}, headers=kopf)
+    assert r.status_code == 200, r.text
+    assert set(await _namen(client, sitzung, ziel)) == {"Runde.wav", "Runde.transkript.json", "Runde.srt"}
+    r = await client.post(f"/api/v1/ablage/knoten/{ton}/ort", json={"ordner_id": unter, "name": "Planung.wav"}, headers=kopf)
+    assert r.status_code == 200 and r.json()["name"] == "Planung.wav"
+    assert set(await _namen(client, sitzung, unter)) == {"Planung.wav", "Planung.transkript.json", "Planung.srt"}
+    # aus dem eigenen Zweig heraus nicht (dort darf die App nur lesen)
+    apps = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps"}, headers=kopf)).json()["id"]
+    assert (await client.post(f"/api/v1/ablage/knoten/{ton}/ort", json={"ordner_id": apps}, headers=kopf)).status_code == 403
+    # den freigegebenen Ordner selbst nicht
+    assert (await client.post(f"/api/v1/ablage/knoten/{eigen}/ort", json={"ordner_id": unter}, headers=kopf)).status_code == 403
