@@ -52,3 +52,35 @@ Schreiben braucht Leserecht auf die Hauptdatei und Schreibrecht in ihrem Ordner.
 Herkunft (von der Hauptdatei, Art = Rolle). Knoten in Listen und Einzelabfragen nennen `haupt_id` und `rolle`, in der
 Oberfläche zählt `begleiter_anzahl` die lebenden Begleiter einer Hauptdatei. Regeln und Namen stehen an einer Stelle in
 `backend/module/speicher/begleiter.py`, die Durchsetzung im Speicherdienst.
+
+## Aktionen und Anfragen
+
+Apps bieten dem Konto an, was sie mit Dateien können (Entscheidung 17.10.2026); das Dateimenü der Kellerwolke zeigt es
+unter "Mit Apps". Eine Anfrage heißt: App X soll Aktion A auf Datei D ausführen. Sie entsteht im Dateimenü, oder eine
+App gibt sie an eine andere weiter.
+
+**Recht je Anfrage:** Solange eine Anfrage offen ist (wartet oder läuft, nicht abgelaufen), darf die angefragte App
+genau diese Datei lesen und ihre Begleiter schreiben, sonst nichts außerhalb ihrer Ordner. Dafür schickt sie bei jedem
+Zugriff den Kopf `X-Kellerwolke-Anfrage: <id>` mit ihrem App-Schlüssel; ist die Anfrage fertig, abgebrochen oder
+abgelaufen, gibt es 403. Ein zweites Geheimnis gibt es nicht.
+
+| Weg | Zweck |
+|---|---|
+| `PUT /api/v1/ablage/aktionen` | die App meldet ihre Aktionen (ersetzt die Liste) und die Adresse ihrer Oberfläche |
+| `GET /api/v1/ablage/anfragen?warten=25` | wartende Anfragen abholen, älteste zuerst; ohne Anfrage wartet es bis zu 30 s; zugleich Lebenszeichen |
+| `POST /api/v1/ablage/anfragen/{id}/annehmen` | ab jetzt läuft sie |
+| `PATCH /api/v1/ablage/anfragen/{id}` | Fortschritt (0 bis 1), Meldung, Ende (`fertig` mit `ergebnis_id` oder `fehler`); 409, wenn abgebrochen: dann aufhören |
+| `GET /api/v1/ablage/anfragen/{id}` | Stand einer Anfrage (etwa nach einem Neustart oder für eine weitergegebene) |
+| `POST /api/v1/ablage/anfragen` mit `{app, aktion, knoten_id}` | an eine andere App weitergeben; wer weitergibt, muss die Datei lesen und neben ihr schreiben dürfen |
+| `GET /api/v1/dateien/{id}/aktionen` (Oberfläche) | was die Apps mit dieser Datei können |
+| `POST /api/v1/anfragen` (Oberfläche) | Anfrage stellen; bei Aktionen zum Öffnen kommt die Adresse in der App zurück |
+| `GET /api/v1/anfragen`, `DELETE .../{id}`, `POST .../aufraeumen` (Oberfläche) | ansehen, abbrechen, aufräumen |
+
+**Aktion:** Kennung, Titel (und `titel_erneut`, wenn der Begleiter ihrer Rolle schon da ist, etwa "Neu
+transkribieren"), Symbol aus Font Awesome, Inhaltstypen (auch `audio/*`), Art und Rolle. Art `hintergrund`: die App
+holt die Anfrage ab und arbeitet; Art `oeffnen`: die Kellerwolke führt den Browser zu `<adresse>/anfrage/<id>`, die
+App nimmt sie dort an. An einem Begleiter erscheinen die Aktionen zum Öffnen seiner Rolle; sie gelten dann für die
+Hauptdatei.
+
+**Fristen:** im Hintergrund 24 Stunden, zum Öffnen 12 Stunden. Wer innerhalb von 90 Sekunden abgeholt hat, gilt als
+erreichbar; sonst zeigt die Oberfläche, dass die Anfrage auf die App wartet.

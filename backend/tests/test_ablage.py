@@ -10,6 +10,7 @@ import pytest
 from app.main import app_bauen
 from app.melder import JournalMelder
 from module.ablage.dienst import AblageDienst
+from module.anfragen.dienst import AnfragenDienst
 from module.appzugang.dienst import AppZugangDienst
 from module.auth.dienst import AuthDienst
 from module.speicher.dienst import SpeicherDienst
@@ -29,6 +30,7 @@ async def umgebung(pool, tmp_path):
     app.state.vorgaenge = VorgangRegistry()
     app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
     app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
+    app.state.anfragen = AnfragenDienst(pool, app.state.speicher)
     app.state.melder = JournalMelder(_dsn(TEST_DB))                    # nicht gestartet; Tests, die wecken, starten einen eigenen
     await app.state.auth.benutzer_anlegen("chef", "geheim", rolle="admin")
     await app.state.auth.benutzer_anlegen("gast", "geheim")

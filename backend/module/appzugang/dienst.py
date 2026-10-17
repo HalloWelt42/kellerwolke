@@ -33,6 +33,13 @@ def _neuer_schluessel() -> str:
     return PRAEFIX + secrets.token_urlsafe(32)
 
 
+def _staerker(a: str | None, b: str | None) -> str | None:
+    for recht in ("schreiben", "lesen"):
+        if recht in (a, b):
+            return recht
+    return None
+
+
 def app_name_pruefen(name: str) -> str:
     name = (name or "").strip()
     if not _APP_NAME.match(name) or name.startswith(".") or name in (".", ".."):
@@ -47,6 +54,7 @@ class AppAkteur:
     zugang_id: str
     app: str
     benutzer: dict = field(compare=False)
+    anfrage: dict | None = field(default=None, compare=False)   # offene Anfrage, auf die sich die App beruft
 
     @property
     def benutzer_id(self):
@@ -232,8 +240,17 @@ class AppZugangDienst:
         if not zeile or zeile["geloescht"]:
             return None, None                     # liegt in einem gelöschten Ordner
         rechte = zeile["rechte"] or []
-        if "schreiben" in rechte:
-            return knoten, "schreiben"
-        if "lesen" in rechte:
-            return knoten, "lesen"
-        return knoten, None
+        recht = "schreiben" if "schreiben" in rechte else "lesen" if "lesen" in rechte else None
+        if recht != "schreiben" and akteur.anfrage is not None:
+            recht = _staerker(recht, await self._recht_aus_anfrage(akteur.anfrage, knoten))
+        return knoten, recht
+
+    async def _recht_aus_anfrage(self, anfrage: dict, knoten: dict) -> str | None:
+        """Eine offene Anfrage gibt der App die angefragte Datei zum Lesen und deren Begleiter zum Schreiben."""
+        if str(knoten["id"]) == str(anfrage["knoten_id"]):
+            return "lesen"
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT 1 FROM begleiter WHERE begleiter_id=%s AND haupt_id=%s",
+                                  (knoten["id"], anfrage["knoten_id"]))
+                return "schreiben" if await cur.fetchone() else None

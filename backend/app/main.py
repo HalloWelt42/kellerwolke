@@ -23,6 +23,9 @@ from .ports import SpeicherNichtVerfuegbar
 from .validierung import validierung_behandeln
 from module.ablage.api import router as ablage_router
 from module.ablage.dienst import AblageDienst
+from module.anfragen.api import router as anfragen_router
+from module.anfragen.api import router_app as anfragen_app_router
+from module.anfragen.dienst import AnfragenDienst
 from module.admin.api import router as admin_router
 from module.appzugang.api import router as appzugang_router
 from module.appzugang.dienst import AppZugangDienst
@@ -88,6 +91,7 @@ async def lebenszyklus(app: FastAPI):
     app.state.vorgaenge = VorgangRegistry()
     app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
     app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
+    app.state.anfragen = AnfragenDienst(pool, app.state.speicher)
     app.state.melder = JournalMelder(EINSTELLUNGEN.dsn)
     app.state.melder.starten()
     app.state.medien = VorschauDienst(pool, app.state.speicher, EINSTELLUNGEN.vorschau_pfad,
@@ -153,6 +157,8 @@ def app_bauen() -> FastAPI:
     app.include_router(geraete_router)
     app.include_router(appzugang_router)
     app.include_router(ablage_router)
+    app.include_router(anfragen_router)
+    app.include_router(anfragen_app_router)
     webdav_einbinden(app)
     return app
 

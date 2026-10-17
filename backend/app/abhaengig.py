@@ -5,6 +5,9 @@ Routen holen sie ueber diese kleinen Funktionen. So bleibt die Verdrahtung
 testbar und ohne globale Singletons.
 """
 
+from dataclasses import replace
+from uuid import UUID
+
 from fastapi import HTTPException, Request
 
 from module.geraete.dienst import ist_geraeteschluessel
@@ -105,4 +108,18 @@ async def aktuelle_app(request: Request):
     akteur = await request.app.state.appzugang.pruefen(schluessel)
     if akteur is None:
         raise HTTPException(status_code=401, detail="App-Schlüssel fehlt, ist unbekannt oder gesperrt")
+    anfrage_id = request.headers.get("x-kellerwolke-anfrage", "").strip()
+    if anfrage_id:
+        # Beruft sich die App auf eine Anfrage, gilt sie nur, solange diese offen ist (Recht je Auftrag).
+        try:
+            anfrage = await request.app.state.anfragen.gueltige(akteur, UUID(anfrage_id))
+        except ValueError:
+            anfrage = None
+        if anfrage is None:
+            raise HTTPException(status_code=403, detail="Diese Anfrage ist nicht (mehr) offen")
+        akteur = replace(akteur, anfrage=anfrage)
     return akteur
+
+
+def hole_anfragen(request: Request):
+    return request.app.state.anfragen

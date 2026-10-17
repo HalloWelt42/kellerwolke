@@ -161,20 +161,25 @@ class AblageDienst:
         if not eltern:
             raise Unsichtbar("Ordner nicht gefunden")
         eltern, _ = await self.mit_recht(akteur, eltern["id"], "schreiben")
+        return await self._in_ordner_schreiben(akteur, eltern, teile[-1], quelle, max_bytes, etag, nur_neu, inhaltstyp)
+
+    async def _in_ordner_schreiben(self, akteur: AppAkteur, eltern: dict, name: str, quelle, max_bytes: int,
+                                   etag: str | None, nur_neu: bool, inhaltstyp: str | None) -> tuple[dict, str, int]:
+        """Schreibt in einen Ordner, dessen Recht der Aufrufer geprüft hat."""
         if eltern["typ"] != "ordner":
             raise ValueError("Ziel ist kein Ordner")
         async with self.pool.connection() as conn:
-            vorhanden = await PostgresMetadataRepository(conn).knoten_finden(akteur.benutzer_id, eltern["id"], teile[-1])
+            vorhanden = await PostgresMetadataRepository(conn).knoten_finden(akteur.benutzer_id, eltern["id"], name)
         if vorhanden and vorhanden["typ"] != "datei":
-            raise FileExistsError(f"{teile[-1]} ist ein Ordner")
+            raise FileExistsError(f"{name} ist ein Ordner")
         if vorhanden and etag is None and not nur_neu:
             raise VorbedingungFehlt("Die Datei gibt es schon: überschreiben nur mit If-Match (zuletzt gelesener ETag)")
         knoten, blob_hash, groesse = await self.speicher.datei_hochladen_strom(
-            akteur.benutzer_id, eltern["id"], teile[-1], quelle, max_bytes,
+            akteur.benutzer_id, eltern["id"], name, quelle, max_bytes,
             Bedingung(etag=etag, nur_neu=nur_neu, zugang_id=akteur.zugang_id))
         async with self.pool.connection() as conn:
             async with conn.transaction():
-                await metadaten.meta_schreiben(conn, knoten["id"], inhaltstyp_aus_kopf(inhaltstyp, teile[-1]), akteur.app)
+                await metadaten.meta_schreiben(conn, knoten["id"], inhaltstyp_aus_kopf(inhaltstyp, name), akteur.app)
         return await self._ansicht(knoten, "schreiben"), blob_hash, groesse
 
     # --- Begleitdateien (Regeln in module/speicher/begleiter.py) ---------------------------------------------
@@ -211,22 +216,41 @@ class AblageDienst:
             if await repo.begleiter_eintrag(haupt_id):
                 raise ValueError(f"{haupt['name']} ist selbst ein Begleiter; Begleiter gehören an die Hauptdatei")
             vorhanden = await repo.begleiter_fuer_rolle(haupt_id, rolle)
-            ordner = "/".join(await repo.pfad_namen(haupt["parent_id"]))
+            eltern = await repo.knoten_holen(haupt["parent_id"])
             frei = [n for n in begleiter_regeln.namen(haupt["name"], zusatz)
                     if not await repo.knoten_finden(akteur.benutzer_id, haupt["parent_id"], n)]
         if vorhanden and not vorhanden["geloescht"]:
-            return await self.datei_schreiben(akteur, f"{ordner}/{vorhanden['name']}", quelle, max_bytes, etag, nur_neu,
-                                              inhaltstyp)
+            await self.mit_recht(akteur, vorhanden["id"], "schreiben")
+            return await self._in_ordner_schreiben(akteur, eltern, vorhanden["name"], quelle, max_bytes, etag, nur_neu,
+                                                   inhaltstyp)
+        if not await self.darf_begleiter(akteur, haupt):
+            raise KeinSchreibrecht("Kein Schreibrecht neben dieser Datei")
         if not frei:
             raise begleiter_regeln.GruppeKonflikt(f"Neben {haupt['name']} ist kein Name für {rolle} frei")
-        knoten, blob_hash, groesse = await self.datei_schreiben(akteur, f"{ordner}/{frei[0]}", quelle, max_bytes, etag,
-                                                                nur_neu or etag is None, inhaltstyp)
+        knoten, blob_hash, groesse = await self._in_ordner_schreiben(akteur, eltern, frei[0], quelle, max_bytes, etag,
+                                                                     nur_neu or etag is None, inhaltstyp)
         await self.speicher.begleiter_anhaengen(akteur.benutzer_id, haupt_id, knoten["id"], rolle, zusatz, akteur.app)
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await metadaten.herkunft_setzen(conn, haupt_id, knoten["id"], rolle, akteur.app)
         return await self._ansicht(await self.speicher.knoten_des_nutzers(akteur.benutzer_id, knoten["id"]), "schreiben"), \
             blob_hash, groesse
+
+    async def darf_begleiter(self, akteur: AppAkteur, haupt: dict) -> bool:
+        """Darf die App neben dieser Datei einen Begleiter anlegen: Schreibrecht in ihrem Ordner oder eine offene
+        Anfrage genau für diese Datei."""
+        if akteur.anfrage is not None and str(akteur.anfrage["knoten_id"]) == str(haupt["id"]):
+            return True
+        if haupt["parent_id"] is None:
+            return False
+        _, recht = await self.zugang.recht(akteur, haupt["parent_id"])
+        return recht == "schreiben"
+
+    async def darf_weitergeben(self, akteur: AppAkteur, knoten_id) -> None:
+        """Eine Anfrage an eine andere App weitergeben darf, wer die Datei lesen und neben ihr schreiben darf."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id)
+        if not await self.darf_begleiter(akteur, knoten):
+            raise KeinSchreibrecht("Kein Schreibrecht neben dieser Datei")
 
     async def begleiter_anhaengen(self, akteur: AppAkteur, haupt_id, rolle: str, knoten_id, zusatz: str) -> dict:
         """Macht eine vorhandene Datei der App zum Begleiter; sie kommt neben die Hauptdatei (etwa beim Umzug einer App
