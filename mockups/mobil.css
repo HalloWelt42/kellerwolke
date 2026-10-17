@@ -1,0 +1,193 @@
+/* Kellerwolke mobil - eigenständige, reduzierte Ansicht für das Telefon (Entwurf).
+   Eigene Marken und eigener Aufbau, keine verkleinerte Desktop-Ansicht. Geteilt mit dem Desktop sind nur die Daten
+   und die Schnittstelle. Grundschrift 17 px, Berührflächen ab 44 px, kein Überfahren, Folgenreiches per Halten. */
+
+:root {
+  --m-bg: #eef1f5;
+  --m-flaeche: #ffffff;
+  --m-flaeche-2: #f3f5f8;
+  --m-rand: #dde3ea;
+  --m-text: #1b2735;
+  --m-text-2: #5d6b7b;
+  --m-text-3: #8593a2;
+  --m-akzent: #2f7ce0;
+  --m-akzent-weich: #e6f0fd;
+  --m-akzent-text: #ffffff;
+  --m-ordner: #f0b34a;
+  --m-gefahr: #df524f;
+  --m-gefahr-weich: #fbe7e6;
+  --m-gut: #2faf5b;
+  --m-schleier: rgba(15, 20, 25, 0.45);
+  --m-schrift: 17px;
+  --m-klein: 15px;
+  --m-marke: 13px;
+  --m-tipp: 48px;          /* Berührfläche */
+  --m-zeile: 64px;
+  --m-r: 14px;
+  --m-a: 16px;
+}
+
+:root[data-theme="dunkel"] {
+  --m-bg: #0b0f14;
+  --m-flaeche: #141a22;
+  --m-flaeche-2: #1b232e;
+  --m-rand: #263140;
+  --m-text: #e7edf3;
+  --m-text-2: #9aa8b8;
+  --m-text-3: #6b7a8a;
+  --m-akzent: #4aa8ff;
+  --m-akzent-weich: #15324d;
+  --m-akzent-text: #06121f;
+  --m-ordner: #e8b54a;
+  --m-gefahr: #ff6b6b;
+  --m-gefahr-weich: #3a1d1d;
+  --m-gut: #4ade80;
+  --m-schleier: rgba(0, 0, 0, 0.6);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: "Barlow", system-ui, sans-serif;
+  background: #d9dee5;
+  color: var(--m-text);
+  padding: 24px;
+}
+:root[data-theme="dunkel"] body { background: #05070a; }
+
+/* ----- Entwurfsrahmen: mehrere Telefone nebeneinander ----- */
+.buehne { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+.zustand-titel { font-size: 14px; color: #5d6b7b; margin: 0 0 8px; font-weight: 600; }
+:root[data-theme="dunkel"] .zustand-titel { color: #93a1b1; }
+.telefon {
+  width: 390px; height: 844px; border-radius: 44px; overflow: hidden; position: relative;
+  background: var(--m-bg); box-shadow: 0 0 0 10px #1b2735, 0 20px 50px rgba(0, 0, 0, 0.35);
+  display: flex; flex-direction: column; font-size: var(--m-schrift);
+}
+
+/* ----- Schale ----- */
+.m-status { height: 47px; flex: none; }                          /* Platz der Aussparung (safe-area-inset-top) */
+.m-kopf {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 8px;
+  background: var(--m-bg);
+}
+.m-kopf h1 { font-size: 22px; margin: 0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-kopf .m-unter { display: block; font-size: var(--m-marke); color: var(--m-text-3); font-weight: 500; }
+.m-knopf {
+  width: var(--m-tipp); height: var(--m-tipp); border: none; background: none; border-radius: 50%;
+  color: var(--m-text); font-size: 20px; display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.m-knopf.akzent { color: var(--m-akzent); }
+.m-suche {
+  margin: 0 var(--m-a) 8px; height: 44px; border-radius: 12px; background: var(--m-flaeche-2);
+  display: flex; align-items: center; gap: 10px; padding: 0 14px; color: var(--m-text-3); font-size: var(--m-klein); flex: none;
+}
+.m-suche.aktiv { background: var(--m-flaeche); box-shadow: 0 0 0 2px var(--m-akzent); color: var(--m-text); }
+.m-inhalt { flex: 1; overflow-y: auto; overflow-x: clip; }
+.m-tabs {
+  flex: none; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 4px 30px;   /* + safe-area-inset-bottom */
+  background: var(--m-flaeche); border-top: 1px solid var(--m-rand);
+}
+.m-tab { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--m-text-3); padding: 6px 0; }
+.m-tab i { font-size: 21px; }
+.m-tab.aktiv { color: var(--m-akzent); font-weight: 600; }
+
+/* ----- Liste ----- */
+.m-gruppe { font-size: var(--m-marke); color: var(--m-text-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 14px var(--m-a) 6px; }
+.m-liste { margin: 0 var(--m-a); background: var(--m-flaeche); border-radius: var(--m-r); overflow: hidden; }
+.m-zeile { display: flex; align-items: center; gap: 14px; min-height: var(--m-zeile); padding: 8px 6px 8px 14px; }
+.m-zeile + .m-zeile { border-top: 1px solid var(--m-rand); }
+.m-zeile .m-symbol { width: 36px; text-align: center; font-size: 26px; flex: none; color: var(--m-text-3); }
+.m-zeile .m-symbol.ordner { color: var(--m-ordner); }
+.m-zeile .m-symbol.bild { color: #7a5cf0; }
+.m-zeile .m-symbol.ton { color: #e0569b; }
+.m-zeile .m-symbol.pdf { color: #df524f; }
+.m-vorschaubild { width: 40px; height: 40px; border-radius: 8px; flex: none; background: linear-gradient(135deg, #8ec5fc, #e0c3fc); }
+.m-text { flex: 1; min-width: 0; }
+.m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-meta { font-size: var(--m-marke); color: var(--m-text-3); margin-top: 2px; }
+.m-meta .fa-star { color: #f0b34a; }
+.m-mehr { width: var(--m-tipp); height: var(--m-tipp); display: inline-flex; align-items: center; justify-content: center; color: var(--m-text-3); flex: none; }
+.m-zeile.gewaehlt { background: var(--m-akzent-weich); }
+
+/* Schwebeknopf: hochladen oder Ordner anlegen */
+.m-plus {
+  position: absolute; right: 20px; bottom: 104px; width: 60px; height: 60px; border-radius: 50%;
+  background: var(--m-akzent); color: var(--m-akzent-text); font-size: 26px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 24px rgba(47, 124, 224, 0.4);
+}
+
+/* ----- Blatt von unten ----- */
+.m-schleier { position: absolute; inset: 0; background: var(--m-schleier); }
+.m-blatt {
+  position: absolute; left: 0; right: 0; bottom: 0; background: var(--m-flaeche); border-radius: 22px 22px 0 0;
+  padding: 10px 0 34px;
+}
+.m-griff { width: 40px; height: 5px; border-radius: 3px; background: var(--m-rand); margin: 0 auto 10px; }
+.m-blatt-kopf { display: flex; align-items: center; gap: 12px; padding: 4px var(--m-a) 12px; border-bottom: 1px solid var(--m-rand); }
+.m-blatt-kopf .m-symbol { font-size: 30px; }
+.m-aktion { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 var(--m-a); }
+.m-aktion i { width: 24px; text-align: center; font-size: 20px; color: var(--m-text-2); }
+.m-aktion.gefahr, .m-aktion.gefahr i { color: var(--m-gefahr); }
+.m-aktion .m-hinweis { margin-left: auto; font-size: var(--m-marke); color: var(--m-text-3); }
+
+/* Halten zum Bestätigen: der Ring füllt sich, losgelassen vor dem Ende passiert nichts */
+.m-halten {
+  margin: 8px var(--m-a) 0; height: 56px; border-radius: 14px; background: var(--m-gefahr-weich); color: var(--m-gefahr);
+  display: flex; align-items: center; justify-content: center; gap: 12px; font-weight: 600; position: relative; overflow: hidden;
+}
+.m-halten .m-fuellung { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(223, 82, 79, 0.18); }
+.m-ring {
+  width: 30px; height: 30px; border-radius: 50%; position: relative;
+  background: conic-gradient(var(--m-gefahr) calc(var(--anteil) * 1%), transparent 0);
+}
+.m-ring::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--m-gefahr-weich); }
+
+/* ----- Vorschau (Vollbild) ----- */
+.m-vollbild { background: #000; color: #fff; }
+.m-vollbild .m-kopf { background: transparent; color: #fff; }
+.m-vollbild .m-knopf { color: #fff; }
+.m-bild { flex: 1; display: flex; align-items: center; justify-content: center; }
+.m-bild .foto { width: 100%; height: 520px; background: linear-gradient(160deg, #3a6186, #89253e); }
+.m-leiste { flex: none; display: flex; justify-content: space-around; padding: 10px 0 34px; }
+.m-leiste .m-knopf { color: #fff; }
+.m-punkte { text-align: center; font-size: 13px; color: #aab; padding-bottom: 6px; }
+
+/* ----- Medien ----- */
+.m-segment { display: flex; margin: 0 var(--m-a) 10px; background: var(--m-flaeche-2); border-radius: 10px; padding: 3px; flex: none; }
+.m-segment span { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; font-size: var(--m-klein); color: var(--m-text-2); }
+.m-segment span.an { background: var(--m-flaeche); color: var(--m-text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.m-raster { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+.m-raster div { aspect-ratio: 1; background: var(--f); }
+.m-datum { font-size: var(--m-klein); font-weight: 600; padding: 14px var(--m-a) 8px; }
+.m-spieler {
+  flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; margin: 0 8px 6px;
+  background: var(--m-flaeche); border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.m-cover { width: 44px; height: 44px; border-radius: 8px; background: linear-gradient(135deg, #e0569b, #f0b34a); flex: none; }
+.m-fortschritt { height: 3px; border-radius: 2px; background: var(--m-rand); margin-top: 6px; }
+.m-fortschritt span { display: block; height: 100%; border-radius: 2px; background: var(--m-akzent); }
+
+/* ----- Hochladen ----- */
+.m-quelle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px var(--m-a) 14px; }
+.m-quelle div {
+  background: var(--m-flaeche-2); border-radius: 14px; padding: 18px 12px; text-align: center; font-size: var(--m-klein);
+}
+.m-quelle i { display: block; font-size: 26px; color: var(--m-akzent); margin-bottom: 8px; }
+.m-ziel { margin: 0 var(--m-a) 10px; font-size: var(--m-klein); color: var(--m-text-2); }
+.m-ziel b { color: var(--m-text); }
+.m-upload { display: flex; align-items: center; gap: 12px; padding: 10px var(--m-a); }
+.m-upload .m-text { font-size: var(--m-klein); }
+.m-upload .ok { color: var(--m-gut); }
+
+/* ----- Leer und Fehler ----- */
+.m-leer { text-align: center; padding: 80px 32px; color: var(--m-text-2); }
+.m-leer i { font-size: 44px; color: var(--m-text-3); margin-bottom: 14px; }
+.m-leer h2 { font-size: 20px; color: var(--m-text); margin: 0 0 8px; }
+.m-leer .m-wieder { margin-top: 18px; display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 24px; background: var(--m-akzent); color: var(--m-akzent-text); font-weight: 600; }
+.m-band { margin: 0 var(--m-a) 10px; padding: 10px 14px; border-radius: 12px; background: var(--m-gefahr-weich); color: var(--m-gefahr); font-size: var(--m-klein); display: flex; gap: 10px; align-items: center; }
+
+/* ----- Leiste der Entwürfe (Thema umschalten) ----- */
+.mock-leiste { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 6px; background: #fff; padding: 6px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
+.mock-leiste button { width: 36px; height: 36px; border: none; border-radius: 8px; background: none; cursor: pointer; }
+.mock-leiste button.aktiv { background: #e6f0fd; color: #2f7ce0; }
