@@ -8,6 +8,8 @@ durchgaengig parametrisiert (keine SQL-Injektion).
 
 from psycopg.rows import dict_row
 
+from app.adapters.postgres_metadata import PostgresMetadataRepository
+
 from module.suche.extraktion import inhalt_noetig, text_extrahieren
 
 
@@ -39,7 +41,8 @@ class SuchDienst:
 
     async def suchen(self, besitzer_id, anfrage, grenze: int = 50):
         """Treffer im Namen (Dateien und Ordner) oder im Inhalt, Name höher gewichtet; mit denselben Zusatzfeldern
-        wie die Ordnerliste (Favorit, geteilt, Kinderzahl). Beide Teilmengen kommen über ihren eigenen Index."""
+        wie die Ordnerliste (Favorit, geteilt, Kinderzahl), dazu Ort (Ordnerkette) und ob der Name traf. Beide
+        Teilmengen kommen über ihren eigenen Index."""
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
@@ -52,7 +55,8 @@ class SuchDienst:
                     "SELECT k.*, v.groesse, "
                     "(SELECT count(*) FROM knoten c WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl, "
                     "EXISTS(SELECT 1 FROM favorit f WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit, "
-                    "EXISTS(SELECT 1 FROM freigabe fr WHERE fr.knoten_id = k.id) AS geteilt "
+                    "EXISTS(SELECT 1 FROM freigabe fr WHERE fr.knoten_id = k.id) AS geteilt, "
+                    "k.name_tsv @@ q.q AS im_namen "
                     "FROM treffer t CROSS JOIN q "
                     # Doppelter Eigentuemer-Filter als Defense-in-depth.
                     "JOIN knoten k ON k.id = t.id AND k.besitzer_id = %s AND NOT k.geloescht "
@@ -63,4 +67,9 @@ class SuchDienst:
                     "LIMIT %s",
                     (anfrage, besitzer_id, besitzer_id, besitzer_id, grenze),
                 )
-                return await cur.fetchall()
+                treffer = await cur.fetchall()
+            # Ort je Treffer: die Ordnerkette darüber (wenige Treffer, je eine kurze Abfrage).
+            repo = PostgresMetadataRepository(conn)
+            for t in treffer:
+                t["ort"] = await repo.pfad_namen(t["parent_id"]) if t["parent_id"] else []
+            return treffer

@@ -40,6 +40,9 @@ class KnotenAus(BaseModel):
     geteilt: bool = False
     # Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
     besitzer_name: str | None = None
+    # Nur in Suchergebnissen: Ordnerkette über dem Treffer und ob der Name traf (sonst der Inhalt).
+    ort: list[str] | None = None
+    im_namen: bool | None = None
 
     @computed_field
     @property

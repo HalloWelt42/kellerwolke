@@ -31,6 +31,10 @@ async def test_suche_findet_ordner_umbenanntes_und_meldet_favorit(umgebung):
     assert (await client.get("/api/v1/suche", params={"q": "a"}, headers=h)).json() == []
     treffer = (await client.get("/api/v1/suche", params={"q": "steuern"}, headers=h)).json()
     assert [t["id"] for t in treffer] == [ordner["id"]] and treffer[0]["favorit"] is False
+    assert treffer[0]["ort"] == [] and treffer[0]["im_namen"] is True
+    unter = (await client.post("/api/v1/dateien/ordner", json={"name": "Belege", "parent_id": ordner["id"]}, headers=h)).json()
+    treffer = (await client.get("/api/v1/suche", params={"q": "belege"}, headers=h)).json()
+    assert [t["ort"] for t in treffer if t["id"] == unter["id"]] == [["Steuern 2026"]]
 
 
 async def test_journal_stand_und_entfernt(umgebung):
