@@ -70,7 +70,10 @@ export function symbolFuerName(name: string): string {
 // Medienart bestimmt der Server (eine Stelle für alle Endungen, auch m4a, ogg, opus); die Rolle eines Begleiters
 // geht vor (ein Transkript ist eine JSON-Datei, zeigt sich aber als Untertitelsymbol).
 const NACH_MEDIENART: Record<string, string> = { bild: "fa-file-image", audio: "fa-file-audio", video: "fa-file-video" };
-const NACH_ROLLE: Record<string, string> = { transkript: "fa-closed-captioning" };
+const NACH_ROLLE: Record<string, string> = {
+  transkript: "fa-closed-captioning", untertitel: "fa-closed-captioning", untertitel_vtt: "fa-closed-captioning",
+  protokoll: "fa-list-check", zusammenfassung: "fa-list-check", aufgaben: "fa-list-check", sprache: "fa-volume-high",
+};
 
 // Symbol der Rolle eines Begleiters, wenn sie eins hat (Rechner und Telefon).
 export function rollenSymbol(rolle: string | null | undefined): string | null {
@@ -85,8 +88,12 @@ export function symbol(k: Knoten): { icon: string; klasse: string } {
   return { icon, klasse: "" };
 }
 
-// Anzeigename der Rolle eines Begleiters.
-const ROLLEN: Record<string, string> = { transkript: "Transkript", untertitel: "Untertitel", sprache: "Sprachausgabe" };
+// Anzeigename der Rolle eines Begleiters (die Rollen der eigenen Apps; unbekannte lesbar aus dem Schlüssel).
+const ROLLEN: Record<string, string> = {
+  transkript: "Transkript", untertitel: "Untertitel", untertitel_vtt: "Untertitel (WebVTT)", text: "Text",
+  markdown: "Markdown", daten: "Daten", dokument: "Dokument", protokoll: "Protokoll", zusammenfassung: "Zusammenfassung",
+  aufgaben: "Aufgaben", sprache: "Sprachausgabe",
+};
 export function rolleText(rolle: string): string {
   return ROLLEN[rolle] ?? rolle.charAt(0).toUpperCase() + rolle.slice(1).replaceAll("_", " ");
 }
