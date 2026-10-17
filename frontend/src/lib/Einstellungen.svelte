@@ -3,6 +3,7 @@
   import * as api from "./api";
   import Logo from "./Logo.svelte";
   import Modal from "./Modal.svelte";
+  import Geraete from "./Geraete.svelte";
   import Zugaenge from "./Zugaenge.svelte";
   import type { Benutzer, SpeicherStatus } from "./types";
   import { groesseText } from "./format";
@@ -13,7 +14,7 @@
   }
   let { schliessen }: Props = $props();
 
-  type Seite = "konten" | "extern" | "speicher" | "zugaenge";
+  type Seite = "konten" | "extern" | "speicher" | "zugaenge" | "geraete";
   // Verwaltung des Hauses nur für Admins; die eigenen Zugänge verwaltet jedes Konto selbst.
   const istAdmin = auth.benutzer?.rolle === "admin";
   let seite = $state<Seite>(istAdmin ? "konten" : "zugaenge");
@@ -235,6 +236,9 @@
     <button class="einst-eintrag" class:aktiv={seite === "zugaenge"} onclick={() => (seite = "zugaenge")}>
       <i class="fa-solid fa-key"></i> Zugänge
     </button>
+    <button class="einst-eintrag" class:aktiv={seite === "geraete"} onclick={() => (seite = "geraete")}>
+      <i class="fa-solid fa-mobile-screen"></i> Geräte
+    </button>
   </nav>
 
   <section class="einst-inhalt">
@@ -242,6 +246,8 @@
 
     {#if seite === "zugaenge"}
       <Zugaenge />
+    {:else if seite === "geraete"}
+      <Geraete />
     {:else if seite === "konten"}
       <h1>Konten</h1>
       <p class="unter">Familienkonten anlegen, Rolle setzen und sperren.</p>

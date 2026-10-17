@@ -7,6 +7,8 @@ testbar und ohne globale Singletons.
 
 from fastapi import HTTPException, Request
 
+from module.geraete.dienst import ist_geraeteschluessel
+
 # Cookie des Lesezugangs für Inhaltsadressen (gesetzt von module/inhalt/api.py, nur für deren Pfad).
 LESEZUGANG_COOKIE = "kw_inhalt"
 
@@ -47,9 +49,34 @@ def hole_uploads(request: Request):
     return request.app.state.uploads
 
 
+def hole_geraete(request: Request):
+    return request.app.state.geraete
+
+
+def absender(request: Request) -> str | None:
+    """Die Adresse des Absenders (hinter dem Caddy vorne die echte, uvicorn liest dessen Weiterleitungskopf)."""
+    return request.client.host if request.client else None
+
+
+async def benutzer_zum_token(request: Request, token: str) -> dict | None:
+    """Wer zu einem Token gehört: eine Sitzung (Anmeldung mit Passwort) oder der Schlüssel eines gekoppelten Geräts.
+    Beide kommen im selben Kopf und im selben Lese-Cookie; nur hier wird unterschieden."""
+    if ist_geraeteschluessel(token):
+        return await request.app.state.geraete.pruefen(token, absender(request))
+    return await request.app.state.auth.sitzung_pruefen(token)
+
+
+async def token_beenden(request: Request, token: str) -> None:
+    """Abmelden: die Sitzung endet, ein gekoppeltes Gerät trennt sich."""
+    if ist_geraeteschluessel(token):
+        await request.app.state.geraete.trennen_per_schluessel(token)
+    else:
+        await request.app.state.auth.abmelden(token)
+
+
 async def aktueller_benutzer(request: Request) -> dict:
     token = request.headers.get("x-kellerwolke-sitzung", "")
-    benutzer = await request.app.state.auth.sitzung_pruefen(token)
+    benutzer = await benutzer_zum_token(request, token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
     return benutzer
@@ -58,7 +85,7 @@ async def aktueller_benutzer(request: Request) -> dict:
 async def lese_benutzer(request: Request) -> dict:
     """Für Inhaltsadressen (<img>, <audio>, <video>, Download-Links): der Lesezugang als Cookie oder der Sitzungskopf."""
     token = request.headers.get("x-kellerwolke-sitzung") or request.cookies.get(LESEZUGANG_COOKIE, "")
-    benutzer = await request.app.state.auth.sitzung_pruefen(token)
+    benutzer = await benutzer_zum_token(request, token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
     return benutzer

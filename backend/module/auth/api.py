@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.abhaengig import hole_auth
+from app.abhaengig import benutzer_zum_token, hole_auth, token_beenden
 from module.auth.modelle import AuthStatus, BenutzerAus, LoginAntwort, LoginEingabe
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -18,13 +18,13 @@ async def login(eingabe: LoginEingabe, auth=Depends(hole_auth)):
 
 
 @router.post("/logout", status_code=204)
-async def logout(request: Request, auth=Depends(hole_auth)):
-    await auth.abmelden(request.headers.get("x-kellerwolke-sitzung", ""))
+async def logout(request: Request):
+    await token_beenden(request, request.headers.get("x-kellerwolke-sitzung", ""))
 
 
 @router.get("/status", response_model=AuthStatus)
-async def status(request: Request, auth=Depends(hole_auth)):
-    benutzer = await auth.sitzung_pruefen(request.headers.get("x-kellerwolke-sitzung", ""))
+async def status(request: Request):
+    benutzer = await benutzer_zum_token(request, request.headers.get("x-kellerwolke-sitzung", ""))
     if benutzer:
         return AuthStatus(angemeldet=True, benutzer=BenutzerAus.model_validate(benutzer))
     return AuthStatus(angemeldet=False)

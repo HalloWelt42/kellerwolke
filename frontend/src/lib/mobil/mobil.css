@@ -246,4 +246,6 @@
 .m-band { flex: none; margin: 0 var(--m-a) 10px; padding: 10px 14px; border-radius: 12px; background: var(--m-gefahr-weich); color: var(--m-gefahr); font-size: var(--m-klein); display: flex; gap: 10px; align-items: center; }
 .m-band span { flex: 1; min-width: 0; }
 .m-band button { border: none; background: none; color: inherit; width: 32px; height: 32px; cursor: pointer; flex: none; }
+.m-geraet-marke { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--m-akzent-weich); color: var(--m-akzent); margin-left: 6px; vertical-align: 2px; }
+.m-zeile.m-gefahr .m-name, .m-zeile.m-gefahr .m-symbol { color: var(--m-gefahr); }
 .m-fusszeile { text-align: center; padding: 18px 32px; font-size: var(--m-marke); color: var(--m-text-3); }

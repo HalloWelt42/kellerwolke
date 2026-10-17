@@ -5,12 +5,15 @@
   import { thema } from "../thema.svelte";
   import { zustand, ladeSpeicher } from "../zustand.svelte";
   import { groesseText } from "../format";
+  import type { Geraet } from "../types";
   import { blattOeffnen, zeigeSeite } from "./mobil.svelte";
 
   // Mehr: Geteiltes, Papierkorb, Speicher und Konto. Was nur am Rechner Sinn
-  // ergibt (Verwaltung, Zugänge, geteilte Ansicht), steht hier nicht.
+  // ergibt (Verwaltung, Zugänge, Geräte koppeln, geteilte Ansicht), steht hier nicht. Ein gekoppeltes Gerät
+  // zeigt sich selbst und trennt sich statt abzumelden.
   let geteilt = $state<number | null>(null);
   let papierkorb = $state<number | null>(null);
+  let geraet = $state<Geraet | null>(null); // gesetzt, wenn dieses Gerät gekoppelt ist (statt mit Passwort angemeldet)
 
   onMount(async () => {
     ladeSpeicher();
@@ -21,11 +24,17 @@
     } catch {
       // Zahlen sind Zusatz
     }
+    try {
+      geraet = await api.diesesGeraet();
+    } catch {
+      geraet = null; // mit Passwort angemeldet
+    }
   });
 
   const s = $derived(zustand.speicher);
   const anteil = $derived(s && s.gesamt ? Math.min(100, (s.benutzt / s.gesamt) * 100) : 0);
   const themaText = $derived(thema.wahl === "system" ? "wie das Telefon" : thema.wahl === "dunkel" ? "dunkel" : "hell");
+  const seit = (iso: string) => new Date(iso).toLocaleDateString("de-DE");
   const anzahl = (n: number | null, eins: string, mehr: string) => (n === null ? "" : n === 1 ? `1 ${eins}` : `${n} ${mehr}`);
 </script>
 
@@ -67,12 +76,26 @@
     <i class="fa-solid fa-circle-half-stroke m-symbol"></i>
     <span class="m-text"><span class="m-name" style="display:block">Thema</span><span class="m-meta" style="display:block">{themaText}</span></span>
   </button>
-  <button class="m-zeile" onclick={abmelden}>
-    <i class="fa-solid fa-right-from-bracket m-symbol"></i>
-    <span class="m-text"><span class="m-name" style="display:block">Abmelden</span><span class="m-meta" style="display:block">{auth.benutzer?.name ?? ""}</span></span>
-  </button>
+  {#if geraet}
+    <div class="m-zeile" style="cursor:default">
+      <i class="fa-solid fa-mobile-screen m-symbol"></i>
+      <span class="m-text">
+        <span class="m-name" style="display:block">{geraet.name}<span class="m-geraet-marke">dieses Gerät</span></span>
+        <span class="m-meta" style="display:block">gekoppelt seit {seit(geraet.gekoppelt_am)} · Konto {auth.benutzer?.name ?? ""}</span>
+      </span>
+    </div>
+    <button class="m-zeile m-gefahr" onclick={abmelden}>
+      <i class="fa-solid fa-link-slash m-symbol"></i>
+      <span class="m-text"><span class="m-name" style="display:block">Gerät trennen</span><span class="m-meta" style="display:block">meldet ab; zum Wiederkommen neu koppeln</span></span>
+    </button>
+  {:else}
+    <button class="m-zeile" onclick={abmelden}>
+      <i class="fa-solid fa-right-from-bracket m-symbol"></i>
+      <span class="m-text"><span class="m-name" style="display:block">Abmelden</span><span class="m-meta" style="display:block">{auth.benutzer?.name ?? ""}</span></span>
+    </button>
+  {/if}
 </div>
 <p class="m-fusszeile">
-  Verwaltung, externe Quellen, Zugänge für Apps und die geteilte Ansicht gibt es am Rechner.
+  Verwaltung, externe Quellen, Zugänge für Apps, Geräte und die geteilte Ansicht gibt es am Rechner.
   {#if zustand.version}<br />Kellerwolke {zustand.version}{/if}
 </p>

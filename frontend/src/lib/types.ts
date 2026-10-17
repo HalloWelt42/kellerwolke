@@ -153,3 +153,26 @@ export interface AppZugangNeu {
   zugang: AppZugang;
   schluessel: string;
 }
+
+// Gekoppelte Geräte (Einstellungen, Geräte; Anmeldung mit Code)
+export type GeraeteArt = "webapp" | "browser";
+
+export interface Geraet {
+  id: string;
+  name: string;
+  art: GeraeteArt;
+  gekoppelt_am: string;
+  zuletzt_am: string | null;
+  zuletzt_adresse: string | null;
+  dieses: boolean;
+}
+
+export type KopplungStand = "wartet" | "gekoppelt" | "abgelaufen";
+
+export interface Kopplung {
+  id: string;
+  code: string | null;
+  ablauf: string;
+  stand: KopplungStand;
+  geraet: Geraet | null;
+}

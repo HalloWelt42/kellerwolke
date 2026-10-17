@@ -31,6 +31,8 @@ from module.auth.dienst import AuthDienst
 from module.inhalt.api import router as inhalt_router
 from module.medien.api import router as medien_router
 from module.medien.vorschau import VorschauDienst
+from module.geraete.api import router as geraete_router
+from module.geraete.dienst import GeraeteDienst
 from module.uploads.api import router as uploads_router
 from module.uploads.dienst import UploadDienst
 from module.speicher.api import router as datei_router
@@ -91,11 +93,13 @@ async def lebenszyklus(app: FastAPI):
     app.state.medien = VorschauDienst(pool, app.state.speicher, EINSTELLUNGEN.vorschau_pfad,
                                       EINSTELLUNGEN.vorschau_gleichzeitig, EINSTELLUNGEN.ffmpeg)
     app.state.uploads = UploadDienst(pool, app.state.speicher, EINSTELLUNGEN.teile_pfad, EINSTELLUNGEN.teile_tage)
+    app.state.geraete = GeraeteDienst(pool)
     pflege = [
         asyncio.create_task(_taeglich("Journal", lambda: app.state.speicher.journal_aufraeumen(EINSTELLUNGEN.journal_tage)),
                             name="journal-pflege"),
         asyncio.create_task(_taeglich("Vorschauen", app.state.medien.aufraeumen), name="vorschau-pflege"),
         asyncio.create_task(_taeglich("Uploads", app.state.uploads.aufraeumen), name="upload-pflege"),
+        asyncio.create_task(_taeglich("Kopplungen", app.state.geraete.aufraeumen), name="kopplung-pflege"),
     ]
     await _admin_seed(app.state.auth)
     try:
@@ -146,6 +150,7 @@ def app_bauen() -> FastAPI:
     app.include_router(medien_router)
     app.include_router(inhalt_router)
     app.include_router(uploads_router)
+    app.include_router(geraete_router)
     app.include_router(appzugang_router)
     app.include_router(ablage_router)
     webdav_einbinden(app)

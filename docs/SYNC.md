@@ -39,6 +39,24 @@ Dateien in mehrere inhaltsadressierte Blöcke zerlegt; ein Client lädt dann nur
 die ihm fehlenden Blöcke (Delta-Sync). Bestandsdateien bleiben als Ein-Block-
 Einträge gültig - keine Migration nötig.
 
+## Gekoppelte Geräte
+
+Ein Telefon oder Tablet meldet sich nicht mit dem Passwort an, sondern wird gekoppelt; so liegt dort kein Passwort.
+
+1. Am Rechner unter Einstellungen, Geräte erzeugt `POST /api/v1/geraete/kopplung` einen Code (acht Zeichen, zehn
+   Minuten gültig, nur einmal; ein neuer ersetzt einen offenen). Der QR-Code daneben öffnet die Kellerwolke mit
+   `#koppeln=<Code>`; der Code steht hinter dem `#` und geht so in kein Protokoll.
+2. Das Gerät löst ihn ohne Anmeldung ein: `POST /api/v1/geraete/koppeln` mit `code`, `name` und `art` (`webapp`
+   oder `browser`). Die Antwort trägt den Schlüssel `kw_geraet_...`, einmal im Klartext.
+3. Der Schlüssel geht danach im Kopf `X-Kellerwolke-Sitzung` mit wie ein Sitzungs-Token, auch für den Lese-Cookie
+   der Inhaltsadressen. Er handelt mit den Rechten des Kontos und läuft nicht ab.
+4. `GET /api/v1/geraete` listet die Geräte mit "zuletzt gesehen" und Adresse, `PATCH`/`DELETE /api/v1/geraete/{id}`
+   benennt um oder trennt. Abmelden auf dem Gerät selbst (`POST /api/v1/auth/logout`) trennt es ebenfalls.
+
+Falsche Codes werden je Absender gebremst (nach fünf Fehlern in zehn Minuten fünf Minuten Pause, Antwort 429).
+Auf dem iPhone hat die Web-App vom Home-Bildschirm einen eigenen Speicher, getrennt von Safari: dort wird der Code
+eingetippt, der QR-Code koppelt den Browser.
+
 ## Fortsetzbare Uploads
 
 Ein Telefon verliert die Verbindung oder legt die App schlafen; eine große Datei soll dann nicht von vorn beginnen.

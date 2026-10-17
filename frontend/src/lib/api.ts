@@ -5,8 +5,11 @@ import type {
   Benutzer,
   ExternEintrag,
   Freigabe,
+  GeraeteArt,
+  Geraet,
   Knoten,
   Konto,
+  Kopplung,
   Medium,
   Pfadteil,
   PoolAufraeumen,
@@ -451,4 +454,44 @@ export function zugangRechte(id: string, rechte: { knoten_id: string; recht: Rec
 
 export function zugangLoeschen(id: string): Promise<void> {
   return hole<void>(`/v1/app-zugaenge/${id}`, { method: "DELETE" });
+}
+
+// --- Gekoppelte Geräte ------------------------------------------------------
+// Das Gerät löst den Code ohne Anmeldung ein; sein Schlüssel geht danach wie ein Sitzungs-Token mit.
+export async function koppeln(code: string, name: string, art: GeraeteArt): Promise<Benutzer> {
+  const daten = await hole<{ schluessel: string; benutzer: Benutzer }>("/v1/geraete/koppeln", {
+    method: "POST",
+    body: JSON.stringify({ code, name, art }),
+  });
+  setzeToken(daten.schluessel);
+  return daten.benutzer;
+}
+
+export function geraete(): Promise<Geraet[]> {
+  return hole<Geraet[]>("/v1/geraete");
+}
+
+// Das Gerät, das gerade fragt; 404, wenn mit Passwort angemeldet.
+export function diesesGeraet(): Promise<Geraet> {
+  return hole<Geraet>("/v1/geraete/dieses");
+}
+
+export function kopplungStarten(): Promise<Kopplung> {
+  return hole<Kopplung>("/v1/geraete/kopplung", { method: "POST" });
+}
+
+export function kopplungStand(id: string): Promise<Kopplung> {
+  return hole<Kopplung>(`/v1/geraete/kopplung/${id}`);
+}
+
+export function kopplungAbbrechen(id: string): Promise<void> {
+  return hole<void>(`/v1/geraete/kopplung/${id}`, { method: "DELETE" });
+}
+
+export function geraetUmbenennen(id: string, name: string): Promise<Geraet> {
+  return hole<Geraet>(`/v1/geraete/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+}
+
+export function geraetTrennen(id: string): Promise<void> {
+  return hole<void>(`/v1/geraete/${id}`, { method: "DELETE" });
 }

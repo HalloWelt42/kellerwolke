@@ -3,7 +3,7 @@ import { playerZuruecksetzen } from "./player.svelte";
 import { kontoVerlassen } from "./zustand.svelte";
 import { schliesseVollansicht } from "./vorschau.svelte";
 import { waehleAnsicht } from "./ansicht.svelte";
-import type { Benutzer } from "./types";
+import type { Benutzer, GeraeteArt } from "./types";
 
 export const auth = $state<{
   geladen: boolean;
@@ -61,6 +61,15 @@ export async function anmelden(kennung: string, passwort: string): Promise<void>
   auth.angemeldet = true;
 }
 
+// Anmelden mit einem Kopplungscode vom Rechner: das Gerät bleibt angemeldet, bis es getrennt wird.
+export async function mitCodeKoppeln(code: string, name: string, art: GeraeteArt): Promise<void> {
+  const benutzer = await api.koppeln(code, name, art);
+  await zugangEinrichten();
+  auth.benutzer = benutzer;
+  auth.angemeldet = true;
+}
+
+// Abmelden; auf einem gekoppelten Gerät heißt das: es trennt sich.
 export async function abmelden(): Promise<void> {
   await api.abmelden();
   aufraeumen();
