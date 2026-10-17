@@ -2,6 +2,7 @@
   import * as api from "./api";
   import Logo from "./Logo.svelte";
   import Modal from "./Modal.svelte";
+  import Zugaenge from "./Zugaenge.svelte";
   import type { Benutzer, SpeicherStatus } from "./types";
   import { groesseText } from "./format";
   import { auth } from "./auth.svelte";
@@ -11,8 +12,10 @@
   }
   let { schliessen }: Props = $props();
 
-  type Seite = "konten" | "extern" | "speicher" | "apps";
-  let seite = $state<Seite>("konten");
+  type Seite = "konten" | "extern" | "speicher" | "apps" | "zugaenge";
+  // Verwaltung des Hauses nur für Admins; die eigenen Zugänge verwaltet jedes Konto selbst.
+  const istAdmin = auth.benutzer?.rolle === "admin";
+  let seite = $state<Seite>(istAdmin ? "konten" : "zugaenge");
   let fehler = $state("");
 
   // --- Konten ---------------------------------------------------------------
@@ -33,7 +36,7 @@
       kontenLaden = false;
     }
   }
-  ladeKonten();
+  if (istAdmin) ladeKonten();
 
   async function kontoAnlegen(e: Event) {
     e.preventDefault();
@@ -277,6 +280,7 @@
 
   <nav class="einst-nav">
     <div class="nav-titel">Einstellungen</div>
+    {#if istAdmin}
     <button class="einst-eintrag" class:aktiv={seite === "konten"} onclick={() => (seite = "konten")}>
       <i class="fa-solid fa-users"></i> Konten
     </button>
@@ -290,15 +294,23 @@
     <button class="einst-eintrag" class:aktiv={seite === "extern"} onclick={() => (seite = "extern")}>
       <i class="fa-solid fa-folder-tree"></i> Externe Quellen
     </button>
+    {/if}
+    <button class="einst-eintrag" class:aktiv={seite === "zugaenge"} onclick={() => (seite = "zugaenge")}>
+      <i class="fa-solid fa-key"></i> Zugänge
+    </button>
+    {#if istAdmin}
     <button class="einst-eintrag" class:aktiv={seite === "apps"} onclick={() => (seite = "apps")}>
       <i class="fa-solid fa-puzzle-piece"></i> Apps
     </button>
+    {/if}
   </nav>
 
   <section class="einst-inhalt">
     {#if fehler}<div class="fehlerstreifen">{fehler}</div>{/if}
 
-    {#if seite === "konten"}
+    {#if seite === "zugaenge"}
+      <Zugaenge />
+    {:else if seite === "konten"}
       <h1>Konten</h1>
       <p class="unter">Familienkonten anlegen, Rolle setzen und sperren.</p>
       <div class="karte">

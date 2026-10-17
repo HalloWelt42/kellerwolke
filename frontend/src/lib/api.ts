@@ -1,5 +1,7 @@
 import type {
   App,
+  AppZugang,
+  AppZugangNeu,
   AuthStatus,
   Benutzer,
   ExternEintrag,
@@ -9,6 +11,7 @@ import type {
   PluginInfo,
   PoolAufraeumen,
   PoolPruefung,
+  Recht,
   SpeicherStatus,
   Verschiebung,
   Version,
@@ -489,4 +492,29 @@ export function externeQuelleAnlegen(
     method: "POST",
     body: JSON.stringify({ besitzer_id: besitzerId, name, pfad }),
   });
+}
+
+// --- Zugänge für eigene Apps (Schlüssel mit Rechten je Ordner) -------------------
+export function zugaenge(): Promise<AppZugang[]> {
+  return hole<AppZugang[]>("/v1/app-zugaenge");
+}
+
+export function zugangAnlegen(app: string): Promise<AppZugangNeu> {
+  return hole<AppZugangNeu>("/v1/app-zugaenge", { method: "POST", body: JSON.stringify({ app }) });
+}
+
+export function zugangErneuern(id: string): Promise<AppZugangNeu> {
+  return hole<AppZugangNeu>(`/v1/app-zugaenge/${id}/erneuern`, { method: "POST" });
+}
+
+export function zugangAktiv(id: string, aktiv: boolean): Promise<AppZugang> {
+  return hole<AppZugang>(`/v1/app-zugaenge/${id}`, { method: "PATCH", body: JSON.stringify({ aktiv }) });
+}
+
+export function zugangRechte(id: string, rechte: { knoten_id: string; recht: Recht }[]): Promise<AppZugang> {
+  return hole<AppZugang>(`/v1/app-zugaenge/${id}/rechte`, { method: "PUT", body: JSON.stringify({ rechte }) });
+}
+
+export function zugangLoeschen(id: string): Promise<void> {
+  return hole<void>(`/v1/app-zugaenge/${id}`, { method: "DELETE" });
 }

@@ -231,11 +231,9 @@
                 <i class="fa-solid {thema.aktuell === 'hell' ? 'fa-moon' : 'fa-sun'}"></i>
                 {thema.aktuell === "hell" ? "Dunkles Thema" : "Helles Thema"}
               </button>
-              {#if auth.benutzer?.rolle === "admin"}
-                <button role="menuitem" onclick={() => { nutzerMenuOffen = false; verwaltungOffen = true; }}>
-                  <i class="fa-solid fa-gear"></i> Verwaltung
-                </button>
-              {/if}
+              <button role="menuitem" onclick={() => { nutzerMenuOffen = false; verwaltungOffen = true; }}>
+                <i class="fa-solid fa-gear"></i> {auth.benutzer?.rolle === "admin" ? "Verwaltung" : "Zugänge"}
+              </button>
               <div class="ktrenner"></div>
               <button role="menuitem" onclick={() => { nutzerMenuOffen = false; abmelden(); }}>
                 <i class="fa-solid fa-right-from-bracket"></i> Abmelden

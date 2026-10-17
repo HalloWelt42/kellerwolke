@@ -128,3 +128,26 @@ export interface Vorgang {
   gesamt: number; // 0 = unbestimmt
   fehler?: string | null;
 }
+
+// --- Zugänge für eigene Apps ----------------------------------------------------
+export type Recht = "lesen" | "schreiben";
+
+export interface AppRecht {
+  knoten_id: string;
+  pfad: string;
+  recht: Recht;
+}
+
+export interface AppZugang {
+  id: string;
+  app: string;
+  aktiv: boolean;
+  erstellt_am: string;
+  zuletzt_genutzt: string | null;
+  rechte: AppRecht[];
+}
+
+export interface AppZugangNeu {
+  zugang: AppZugang;
+  schluessel: string;
+}
