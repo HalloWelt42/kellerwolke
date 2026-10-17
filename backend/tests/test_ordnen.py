@@ -61,3 +61,7 @@ async def test_papierkorb_wird_aufgehalten(umgebung):
     assert stand.befund == "konflikt" and "Runde.transkript.json" in stand.grund
     await dienst.ausfuehren(mit_begleiter)
     assert await speicher.knoten_per_pfad(besitzer, "Apps/Runde.wav") is not None
+    samt = Ordnung.model_validate({"konto": "familie", "schritte": [
+        {"art": "papierkorb", "ziel": "Apps/Runde.wav", "mit_begleitern": True}]})
+    assert [s.befund for s in await dienst.ausfuehren(samt)] == ["ausgefuehrt"]
+    assert await speicher.knoten_per_pfad(besitzer, "Apps/Runde.transkript.json") is None      # die Gruppe ging mit

@@ -4,7 +4,8 @@ erst die Vorschau, die nichts ändert; jeder Schritt wird beim Ausführen noch e
 nie, der Papierkorb gibt alles wieder her.
 
 Ein Schritt "papierkorb" kann eine Prüfsumme nennen (nur genau dieser Inhalt) und legt eine Hauptdatei nur weg, wenn
-ihr keine Begleiter mehr anhängen, außer solchen, die frühere Schritte desselben Plans woandershin hängen.
+ihr keine Begleiter mehr anhängen, außer solchen, die frühere Schritte desselben Plans woandershin hängen, oder wenn er
+es ausdrücklich samt Begleitern verlangt (`mit_begleitern`).
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ class Weglegen(BaseModel):
     art: Literal["papierkorb"]
     ziel: str = Field(min_length=1)
     sha256: str | None = Field(None, pattern=SHA256, description="nur wenn der Inhalt genau diese Prüfsumme hat")
+    mit_begleitern: bool = Field(False, description="eine Hauptdatei samt ihren Begleitern (sonst nur ohne)")
 
 
 Schritt = Annotated[Umhaengen | Weglegen, Field(discriminator="art")]
@@ -117,7 +119,7 @@ class OrdnenDienst:
             return Stand(schritt=text, befund="erledigt", grund="liegt nicht (mehr) da")
         if s.sha256 and await self.e._aktueller_hash(knoten) != s.sha256:
             return Stand(schritt=text, befund="konflikt", grund="anderer Inhalt als im Plan")
-        if knoten["typ"] == "datei":
+        if knoten["typ"] == "datei" and not s.mit_begleitern:
             umgehaengt = {u.datei for u in vorher if isinstance(u, Umhaengen)}
             async with self.e.pool.connection() as conn:
                 mit = await PostgresMetadataRepository(conn).begleiter_der_haupt(knoten["id"])
