@@ -12,6 +12,7 @@ from io import BytesIO
 from psycopg.rows import dict_row
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
+from app.namen import nfc
 
 from module.suche.extraktion import inhalt_noetig, lesemenge, text_extrahieren
 
@@ -50,6 +51,7 @@ class SuchDienst:
         return await asyncio.to_thread(text_extrahieren, name, BytesIO(daten))
 
     async def inhalt_speichern(self, besitzer_id, knoten_id, text: str) -> None:
+        text = nfc(text)
         # besitzer_id kommt aus dem Knoten selbst, und es wird nur indexiert,
         # wenn der Knoten dem angegebenen Nutzer gehoert. So kann der Eigentuemer-
         # Stempel nicht vergiftet oder umgestempelt werden (Isolation). Der Name
@@ -68,6 +70,7 @@ class SuchDienst:
         """Treffer im Namen (Dateien und Ordner) oder im Inhalt, Name höher gewichtet; mit denselben Zusatzfeldern
         wie die Ordnerliste (Favorit, geteilt, Kinderzahl), dazu Ort (Ordnerkette) und ob der Name traf. Beide
         Teilmengen kommen über ihren eigenen Index."""
+        anfrage = nfc(anfrage)
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(

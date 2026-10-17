@@ -5,6 +5,8 @@ mehrere Schreibvorgaenge in einer Transaktion buendeln kann.
 
 from psycopg.rows import dict_row
 
+from app.namen import nfc
+
 
 class PostgresMetadataRepository:
     def __init__(self, conn) -> None:
@@ -34,14 +36,14 @@ class PostgresMetadataRepository:
         return await self._eine(
             "INSERT INTO knoten (besitzer_id, parent_id, name, typ) "
             "VALUES (%s,%s,%s,'ordner') RETURNING *",
-            (besitzer_id, parent_id, name),
+            (besitzer_id, parent_id, nfc(name)),
         )
 
     async def datei_anlegen(self, besitzer_id, parent_id, name):
         return await self._eine(
             "INSERT INTO knoten (besitzer_id, parent_id, name, typ) "
             "VALUES (%s,%s,%s,'datei') RETURNING *",
-            (besitzer_id, parent_id, name),
+            (besitzer_id, parent_id, nfc(name)),
         )
 
     async def datei_upsert(self, besitzer_id, parent_id, name):
@@ -54,14 +56,14 @@ class PostgresMetadataRepository:
             "ON CONFLICT (besitzer_id, parent_id, lower(name)) WHERE NOT geloescht "
             "DO UPDATE SET geaendert_am = now() "
             "RETURNING *, (xmax = 0) AS eingefuegt",
-            (besitzer_id, parent_id, name),
+            (besitzer_id, parent_id, nfc(name)),
         )
 
     async def extern_anlegen(self, besitzer_id, parent_id, name, extern_pfad):
         return await self._eine(
             "INSERT INTO knoten (besitzer_id, parent_id, name, typ, extern_pfad) "
             "VALUES (%s,%s,%s,'extern',%s) RETURNING *",
-            (besitzer_id, parent_id, name, extern_pfad),
+            (besitzer_id, parent_id, nfc(name), extern_pfad),
         )
 
     async def knoten_holen(self, knoten_id):
@@ -83,12 +85,12 @@ class PostgresMetadataRepository:
             return await self._eine(
                 "SELECT * FROM knoten WHERE besitzer_id=%s AND parent_id IS NULL "
                 "AND lower(name)=lower(%s) AND NOT geloescht",
-                (besitzer_id, name),
+                (besitzer_id, nfc(name)),
             )
         return await self._eine(
             "SELECT * FROM knoten WHERE besitzer_id=%s AND parent_id=%s "
             "AND lower(name)=lower(%s) AND NOT geloescht",
-            (besitzer_id, parent_id, name),
+            (besitzer_id, parent_id, nfc(name)),
         )
 
     async def kinder(self, besitzer_id, parent_id):
@@ -278,7 +280,7 @@ class PostgresMetadataRepository:
     async def knoten_umbenennen(self, besitzer_id, knoten_id, neuer_name):
         await self.conn.execute(
             "UPDATE knoten SET name=%s, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
-            (neuer_name, knoten_id, besitzer_id),
+            (nfc(neuer_name), knoten_id, besitzer_id),
         )
 
     async def knoten_verschieben(self, besitzer_id, knoten_id, neuer_parent):
@@ -591,7 +593,7 @@ class PostgresMetadataRepository:
         """Ort und Name in einer Anweisung (die Eindeutigkeit gilt für das Ergebnis, nicht für einen Zwischenstand)."""
         await self.conn.execute(
             "UPDATE knoten SET parent_id=%s, name=%s, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
-            (parent_id, name, knoten_id, besitzer_id),
+            (parent_id, nfc(name), knoten_id, besitzer_id),
         )
 
     async def begleiter_loesen(self, begleiter_id) -> bool:

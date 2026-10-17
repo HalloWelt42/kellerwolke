@@ -99,3 +99,11 @@ backend/.venv/bin/python tools/einspielen.py /mnt/data/einspielen/<lauf>/plan.js
 Die Vorschau sagt je Eintrag neu, vorhanden, fortsetzen, Konflikt oder fehlt und ändert nichts. Überschrieben wird
 nie: liegt am Ziel etwas anderes, bleibt es, und der Eintrag entfällt. Jeder Stand wird nur mit seiner Prüfsumme
 eingetragen; nach einem Abbruch setzt ein neuer Lauf beim nächsten Stand fort. Vorher sichern (`tools/pi/sichern.sh`).
+
+Danach ordnen, ebenfalls nach Plan und mit Vorschau: `tools/ordnen.py` hängt Begleitdateien an eine andere Hauptdatei
+(sie ziehen neben sie) und legt Dateien in den Papierkorb, auf Wunsch nur bei genau dieser Prüfsumme und nie, solange
+noch Begleiter an einer Hauptdatei hängen (Aufbau in `backend/module/einspielen/ordnen.py`). Endgültig gelöscht wird
+nicht; das bleibt dem Papierkorb in der Oberfläche.
+
+Namen speichert die Kellerwolke in einer Form (Unicode NFC, `app/namen.py`): macOS liefert Dateinamen zerlegt, sonst
+gäbe es zwei gleich aussehende Dateien in einem Ordner, und die Suche fände "grün" in der anderen Form nicht.
