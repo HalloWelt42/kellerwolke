@@ -270,3 +270,13 @@ async def test_app_verschiebt_eine_gruppe_in_ihrem_zweig(umgebung):
     assert (await client.post(f"/api/v1/ablage/knoten/{ton}/ort", json={"ordner_id": apps}, headers=kopf)).status_code == 403
     # den freigegebenen Ordner selbst nicht
     assert (await client.post(f"/api/v1/ablage/knoten/{eigen}/ort", json={"ordner_id": unter}, headers=kopf)).status_code == 403
+
+
+async def test_app_loest_einen_begleiter_und_behaelt_ihn_beim_loeschen_der_quelle(umgebung):
+    client, sitzung = umgebung
+    kopf, _, unter, ton, t, _ = await _gruppe(client, sitzung)
+    r = await client.post(f"/api/v1/ablage/knoten/{t}/loesen", headers=kopf)
+    assert r.status_code == 200 and r.json()["haupt_id"] is None
+    assert (await client.post(f"/api/v1/ablage/knoten/{t}/loesen", headers=kopf)).status_code == 422
+    assert (await client.delete(f"/api/v1/ablage/knoten/{ton}", headers=kopf)).status_code == 204
+    assert set(await _namen(client, sitzung, unter)) == {"Runde.transkript.json"}       # der Untertitel ging mit

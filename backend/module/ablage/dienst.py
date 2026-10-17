@@ -236,6 +236,14 @@ class AblageDienst:
         return await self._ansicht(await self.speicher.knoten_des_nutzers(akteur.benutzer_id, knoten["id"]), "schreiben"), \
             blob_hash, groesse
 
+    async def begleiter_loesen(self, akteur: AppAkteur, knoten_id) -> dict:
+        """Ein Begleiter wird eine gewöhnliche Datei (etwa: die Aufnahme geht in den Papierkorb, das Transkript
+        bleibt). Braucht Schreibrecht auf den Begleiter; die Herkunft bleibt."""
+        knoten, recht = await self.mit_recht(akteur, knoten_id, "schreiben")
+        if not await self.speicher.aus_gruppe_loesen(akteur.benutzer_id, knoten_id):
+            raise ValueError(f"{knoten['name']} ist kein Begleiter")
+        return await self._ansicht(knoten, recht)
+
     async def darf_begleiter(self, akteur: AppAkteur, haupt: dict) -> bool:
         """Darf die App neben dieser Datei einen Begleiter anlegen: Schreibrecht in ihrem Ordner oder eine offene
         Anfrage genau für diese Datei."""

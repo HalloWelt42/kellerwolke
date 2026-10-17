@@ -271,6 +271,15 @@ async def umziehen(knoten_id: UUID, eingabe: UmziehenEingabe, akteur=Depends(akt
         raise _fehler(f) from None
 
 
+@router.post("/knoten/{knoten_id}/loesen", response_model=AblageKnotenAus)
+async def begleiter_loesen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Ein Begleiter wird eine gewöhnliche Datei: er zieht nicht mehr mit seiner Hauptdatei um (die Herkunft bleibt)."""
+    try:
+        return await ablage.begleiter_loesen(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
 @router.get("/knoten/{knoten_id}/begleiter", response_model=list[AblageKnotenAus])
 async def begleiter(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     """Begleitdateien einer Hauptdatei (Transkript, Untertitel, Sprachausgabe ...), nach Rolle."""

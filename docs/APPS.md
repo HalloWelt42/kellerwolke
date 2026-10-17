@@ -48,6 +48,7 @@ Ein Begleiter hat selbst keine Begleiter; Ergebnisse zu einem Ergebnis gehören 
 | `GET /api/v1/ablage/knoten/{haupt}/begleiter` | Begleiter einer Hauptdatei, nach Rolle |
 | `PUT /api/v1/ablage/knoten/{haupt}/begleiter/{rolle}?zusatz=.transkript.json` | Begleiter schreiben (Körper roh); neu, oder neue Version mit `If-Match` |
 | `POST /api/v1/ablage/knoten/{haupt}/begleiter/{rolle}` mit `{knoten_id, zusatz}` | eine vorhandene Datei der App wird Begleiter und kommt neben die Hauptdatei |
+| `POST /api/v1/ablage/knoten/{id}/loesen` | ein Begleiter wird eine gewöhnliche Datei (etwa: Aufnahme in den Papierkorb, Transkript behalten) |
 | `POST /api/v1/dateien/{id}/loesen` (Oberfläche) | Begleiter aus der Gruppe lösen |
 
 Schreiben braucht Leserecht auf die Hauptdatei und Schreibrecht in ihrem Ordner. Jeder Begleiter trägt zusätzlich die
