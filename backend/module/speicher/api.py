@@ -19,7 +19,7 @@ from app.abhaengig import (
 )
 from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
-from module.speicher.dienst import ArchivZuGross
+from module.speicher.dienst import ArchivZuGross, NameBelegt, ZielUngueltig
 from module.speicher.modelle import (
     ExternEintragAus,
     ExternOrdnerEingabe,
@@ -94,7 +94,7 @@ async def speicher_status(benutzer=Depends(aktueller_benutzer), speicher=Depends
 @router.get("", response_model=list[KnotenAus])
 async def auflisten(parent_id: UUID | None = None, benutzer=Depends(aktueller_benutzer),
                     speicher=Depends(hole_speicher)):
-    if parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], parent_id):
+    if parent_id and not await speicher.lebender_knoten(benutzer["id"], parent_id):
         raise HTTPException(status_code=404, detail="Ordner nicht gefunden")
     return [KnotenAus.model_validate(k) for k in await speicher.kinder(benutzer["id"], parent_id)]
 
@@ -228,10 +228,10 @@ async def extern_ordner(knoten_id: UUID, eingabe: ExternOrdnerEingabe,
 @router.post("/ordner", response_model=KnotenAus)
 async def ordner_anlegen(eingabe: OrdnerEingabe, benutzer=Depends(aktueller_benutzer),
                          speicher=Depends(hole_speicher)):
-    if eingabe.parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], eingabe.parent_id):
-        raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
     try:
         knoten = await speicher.ordner_anlegen(benutzer["id"], eingabe.parent_id, eingabe.name)
+    except ZielUngueltig:
+        raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
     except UniqueViolation:
         raise HTTPException(status_code=409, detail="Name bereits vergeben")
     return KnotenAus.model_validate(knoten)
@@ -241,8 +241,6 @@ async def ordner_anlegen(eingabe: OrdnerEingabe, benutzer=Depends(aktueller_benu
 async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=None),
                     benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher),
                     suche=Depends(hole_suche), vorgaenge=Depends(hole_vorgaenge)):
-    if parent_id and not await speicher.knoten_des_nutzers(benutzer["id"], parent_id):
-        raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
     # Direkt aus dem Strom auf die Platte: die Datei landet NIE vollstaendig im
     # Speicher, damit auch sehr grosse Dateien sicher ankommen. Die Obergrenze
     # wird beim Streamen durchgesetzt.
@@ -253,7 +251,11 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
             benutzer["id"], parent_id, name, datei.file, EINSTELLUNGEN.max_upload
         )
     except DateiZuGross:
-        raise HTTPException(status_code=413, detail="Datei zu gross")
+        raise HTTPException(status_code=413, detail="Datei zu groß")
+    except ZielUngueltig:
+        raise HTTPException(status_code=404, detail="Zielordner nicht gefunden")
+    except NameBelegt as f:
+        raise HTTPException(status_code=409, detail=str(f))
 
     # Indizierung laeuft als Hintergrund-Vorgang, damit der Upload nicht darauf
     # wartet und ein Index-Fehler den Upload nicht scheitern laesst. Der Inhalt
@@ -334,10 +336,10 @@ async def versionen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
 @router.patch("/{knoten_id}/name", response_model=KnotenAus)
 async def umbenennen(knoten_id: UUID, eingabe: UmbenennenEingabe,
                      benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
-    if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
-        raise HTTPException(status_code=404, detail="Nicht gefunden")
     try:
         knoten = await speicher.umbenennen(benutzer["id"], knoten_id, eingabe.name)
+    except ZielUngueltig:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
     except UniqueViolation:
         raise HTTPException(status_code=409, detail="Name bereits vergeben")
     return KnotenAus.model_validate(knoten)
@@ -346,7 +348,7 @@ async def umbenennen(knoten_id: UUID, eingabe: UmbenennenEingabe,
 @router.patch("/{knoten_id}/ort", response_model=KnotenAus)
 async def verschieben(knoten_id: UUID, eingabe: VerschiebenEingabe,
                       benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
-    if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
+    if not await speicher.lebender_knoten(benutzer["id"], knoten_id):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
     try:
         knoten = await speicher.verschieben(benutzer["id"], knoten_id, eingabe.parent_id)
@@ -360,7 +362,7 @@ async def verschieben(knoten_id: UUID, eingabe: VerschiebenEingabe,
 @router.delete("/{knoten_id}", status_code=204)
 async def loeschen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
                    speicher=Depends(hole_speicher)):
-    if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
+    if not await speicher.lebender_knoten(benutzer["id"], knoten_id):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
     await speicher.loeschen(benutzer["id"], knoten_id)
 
@@ -376,7 +378,7 @@ async def endgueltig_loeschen(knoten_id: UUID, benutzer=Depends(aktueller_benutz
 @router.post("/{knoten_id}/favorit", status_code=204)
 async def favorit_an(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
                      speicher=Depends(hole_speicher)):
-    if not await speicher.knoten_des_nutzers(benutzer["id"], knoten_id):
+    if not await speicher.lebender_knoten(benutzer["id"], knoten_id):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
     await speicher.favorit_setzen(benutzer["id"], knoten_id, True)
 

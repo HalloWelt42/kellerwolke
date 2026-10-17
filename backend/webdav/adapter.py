@@ -18,6 +18,7 @@ from starlette.responses import Response, StreamingResponse
 
 from app.config import EINSTELLUNGEN
 from app.ports import SpeicherNichtVerfuegbar
+from module.speicher.dienst import NameBelegt, ZielUngueltig
 
 BASIS = "/webdav"
 _METHODEN = ["OPTIONS", "GET", "HEAD", "PUT", "DELETE", "PROPFIND", "MKCOL", "MOVE", "COPY"]
@@ -181,7 +182,10 @@ async def _put(request, benutzer, pfad) -> Response:
             return Response(status_code=413)
         stuecke.append(stueck)
     daten = b"".join(stuecke)
-    knoten = await speicher.datei_hochladen(benutzer["id"], parent, name, daten)
+    try:
+        knoten = await speicher.datei_hochladen(benutzer["id"], parent, name, daten)
+    except (NameBelegt, ZielUngueltig):
+        return Response(status_code=409)
     await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
     return Response(status_code=204 if existierte else 201)
 
@@ -210,6 +214,8 @@ async def _mkcol(request, benutzer, pfad) -> Response:
         await speicher.ordner_anlegen(benutzer["id"], parent, name)
     except UniqueViolation:
         return Response(status_code=405)
+    except ZielUngueltig:
+        return Response(status_code=409)
     return Response(status_code=201)
 
 

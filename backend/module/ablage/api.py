@@ -15,7 +15,7 @@ from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
-from module.speicher.dienst import Gesperrt, VorbedingungVerletzt
+from module.speicher.dienst import Gesperrt, NameBelegt, VorbedingungVerletzt, ZielUngueltig
 from module.appzugang.modelle import RechtAus
 from module.speicher.api import bereich_aus_kopf, dateiname_kopf
 
@@ -106,8 +106,10 @@ def _fehler(f: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(f))
     if isinstance(f, KeinSchreibrecht):
         return HTTPException(status_code=403, detail=str(f))
-    if isinstance(f, FileExistsError):
+    if isinstance(f, (FileExistsError, NameBelegt)):
         return HTTPException(status_code=409, detail=str(f))
+    if isinstance(f, ZielUngueltig):
+        return HTTPException(status_code=404, detail=str(f))
     if isinstance(f, VorbedingungVerletzt):
         return HTTPException(status_code=412, detail=str(f))
     if isinstance(f, VorbedingungFehlt):
@@ -120,7 +122,7 @@ def _fehler(f: Exception) -> HTTPException:
 
 
 _FEHLER = (Unsichtbar, KeinSchreibrecht, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross,
-           Gesperrt)
+           Gesperrt, NameBelegt)
 
 
 def _bedingung(request: Request) -> tuple[str | None, bool]:

@@ -370,3 +370,29 @@ async def test_download_dateiname_mit_umlaut(umgebung):
     # RFC-5987-Form traegt den echten Namen, der ASCII-Teil bleibt als Rueckfall.
     assert "filename*=UTF-8''" in cd
     assert "%C3%9C" in cd  # das grosse U-Umlaut, prozentkodiert
+
+
+async def test_geloeschter_ordner_ist_weder_lesbar_noch_beschreibbar(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    p = (await client.post("/api/v1/dateien/ordner", json={"name": "P"}, headers=h)).json()
+    s = (await client.post("/api/v1/dateien/ordner", json={"name": "S", "parent_id": p["id"]}, headers=h)).json()
+    assert (await client.delete(f"/api/v1/dateien/{p['id']}", headers=h)).status_code == 204
+    assert (await client.get(f"/api/v1/dateien?parent_id={s['id']}", headers=h)).status_code == 404
+    r = await client.post("/api/v1/dateien/upload", data={"parent_id": s["id"]},
+                          files={"datei": ("x.txt", b"x", "text/plain")}, headers=h)
+    assert r.status_code == 404
+    r = await client.post("/api/v1/dateien/ordner", json={"name": "N", "parent_id": s["id"]}, headers=h)
+    assert r.status_code == 404
+    assert (await client.patch(f"/api/v1/dateien/{s['id']}/name", json={"name": "T"}, headers=h)).status_code == 404
+    assert (await client.delete(f"/api/v1/dateien/{s['id']}", headers=h)).status_code == 404
+    korb = (await client.get("/api/v1/dateien/papierkorb", headers=h)).json()
+    assert [k["id"] for k in korb] == [p["id"]]
+
+
+async def test_datei_mit_ordnernamen_409(umgebung):
+    client, _ = umgebung
+    h = await _anmelden(client)
+    await client.post("/api/v1/dateien/ordner", json={"name": "Fotos"}, headers=h)
+    r = await _upload(client, h, "fotos", b"x")
+    assert r.status_code == 409

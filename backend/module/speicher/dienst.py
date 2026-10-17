@@ -165,6 +165,22 @@ def _pool_pruefen_fs(wurzel, soll, tief):
     return {"verwaist": verwaist, "fehlend": fehlend, "beschaedigt": beschaedigt, "geprueft": geprueft}
 
 
+def name_mit_zusatz(name: str, zusatz: str, ist_datei: bool) -> str:
+    """Hängt einen Zusatz in Klammern an, bei Dateien vor der Endung: "Bericht (wiederhergestellt).pdf"."""
+    stamm, punkt, endung = name.rpartition(".")
+    if ist_datei and punkt and stamm:
+        return f"{stamm} ({zusatz}).{endung}"
+    return f"{name} ({zusatz})"
+
+
+class ZielUngueltig(ValueError):
+    """Der Zielordner ist kein lebender Ordner des Kontos (gelöscht, fremd, keiner)."""
+
+
+class NameBelegt(Exception):
+    """Unter dem Namen liegt im Ordner schon ein Objekt anderer Art (Datei gegen Ordner)."""
+
+
 class VorbedingungVerletzt(Exception):
     """Der Stand der Datei passt nicht zur Bedingung des Schreibers (If-Match oder If-None-Match)."""
 
@@ -254,7 +270,7 @@ class SpeicherDienst:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
                 knoten = await repo.knoten_holen(knoten_id)
-                if not knoten or knoten["besitzer_id"] != besitzer_id:
+                if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
                     return False
                 await repo.freigabe_setzen(knoten_id, ziel_id, rechte)
                 return True
@@ -611,6 +627,8 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
+                if not await repo.ordner_lebt(besitzer_id, parent_id):
+                    raise ZielUngueltig("Zielordner nicht gefunden")
                 knoten = await repo.ordner_anlegen(besitzer_id, parent_id, name)
                 await repo.journal_anhaengen(besitzer_id, knoten["id"], "erstellt")
                 return knoten
@@ -644,8 +662,12 @@ class SpeicherDienst:
             async with self.pool.connection() as conn:
                 async with conn.transaction():
                     repo = PostgresMetadataRepository(conn)
+                    if not await repo.ordner_lebt(besitzer_id, parent_id):
+                        raise ZielUngueltig("Zielordner nicht gefunden")
                     # Atomar anlegen/finden (kein Check-then-act-Race).
                     knoten = await repo.datei_upsert(besitzer_id, parent_id, name)
+                    if knoten["typ"] != "datei":
+                        raise NameBelegt(f"{name} ist ein Ordner")
                     war_neu = knoten["eingefuegt"]
                     # Die Zeile ist ab hier bis zum Ende der Transaktion gesperrt (ON CONFLICT DO UPDATE),
                     # der gelesene ETag ist also der gültige Stand.
@@ -1051,30 +1073,39 @@ class SpeicherDienst:
             repo = PostgresMetadataRepository(conn)
             return await repo.papierkorb(besitzer_id)
 
+    async def lebender_knoten(self, besitzer_id, knoten_id):
+        """Der Knoten, wenn er dem Konto gehört und nicht im Papierkorb liegt - sonst None."""
+        knoten = await self.knoten_des_nutzers(besitzer_id, knoten_id)
+        return knoten if knoten and not knoten["geloescht"] else None
+
     async def umbenennen(self, besitzer_id, knoten_id, neuer_name):
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
+                    raise ZielUngueltig("Nicht gefunden")
                 await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
                 return await repo.knoten_holen(knoten_id)
+
+    async def _ziel_pruefen(self, repo, besitzer_id, knoten_id, neuer_parent) -> None:
+        """Ziel eines Verschiebens: die Wurzel oder ein lebender eigener Ordner, nicht im eigenen Teilbaum."""
+        if not await repo.ordner_lebt(besitzer_id, neuer_parent):
+            raise ZielUngueltig("Ungültiges Ziel")
+        if neuer_parent is not None and await repo.ist_im_teilbaum(knoten_id, neuer_parent):
+            raise ZielUngueltig("Das Ziel liegt im eigenen Teilbaum")
 
     async def verschieben(self, besitzer_id, knoten_id, neuer_parent):
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
-                if neuer_parent is not None:
-                    ziel = await repo.knoten_holen(neuer_parent)
-                    if (not ziel or ziel["besitzer_id"] != besitzer_id
-                            or ziel["geloescht"] or ziel["typ"] not in ("ordner", "extern")):
-                        raise ValueError("Ungueltiges Ziel")
-                    # Verschieben in sich selbst oder einen eigenen Nachkommen verbieten.
-                    if await repo.ist_im_teilbaum(knoten_id, neuer_parent):
-                        raise ValueError("Zyklus: Ziel liegt im eigenen Teilbaum")
                 alt = await repo.knoten_holen(knoten_id)
+                if not alt or alt["besitzer_id"] != besitzer_id or alt["geloescht"]:
+                    raise ZielUngueltig("Nicht gefunden")
+                await self._ziel_pruefen(repo, besitzer_id, knoten_id, neuer_parent)
                 await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben",
-                                             von_parent_id=alt["parent_id"] if alt else None)
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben", von_parent_id=alt["parent_id"])
                 return await repo.knoten_holen(knoten_id)
 
     async def umziehen(self, besitzer_id, knoten_id, neuer_parent, neuer_name):
@@ -1084,15 +1115,9 @@ class SpeicherDienst:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
                 knoten = await repo.knoten_holen(knoten_id)
-                if not knoten or knoten["besitzer_id"] != besitzer_id:
+                if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
                     return None
-                if neuer_parent is not None:
-                    ziel = await repo.knoten_holen(neuer_parent)
-                    if (not ziel or ziel["besitzer_id"] != besitzer_id
-                            or ziel["geloescht"] or ziel["typ"] not in ("ordner", "extern")):
-                        raise ValueError("Ungueltiges Ziel")
-                    if await repo.ist_im_teilbaum(knoten_id, neuer_parent):
-                        raise ValueError("Zyklus")
+                await self._ziel_pruefen(repo, besitzer_id, knoten_id, neuer_parent)
                 if neuer_name and neuer_name != knoten["name"]:
                     await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
                 if neuer_parent != knoten["parent_id"]:
@@ -1101,24 +1126,38 @@ class SpeicherDienst:
                 return await repo.knoten_holen(knoten_id)
 
     async def loeschen(self, besitzer_id, knoten_id):
-        async with self.pool.connection() as conn:
-            async with conn.transaction():
-                repo = PostgresMetadataRepository(conn)
-                await repo.knoten_loeschen(besitzer_id, knoten_id)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "geloescht")
-
-    async def wiederherstellen(self, besitzer_id, knoten_id):
+        """Legt einen lebenden Knoten samt Teilbaum in den Papierkorb; schon Gelöschtes bleibt unberührt."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
                 knoten = await repo.knoten_holen(knoten_id)
-                if not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]:
+                if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
+                    return
+                await repo.knoten_loeschen(besitzer_id, knoten_id)
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "geloescht")
+
+    async def wiederherstellen(self, besitzer_id, knoten_id):
+        """Holt eine Papierkorb-Wurzel samt Teilbaum zurück. Liegt der Elternordner selbst noch im Papierkorb (oder
+        gibt es ihn nicht mehr), kommt sie nach "Meine Dateien"; ist der Name dort vergeben, mit Zusatz."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if (not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]
+                        or knoten["geloescht_wurzel"] != knoten["id"]):
                     return None
+                ziel = knoten["parent_id"]
+                if ziel is not None:
+                    eltern = await repo.knoten_holen(ziel)
+                    if not eltern or eltern["geloescht"]:
+                        ziel = None
                 name = knoten["name"]
-                # Bei Namenskollision mit lebendem Geschwister umbenennen.
-                if await repo.knoten_finden(besitzer_id, knoten["parent_id"], name):
-                    name = f"{name} (wiederhergestellt)"
-                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name)
+                n = 1
+                while await repo.knoten_finden(besitzer_id, ziel, name):
+                    name = name_mit_zusatz(knoten["name"], "wiederhergestellt" if n == 1 else f"wiederhergestellt {n}",
+                                           knoten["typ"] == "datei")
+                    n += 1
+                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name, ziel)
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "erstellt")
                 return await repo.knoten_holen(knoten_id)
 

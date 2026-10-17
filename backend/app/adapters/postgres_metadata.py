@@ -67,6 +67,17 @@ class PostgresMetadataRepository:
     async def knoten_holen(self, knoten_id):
         return await self._eine("SELECT * FROM knoten WHERE id=%s", (knoten_id,))
 
+    async def ordner_lebt(self, besitzer_id, ordner_id) -> bool:
+        """True für die Wurzel oder einen lebenden eigenen Ordner. Die Zeile bleibt bis zum Ende der Transaktion
+        gegen gleichzeitiges Löschen gesperrt: was hier hineinkommt, landet nie unsichtbar im Papierkorb."""
+        if ordner_id is None:
+            return True
+        zeile = await self._eine(
+            "SELECT 1 AS da FROM knoten WHERE id=%s AND besitzer_id=%s AND typ='ordner' AND NOT geloescht FOR SHARE",
+            (ordner_id, besitzer_id),
+        )
+        return zeile is not None
+
     async def knoten_finden(self, besitzer_id, parent_id, name):
         if parent_id is None:
             return await self._eine(
@@ -272,23 +283,49 @@ class PostgresMetadataRepository:
         )
 
     async def knoten_loeschen(self, besitzer_id, knoten_id):
+        """Legt den Knoten samt lebendem Teilbaum in den Papierkorb, mit ihm als Wurzel. Schon einzeln Gelöschtes
+        darunter behält seine eigene Wurzel. Das Änderungsdatum zeigt bei der Wurzel den Zeitpunkt des Löschens.
+
+        Erst wird der Teilbaum gesperrt: wer gerade hineinschreibt (ordner_lebt), ist danach fertig und steht im
+        Stand der zweiten Anweisung; wer später kommt, sieht den Ordner gelöscht."""
         await self.conn.execute(
-            "UPDATE knoten SET geloescht=true, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
+            "WITH RECURSIVE baum AS ("
+            "  SELECT id FROM knoten WHERE id=%s AND besitzer_id=%s "
+            "  UNION ALL "
+            "  SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id WHERE NOT k.geloescht"
+            ") SELECT id FROM knoten WHERE id IN (SELECT id FROM baum) FOR UPDATE",
             (knoten_id, besitzer_id),
         )
-
-    async def knoten_wiederherstellen(self, besitzer_id, knoten_id, name):
         await self.conn.execute(
-            "UPDATE knoten SET geloescht=false, name=%s, geaendert_am=now() "
+            "WITH RECURSIVE baum AS ("
+            "  SELECT id FROM knoten WHERE id=%s AND besitzer_id=%s AND NOT geloescht "
+            "  UNION ALL "
+            "  SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id WHERE NOT k.geloescht"
+            ") UPDATE knoten SET geloescht=true, geloescht_wurzel=%s, "
+            "geaendert_am = CASE WHEN knoten.id=%s THEN now() ELSE knoten.geaendert_am END "
+            "WHERE id IN (SELECT id FROM baum)",
+            (knoten_id, besitzer_id, knoten_id, knoten_id),
+        )
+
+    async def knoten_wiederherstellen(self, besitzer_id, knoten_id, name, parent_id):
+        """Holt den Teilbaum einer Papierkorb-Wurzel zurück; die Wurzel selbst unter name in parent_id."""
+        await self.conn.execute(
+            "UPDATE knoten SET geloescht=false, geloescht_wurzel=NULL "
+            "WHERE geloescht_wurzel=%s AND besitzer_id=%s AND id<>%s",
+            (knoten_id, besitzer_id, knoten_id),
+        )
+        await self.conn.execute(
+            "UPDATE knoten SET geloescht=false, geloescht_wurzel=NULL, name=%s, parent_id=%s, geaendert_am=now() "
             "WHERE id=%s AND besitzer_id=%s",
-            (name, knoten_id, besitzer_id),
+            (name, parent_id, knoten_id, besitzer_id),
         )
 
     async def papierkorb(self, besitzer_id):
+        """Nur die Wurzeln: was mit einem Ordner gelöscht wurde, steckt in ihm."""
         return await self._alle(
             "SELECT k.*, v.groesse FROM knoten k "
             "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
-            "WHERE k.besitzer_id=%s AND k.geloescht "
+            "WHERE k.besitzer_id=%s AND k.geloescht AND k.geloescht_wurzel = k.id "
             "ORDER BY k.geaendert_am DESC",
             (besitzer_id,),
         )
@@ -308,7 +345,7 @@ class PostgresMetadataRepository:
 
     async def papierkorb_wurzeln(self, besitzer_id):
         zeilen = await self._alle(
-            "SELECT id FROM knoten WHERE besitzer_id=%s AND geloescht", (besitzer_id,)
+            "SELECT id FROM knoten WHERE besitzer_id=%s AND geloescht AND geloescht_wurzel = id", (besitzer_id,)
         )
         return [z["id"] for z in zeilen]
 
