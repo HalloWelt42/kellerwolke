@@ -310,7 +310,14 @@
   {/if}
 
   {#if teilenKnoten}
-    <Teilen knoten={teilenKnoten} schliessen={() => (teilenKnoten = null)} />
+    <Teilen
+      knoten={teilenKnoten}
+      schliessen={() => {
+        teilenKnoten = null;
+        // Freigaben stehen nicht im Journal: das Kennzeichen sofort nachziehen.
+        aktiveFlaeche().aktualisiere();
+      }}
+    />
   {/if}
 
   {#if endgueltig}

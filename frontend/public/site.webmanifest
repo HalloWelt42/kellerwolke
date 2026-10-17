@@ -1,0 +1,16 @@
+{
+  "name": "Kellerwolke",
+  "short_name": "Kellerwolke",
+  "description": "Eigene Dateiwolke für die Familie",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#2f7ce0",
+  "theme_color": "#2f7ce0",
+  "icons": [
+    { "src": "/symbol-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/symbol-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/symbol-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

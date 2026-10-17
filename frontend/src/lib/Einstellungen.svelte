@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as api from "./api";
   import Logo from "./Logo.svelte";
   import Modal from "./Modal.svelte";
@@ -62,10 +63,11 @@
   async function rolleSetzen(b: Benutzer, rolle: string) {
     try {
       await api.benutzerAktualisieren(b.id, { rolle });
-      await ladeKonten();
     } catch (f) {
       fehler = (f as Error).message;
     }
+    // Neu laden zeigt in jedem Fall den gespeicherten Stand (auch wenn die Änderung abgelehnt wurde).
+    await ladeKonten();
   }
 
   // --- Externe Quelle -------------------------------------------------------
@@ -73,17 +75,19 @@
   let qName = $state("");
   let qPfad = $state("");
   let qMeldung = $state("");
+  let qFehler = $state("");
 
   async function quelleEinhaengen(e: Event) {
     e.preventDefault();
     qMeldung = "";
+    qFehler = "";
     try {
       await api.externeQuelleAnlegen(qBesitzer, qName.trim(), qPfad.trim());
       qMeldung = `Quelle "${qName}" eingehängt.`;
       qName = "";
       qPfad = "";
     } catch (f) {
-      qMeldung = (f as Error).message;
+      qFehler = (f as Error).message;
     }
   }
 
@@ -113,30 +117,52 @@
       : 0,
   );
 
+  // Den Stand einer laufenden Verschiebung abfragen, bis sie fertig ist; endet mit der Seite.
+  function beobachteVerschiebung() {
+    if (pollTimer) return;
+    pollTimer = setInterval(async () => {
+      try {
+        verschiebung = await api.verschiebungStand();
+        if (verschiebung.status === "fertig" || verschiebung.status === "fehler") {
+          if (pollTimer) clearInterval(pollTimer);
+          pollTimer = null;
+          if (verschiebung.status === "fehler") verschiebeFehler = verschiebung.fehler ?? "Fehler";
+          else zielPfad = "";
+          await ladeStatus();
+        }
+      } catch {
+        // weiter abfragen
+      }
+    }, 1000);
+  }
+
   async function starteVerschieben() {
     const ziel = zielPfad.trim();
     if (!ziel) return;
     verschiebeFehler = "";
     try {
       verschiebung = await api.datenablageVerschieben(ziel);
-      pollTimer = setInterval(async () => {
-        try {
-          verschiebung = await api.verschiebungStand();
-          if (verschiebung.status === "fertig" || verschiebung.status === "fehler") {
-            if (pollTimer) clearInterval(pollTimer);
-            pollTimer = null;
-            if (verschiebung.status === "fehler") verschiebeFehler = verschiebung.fehler ?? "Fehler";
-            else zielPfad = "";
-            await ladeStatus();
-          }
-        } catch {
-          // weiter pollen
-        }
-      }, 1000);
+      beobachteVerschiebung();
     } catch (f) {
       verschiebeFehler = (f as Error).message;
     }
   }
+
+  // Beim Öffnen eine schon laufende Verschiebung wieder zeigen; beim Verlassen nicht weiter abfragen.
+  onMount(() => {
+    if (istAdmin) {
+      api.verschiebungStand().then((v) => {
+        if (v.status === "laeuft") {
+          verschiebung = v;
+          beobachteVerschiebung();
+        }
+      }).catch(() => {});
+    }
+    return () => {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+    };
+  });
 
   // Konsistenz / Reparatur (Vorschau, dann auf Wunsch aufraeumen)
   let pruefung = $state<import("./types").PoolPruefung | null>(null);
@@ -293,6 +319,7 @@
           </button>
         </form>
         {#if qMeldung}<div class="meldung">{qMeldung}</div>{/if}
+        {#if qFehler}<div class="fehler">{qFehler}</div>{/if}
       </div>
     {:else if seite === "speicher"}
       <h1>Speicherorte</h1>

@@ -125,8 +125,9 @@
     }
   }
 
+  // Gelöschtes wird nicht abgespielt oder gezeigt: erst wiederherstellen.
   function medienAktivieren(k: Knoten): boolean {
-    return knotenOeffnen(browser, k);
+    return !imPapierkorb && knotenOeffnen(browser, k);
   }
 
   // "Öffnen": Medien spielen oder zeigen, Ordner navigieren, sonst das Detail
@@ -145,7 +146,7 @@
   // erst wenn es gar keine Ansicht gibt, wird die Datei geholt. Ordner
   // navigiert bereits der Einfachklick.
   function rowDblClick(k: Knoten) {
-    if (k.typ !== "datei") return;
+    if (k.typ !== "datei" || imPapierkorb) return;
     if (!medienAktivieren(k)) browser.herunterladen(k);
   }
 

@@ -17,6 +17,8 @@ Das Plugin-System trug genau ein Plugin (Medien), dessen Code dreifach vorlag. E
 
 ### E1 Backend-Kern
 
+Stand: umgesetzt, mit Tests.
+
 | Befund | Behebung |
 |---|---|
 | Löschen markiert nur den obersten Knoten; Inhalte gelöschter Ordner in Favoriten, Suche, Medien; Hochladen in gelöschte Ordner; Datei aus gelöschtem Ordner einzeln wiederhergestellt verschwindet | Ganzer Teilbaum wird markiert (mit Wurzel des Löschens), Wiederherstellen holt genau diesen Teilbaum zurück; liegt der Elternordner noch im Papierkorb, kommt das Objekt nach "Meine Dateien"; Migration für den Bestand |
@@ -32,6 +34,8 @@ Das Plugin-System trug genau ein Plugin (Medien), dessen Code dreifach vorlag. E
 
 ### E2 Medien im Kern, Plugin-System raus
 
+Stand: umgesetzt, mit Tests. Zusätzlich laufen Herunterladen und ZIP über denselben Lesezugang direkt aus dem Strom (der Browser hält keine Datei mehr im Speicher).
+
 | Befund | Behebung |
 |---|---|
 | Medien nur für eigene Dateien (Geteilt: 404, Player meldet Codec-Fehler) | Medien nutzen die Lesezugriffsprüfung des Kerns |
@@ -45,6 +49,8 @@ Das Plugin-System trug genau ein Plugin (Medien), dessen Code dreifach vorlag. E
 | Plugin-Befunde (Deinstallieren löscht Code, Zustand läuft auseinander, Abschalten für alle, kein Wiedereinschalten, Neustart-Rennen, Docker ohne Plugins, ZIP-Rezept, Schema ohne Versionen, drei Kopien, tote Optionen) | Entfallen mit dem Plugin-System; Tabellen `plugin`, `plugin_medien`, `plugin_galerie` werden entfernt (vorher Sicherung) |
 
 ### E3 Oberfläche Kern
+
+Stand: umgesetzt und im Browser geprüft. Bewusst offen: die Upload-Karte meldet eine Datei als fertig, sobald sie gesendet ist (der Server speichert danach noch); ein Doppelklick auf einen Ordner bei sehr schneller Antwort (Verdacht, nicht gemessen).
 
 | Befund | Behebung |
 |---|---|
@@ -71,6 +77,8 @@ Das Plugin-System trug genau ein Plugin (Medien), dessen Code dreifach vorlag. E
 
 ### E4 Oberfläche Medien
 
+Stand: umgesetzt und im Browser geprüft. Bewusst offen: die Dauer in der Audio-Liste ermittelt weiter der Browser je Zeile (Verdacht auf viele gleichzeitige Verbindungen, nicht gemessen; mit der korrigierten Bereichslogik holt er nur noch den Anfang).
+
 | Befund | Behebung |
 |---|---|
 | "Alle Medien" wird nie aktualisiert | Hängt am Live-Abgleich |
@@ -88,4 +96,4 @@ Alle Wege im Browser prüfen (Einzel- und Splitscreen, alle Bereiche, beide Them
 
 ### E6 Mobile Ansicht
 
-Nach Freigabe des Entwurfs `mockups/mobil.html`.
+Nach Freigabe des Entwurfs `mockups/mobil.html`. Dazu gehört `viewport-fit=cover` mit Abständen für Aussparung und Wischleiste; bis dahin bleibt die PWA im sicheren Bereich.
