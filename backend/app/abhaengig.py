@@ -7,6 +7,9 @@ testbar und ohne globale Singletons.
 
 from fastapi import HTTPException, Request
 
+# Cookie des Lesezugangs für Inhaltsadressen (gesetzt von module/inhalt/api.py, nur für deren Pfad).
+LESEZUGANG_COOKIE = "kw_inhalt"
+
 
 def hole_auth(request: Request):
     return request.app.state.auth
@@ -48,9 +51,9 @@ async def aktueller_benutzer(request: Request) -> dict:
     return benutzer
 
 
-async def medien_benutzer(request: Request) -> dict:
-    """Für Medienadressen (<img>, <audio>, <video>): der Medien-Zugang als Cookie oder der Sitzungskopf."""
-    token = request.headers.get("x-kellerwolke-sitzung") or request.cookies.get("kw_medien", "")
+async def lese_benutzer(request: Request) -> dict:
+    """Für Inhaltsadressen (<img>, <audio>, <video>, Download-Links): der Lesezugang als Cookie oder der Sitzungskopf."""
+    token = request.headers.get("x-kellerwolke-sitzung") or request.cookies.get(LESEZUGANG_COOKIE, "")
     benutzer = await request.app.state.auth.sitzung_pruefen(token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")

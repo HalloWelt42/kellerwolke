@@ -28,6 +28,7 @@ from module.appzugang.api import router as appzugang_router
 from module.appzugang.dienst import AppZugangDienst
 from module.auth.api import router as auth_router
 from module.auth.dienst import AuthDienst
+from module.inhalt.api import router as inhalt_router
 from module.medien.api import router as medien_router
 from module.medien.vorschau import VorschauDienst
 from module.speicher.api import router as datei_router
@@ -139,6 +140,7 @@ def app_bauen() -> FastAPI:
     app.include_router(sync_router)
     app.include_router(vorgaenge_router)
     app.include_router(medien_router)
+    app.include_router(inhalt_router)
     app.include_router(appzugang_router)
     app.include_router(ablage_router)
     webdav_einbinden(app)
