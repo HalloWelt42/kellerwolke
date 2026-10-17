@@ -110,6 +110,8 @@ class EinspielDienst:
             return Ergebnis(ziel=e.ziel, befund="vorhanden", staende=staende)
         if aktuell in [s.sha256 for s in e.fruehere]:
             return Ergebnis(ziel=e.ziel, befund="fortsetzen", grund="spätere Stände fehlen noch", staende=staende)
+        if e.ersetzt and aktuell == e.ersetzt:
+            return Ergebnis(ziel=e.ziel, befund="fortsetzen", grund="neue Version über den bisherigen Stand", staende=staende)
         return Ergebnis(ziel=e.ziel, befund="konflikt", grund="am Ziel liegt eine andere Datei", staende=staende)
 
     async def _begleitung_pruefen(self, besitzer, e: Eintrag, ziele: set[str]) -> str:

@@ -82,6 +82,21 @@ async def test_nie_ueberschreiben_und_fortsetzen(umgebung):
     assert len(await speicher.versionen(besitzer, halb["id"])) == 2
 
 
+async def test_neue_version_ueber_bekanntem_stand(umgebung):
+    dienst, speicher, besitzer, ordner = umgebung
+    apps = await speicher.ordner_anlegen(besitzer, None, "Apps")
+    await speicher.datei_hochladen(besitzer, apps["id"], "runde.mp3", b"leise")
+    gut = {**datei(ordner, "gut.mp3", b"besser"), "ziel": "Apps/runde.mp3"}
+    assert (await dienst.pruefen(plan([gut])))[0].befund == "konflikt"          # ohne Angabe nie darüber
+    p = plan([{**gut, "ersetzt": hashlib.sha256(b"leise").hexdigest()}])
+    assert (await dienst.pruefen(p))[0].befund == "fortsetzen"
+    await dienst.ausfuehren(p)
+    runde = await speicher.knoten_per_pfad(besitzer, "Apps/runde.mp3")
+    assert await speicher.datei_lesen(besitzer, runde["id"]) == b"besser"
+    assert len(await speicher.versionen(besitzer, runde["id"])) == 2
+    assert (await dienst.pruefen(p))[0].befund == "vorhanden"
+
+
 async def test_abgewiesen(umgebung):
     dienst, _, _, ordner = umgebung
     d = datei(ordner, "a.txt", b"inhalt")

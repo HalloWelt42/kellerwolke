@@ -32,6 +32,8 @@ class Eintrag(Stand):
     app: str | None = Field(None, max_length=60, description="erzeugende App, wie sie die Kellerwolke anzeigt")
     felder: dict[str, Any] = Field(default_factory=dict)
     fruehere: list[Stand] = Field(default_factory=list, description="ältere Stände, älteste zuerst")
+    ersetzt: str | None = Field(None, pattern=SHA256, description="liegt am Ziel genau dieser Stand, kommt der Eintrag "
+                                                                  "als neue Version darüber (der alte bleibt Version)")
     begleitet: Begleitung | None = None
 
 
