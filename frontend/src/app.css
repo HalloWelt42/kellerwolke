@@ -104,6 +104,12 @@ input,
 textarea {
   user-select: text;
 }
+/* Schlüssel und Codes: ein Klick markiert das Ganze */
+.sb-wert,
+.kb-code {
+  user-select: all;
+  -webkit-user-select: all;
+}
 
 /* ===== App-Raster: Navigation | Inhalt | Detail ===== */
 .app {

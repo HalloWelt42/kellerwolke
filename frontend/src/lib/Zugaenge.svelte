@@ -4,6 +4,7 @@
   import * as api from "./api";
   import { datum } from "./format";
   import Modal from "./Modal.svelte";
+  import { kopieren, markieren } from "./zwischenablage";
   import OrdnerWahl from "./OrdnerWahl.svelte";
   import type { AppRecht, AppZugang, Recht } from "./types";
 
@@ -16,6 +17,7 @@
   let bearbeiten = $state<{ id: string; rechte: AppRecht[] } | null>(null);
   let ordnerWahlOffen = $state(false);
   let entfernen = $state<AppZugang | null>(null);
+  let schluesselFeld = $state<HTMLElement>();
 
   const SYMBOL: Record<string, string> = {
     transkription: "fa-closed-captioning",
@@ -75,13 +77,13 @@
     });
   }
 
-  async function kopieren() {
+  async function schluesselKopieren() {
     if (!neuerSchluessel) return;
-    try {
-      await navigator.clipboard.writeText(neuerSchluessel.schluessel);
-      kopiert = true;
-    } catch {
-      fehler = "Kopieren nicht möglich; bitte den Schlüssel markieren und kopieren.";
+    fehler = "";
+    kopiert = await kopieren(neuerSchluessel.schluessel);
+    if (!kopiert) {
+      markieren(schluesselFeld);
+      fehler = "Der Browser lässt hier nicht kopieren. Der Schlüssel ist markiert: mit Befehlstaste+C oder Strg+C kopieren.";
     }
   }
 
@@ -114,8 +116,8 @@
   <div class="schluessel-box">
     <div class="sb-kopf"><i class="fa-solid fa-key"></i> Schlüssel für <b>{neuerSchluessel.app}</b> ausgestellt</div>
     <div class="sb-zeile">
-      <code class="sb-wert">{neuerSchluessel.schluessel}</code>
-      <button class="knopf primaer" onclick={kopieren}>
+      <code class="sb-wert" bind:this={schluesselFeld}>{neuerSchluessel.schluessel}</code>
+      <button class="knopf primaer" onclick={schluesselKopieren}>
         <i class="fa-solid {kopiert ? 'fa-check' : 'fa-copy'}"></i> {kopiert ? "Kopiert" : "Kopieren"}
       </button>
     </div>
