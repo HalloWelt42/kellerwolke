@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import * as api from "../api";
   import { haupt, zustand } from "../zustand.svelte";
+  import { fassung } from "../fassung.svelte";
   import { verbindung } from "../verbindung.svelte";
   import { vollansichtOffen } from "../vorschau.svelte";
   import { knotenOeffnen } from "../medien/oeffnen";
@@ -174,6 +175,12 @@
   {/if}
 
   <!-- Bänder -->
+  {#if fassung.neu}
+    <div class="m-band" role="alert">
+      <i class="fa-solid fa-rotate"></i><span>Neue Fassung {fassung.neu}; lädt beim nächsten Wechsel von selbst</span>
+      <button aria-label="Jetzt neu laden" onclick={() => location.reload()}><i class="fa-solid fa-rotate"></i></button>
+    </div>
+  {/if}
   {#if !verbindung.ok}
     <div class="m-band" role="alert"><i class="fa-solid fa-wifi"></i><span>Keine Verbindung zur Kellerwolke</span></div>
   {:else if zustand.speicher?.verfuegbar === false}

@@ -7,7 +7,6 @@
     haupt,
     leerePapierkorb,
     endgueltigLoeschen,
-    ladeVersion,
     starteLiveAbgleich,
     stoppeLiveAbgleich,
     vorgaengeUmschalten,
@@ -26,6 +25,7 @@
   import Einstellungen from "./lib/Einstellungen.svelte";
   import { verwaltung, verwaltungOeffnen } from "./lib/verwaltung.svelte";
   import { adresseAnwenden, adresseStarten } from "./lib/adresse.svelte";
+  import { fassung, fassungVerfolgen, ruhig } from "./lib/fassung.svelte";
   import Vorgaenge from "./lib/Vorgaenge.svelte";
   import UploadKarte from "./lib/UploadKarte.svelte";
   import Teilen from "./lib/Teilen.svelte";
@@ -57,14 +57,18 @@
 
   onMount(() => {
     ladeStatus();
-    return adresseStarten();
+    const fassungStoppen = fassungVerfolgen();
+    const adresseStoppen = adresseStarten();
+    return () => {
+      fassungStoppen();
+      adresseStoppen();
+    };
   });
 
   $effect(() => {
     if (auth.angemeldet && !initialGeladen) {
       initialGeladen = true;
       adresseAnwenden();
-      ladeVersion();
       starteLiveAbgleich();
     }
     if (!auth.angemeldet) {
@@ -240,6 +244,16 @@
     <Navigation />
 
     <section class="inhalt">
+      {#if fassung.neu}
+        <div class="speicher-warnung" role="alert">
+          <i class="fa-solid fa-rotate"></i>
+          <span>
+            <strong>Neue Fassung {fassung.neu} ist da.</strong>
+            {ruhig() ? "Beim nächsten Ortswechsel lädt die Kellerwolke sie von selbst." : "Sie lädt von selbst, sobald Hochladen und Wiedergabe fertig sind."}
+          </span>
+          <button class="knopf primaer klein" onclick={() => location.reload()}><i class="fa-solid fa-rotate"></i> Jetzt neu laden</button>
+        </div>
+      {/if}
       {#if !verbindung.ok}
         <div class="speicher-warnung" role="alert">
           <i class="fa-solid fa-wifi"></i>

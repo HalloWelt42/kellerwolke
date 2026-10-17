@@ -20,8 +20,12 @@ function envPort(schluessel: string, standard: number): number {
   return wert && /^\d+$/.test(wert) ? Number(wert) : standard;
 }
 
+// Fassung der gebauten Oberfläche; weicht die des Servers ab, bietet die Oberfläche das Neuladen an.
+const FASSUNG = readFileSync(new URL("../VERSION", import.meta.url), "utf-8").trim();
+
 export default defineConfig({
   plugins: [svelte()],
+  define: { __FASSUNG__: JSON.stringify(FASSUNG) },
   server: {
     host: envWert("KELLERWOLKE_BIND") ?? "127.0.0.1",
     port: envPort("KELLERWOLKE_FRONTEND_PORT", 5200),

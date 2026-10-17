@@ -10,6 +10,7 @@
 import * as api from "./api";
 import { ansicht, waehleAnsicht } from "./ansicht.svelte";
 import { auth } from "./auth.svelte";
+import { vielleichtNeuLaden } from "./fassung.svelte";
 import { geraet } from "./geraet.svelte";
 import { mobil, zeigeReiter, zeigeSeite } from "./mobil/mobil.svelte";
 import { EINSTELLUNGS_SEITEN, verwaltung, type EinstellungsSeite } from "./verwaltung.svelte";
@@ -104,11 +105,14 @@ function ohneDatei(ort: Ort): string {
 function schreiben(ort: Ort, ersetzen = false): void {
   const ziel = adresseVon(ort);
   const schluessel = ohneDatei(ort);
+  const neuerOrt = !ersetzen && schluessel !== letzterOrt;
   if (ziel !== location.pathname + location.search) {
-    if (ersetzen || schluessel === letzterOrt) history.replaceState(null, "", ziel);
-    else history.pushState(null, "", ziel);
+    if (neuerOrt) history.pushState(null, "", ziel);
+    else history.replaceState(null, "", ziel);
   }
   letzterOrt = schluessel;
+  // Ein Ortswechsel ist der ruhige Moment für eine neue Fassung (die Adresse steht schon, das Neuladen landet dort).
+  if (neuerOrt) vielleichtNeuLaden("ortswechsel");
 }
 
 // --- Adresse zum Zustand ---------------------------------------------------------------------------------------
@@ -212,6 +216,7 @@ export function adresseStarten(): () => void {
     });
   });
   const zurueckVor = () => {
+    vielleichtNeuLaden("ortswechsel");
     if (auth.angemeldet) void adresseAnwenden();
   };
   addEventListener("popstate", zurueckVor);

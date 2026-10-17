@@ -196,13 +196,6 @@ export function stoppeLiveAbgleich(): void {
   }
 }
 
-export async function ladeVersion(): Promise<void> {
-  try {
-    zustand.version = await api.version();
-  } catch {
-    // Versionsanzeige ist optional.
-  }
-}
 
 export async function ladeSpeicher(): Promise<void> {
   try {
