@@ -216,6 +216,15 @@ async def inhalt_schreiben(knoten_id: UUID, request: Request, akteur=Depends(akt
         raise _fehler(f) from None
 
 
+@router.delete("/knoten/{knoten_id}", status_code=204)
+async def loeschen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """In den Papierkorb (wiederherstellbar); endgültig löscht nur das Konto."""
+    try:
+        await ablage.loeschen(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
 @router.patch("/knoten/{knoten_id}/felder", response_model=AblageKnotenAus)
 async def felder(knoten_id: UUID, eingabe: FelderEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     try:

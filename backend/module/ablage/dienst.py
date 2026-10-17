@@ -185,6 +185,27 @@ class AblageDienst:
                 await metadaten.felder_mischen(conn, knoten_id, aenderung, akteur.app)
         return await self._ansicht(knoten, recht)
 
+    async def loeschen(self, akteur: AppAkteur, knoten_id) -> None:
+        """In den Papierkorb - endgültig entscheidet das Konto selbst. Ein freigegebener Ordner (Anker von App-Rechten)
+        bleibt stehen; was eine andere App gerade gesperrt hat, ebenso (bei Ordnern: irgendwo darunter)."""
+        await self.mit_recht(akteur, knoten_id, "schreiben")
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT 1 AS anker FROM app_recht WHERE knoten_id=%s LIMIT 1", (knoten_id,))
+                if await cur.fetchone():
+                    raise KeinSchreibrecht("Ein freigegebener Ordner lässt sich nur am Rechner löschen")
+                await cur.execute(
+                    "WITH RECURSIVE baum AS ("
+                    "  SELECT id FROM knoten WHERE id=%s "
+                    "  UNION ALL SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id WHERE NOT k.geloescht"
+                    ") SELECT app, grund, seit, bis FROM sperre "
+                    "WHERE knoten_id IN (SELECT id FROM baum) AND bis > now() AND zugang_id <> %s LIMIT 1",
+                    (knoten_id, akteur.zugang_id))
+                fremd = await cur.fetchone()
+        if fremd:
+            raise Gesperrt(fremd)
+        await self.speicher.loeschen(akteur.benutzer_id, knoten_id)
+
     # --- Bearbeitungssperre -----------------------------------------------------------------------------------
 
     async def sperren(self, akteur: AppAkteur, knoten_id, dauer_s: int, grund: str = "") -> dict:

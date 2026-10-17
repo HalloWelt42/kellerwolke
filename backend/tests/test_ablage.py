@@ -505,3 +505,30 @@ async def test_ereignisstrom_liefert_neue_aenderung(umgebung, pool):
         assert [str(e["knoten_id"]) for e in stand["eintraege"]] == [neu["id"]]
     finally:
         await melder.stoppen()
+
+
+async def test_app_loescht_in_den_papierkorb(umgebung):
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    d = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/alt.txt"}, content=b"x", headers=t)).json()
+    o = (await client.post("/api/v1/ablage/ordner", json={"pfad": "Apps/Transkription/Lauf/tief"}, headers=t)).json()
+    assert (await client.delete(f"/api/v1/ablage/knoten/{d['id']}", headers=t)).status_code == 204
+    assert (await client.get(f"/api/v1/ablage/knoten/{d['id']}", headers=t)).status_code == 404
+    korb = (await client.get("/api/v1/dateien/papierkorb", headers=sitzung)).json()
+    assert [k["name"] for k in korb] == ["alt.txt"]                      # wiederherstellbar beim Konto
+    lauf = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Transkription/Lauf"}, headers=t)).json()
+    assert (await client.delete(f"/api/v1/ablage/knoten/{lauf['id']}", headers=t)).status_code == 204
+    assert (await client.get(f"/api/v1/ablage/knoten/{o['id']}", headers=t)).status_code == 404
+
+
+async def test_app_loescht_weder_anker_noch_fremd_gesperrtes_noch_nur_lesbares(umgebung):
+    client, sitzung = umgebung
+    t, v, d = await _gemeinsam(client, sitzung)
+    eigen = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Tonbearbeitung"}, headers=t)).json()
+    assert (await client.delete(f"/api/v1/ablage/knoten/{eigen['id']}", headers=t)).status_code == 403   # Anker
+    await client.post(f"/api/v1/ablage/knoten/{d}/sperre", json={"dauer_s": 600, "grund": "schneiden"}, headers=t)
+    r = await client.delete(f"/api/v1/ablage/knoten/{d}", headers=v)
+    assert r.status_code == 423 and "Tonbearbeitung" in r.json()["detail"]
+    fremd = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Vertonung/v.txt"}, content=b"x", headers=v)).json()
+    assert (await client.delete(f"/api/v1/ablage/knoten/{fremd['id']}", headers=t)).status_code == 403   # nur lesbar
+    assert (await client.delete(f"/api/v1/ablage/knoten/{d}", headers=t)).status_code == 204             # eigene Sperre
