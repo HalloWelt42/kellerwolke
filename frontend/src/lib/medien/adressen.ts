@@ -9,15 +9,24 @@ export interface MedienEintrag {
   art: Medienart;
   groesse: number | null;
   pfad: Pfadteil[] | null; // Ordnerkette ohne "Meine Dateien"; null = unbekannt (kein "Zum Ordner")
+  geaendert_am: string | null;
+  favorit: boolean | null; // null = unbekannt (dann kein Stern)
+  eigen: boolean; // eigene Datei: favorisieren und löschen möglich
 }
 
-export function ausKnoten(k: Knoten, pfad: Pfadteil[] | null): MedienEintrag | null {
+export function ausKnoten(k: Knoten, pfad: Pfadteil[] | null, eigen = true): MedienEintrag | null {
   if (k.typ !== "datei" || !k.medienart) return null;
-  return { id: k.id, name: k.name, etag: k.etag, art: k.medienart, groesse: k.groesse ?? null, pfad };
+  return {
+    id: k.id, name: k.name, etag: k.etag, art: k.medienart, groesse: k.groesse ?? null, pfad,
+    geaendert_am: k.geaendert_am, favorit: eigen ? !!k.favorit : null, eigen,
+  };
 }
 
 export function ausMedium(m: Medium): MedienEintrag {
-  return { id: m.id, name: m.name, etag: m.etag, art: m.art, groesse: m.groesse, pfad: m.pfad };
+  return {
+    id: m.id, name: m.name, etag: m.etag, art: m.art, groesse: m.groesse, pfad: m.pfad,
+    geaendert_am: m.geaendert_am, favorit: null, eigen: true,
+  };
 }
 
 // Adressen des Lesezugangs (Cookie, siehe api.lesezugangEinrichten). Der

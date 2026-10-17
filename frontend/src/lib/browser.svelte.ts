@@ -169,7 +169,11 @@ export class Browser {
       this.auswahl.beschraenkeAuf(ergebnis.map((k) => k.id));
       this.detailNachziehen(ergebnis);
     } catch (f) {
-      if (meins === this.lauf) this.fehler = (f as Error).message;
+      if (meins !== this.lauf) return;
+      // Nach einem Ortswechsel gehört die alte Liste nicht mehr hierher.
+      if (!still) this.eintraege = [];
+      // Ohne Verbindung meldet das Band der Oberfläche; die Fläche schweigt dazu.
+      if ((f as api.ApiFehler).status !== 0) this.fehler = (f as Error).message;
     } finally {
       if (meins === this.lauf) this.laden = false;
     }
@@ -391,7 +395,7 @@ export class Browser {
     } catch (f) {
       if (meins === this.lauf) {
         this.externEintraege = [];
-        this.fehler = (f as Error).message;
+        if ((f as api.ApiFehler).status !== 0) this.fehler = (f as Error).message;
       }
     } finally {
       if (meins === this.lauf) this.laden = false;

@@ -17,6 +17,7 @@ import type {
   Version,
   Vorgang,
 } from "./types";
+import { verbindung } from "./verbindung.svelte";
 
 // Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl für
 // eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
@@ -68,14 +69,21 @@ async function pruefe(antwort: Response): Promise<Response> {
 }
 
 async function hole<T>(pfad: string, init: RequestInit = {}): Promise<T> {
-  const antwort = await fetch(`/api${pfad}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Kellerwolke-Sitzung": token(),
-      ...(init.headers ?? {}),
-    },
-  });
+  let antwort: Response;
+  try {
+    antwort = await fetch(`/api${pfad}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Kellerwolke-Sitzung": token(),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch {
+    verbindung.ok = false;
+    throw new ApiFehler(0, "Keine Verbindung zur Kellerwolke");
+  }
+  verbindung.ok = true;
   await pruefe(antwort);
   if (antwort.status === 204) return undefined as T;
   return (await antwort.json()) as T;
@@ -307,7 +315,10 @@ export function hochladen(
         reject(new ApiFehler(xhr.status, text));
       }
     };
-    xhr.onerror = () => reject(new ApiFehler(0, "Netzwerkfehler"));
+    xhr.onerror = () => {
+      verbindung.ok = false;
+      reject(new ApiFehler(0, "Keine Verbindung zur Kellerwolke"));
+    };
     xhr.onabort = () => reject(new ApiFehler(0, "Abgebrochen"));
     griffSetzen?.({ abbrechen: () => xhr.abort() });
     const formular = new FormData();

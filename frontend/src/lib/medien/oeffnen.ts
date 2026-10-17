@@ -35,7 +35,8 @@ export function zumOrdner(pfad: Pfadteil[], markiereId?: string): void {
 // Blättern und Titelliste. Die Ordnerkette ist nur in "Meine Dateien" bekannt.
 export function medienDerFlaeche(b: Browser): MedienEintrag[] {
   const pfad = b.bereich === "dateien" ? b.pfad.slice(1) : null;
-  return b.sichtbar.map((k) => ausKnoten(k, pfad)).filter((m): m is MedienEintrag => m !== null);
+  const eigen = b.bereich !== "geteilt";
+  return b.sichtbar.map((k) => ausKnoten(k, pfad, eigen)).filter((m): m is MedienEintrag => m !== null);
 }
 
 // Einen Knoten der Fläche als Medium öffnen; false, wenn er keins ist.

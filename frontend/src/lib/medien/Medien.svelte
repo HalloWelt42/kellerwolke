@@ -57,7 +57,7 @@
     e.quelle === "alle"
       ? alle.map(ausMedium)
       : browser.eintraege
-          .map((k) => ausKnoten(k, browser.bereich === "dateien" ? browser.pfad.slice(1) : null))
+          .map((k) => ausKnoten(k, browser.bereich === "dateien" ? browser.pfad.slice(1) : null, browser.bereich !== "geteilt"))
           .filter((m): m is MedienEintrag => m !== null),
   );
   const medien = $derived(roh.filter((m) => e.filter === "alle" || m.art === e.filter));

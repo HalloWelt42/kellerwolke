@@ -1,0 +1,249 @@
+/* Kellerwolke mobil - eigenständige, reduzierte Oberfläche für das Telefon (Entwurf mockups/mobil.html).
+   Eigene Bausteine (m-...), keine verkleinerte Rechner-Ansicht; geteilt sind nur Daten und Schnittstelle.
+   Grundschrift 17 px, Berührflächen ab 44 px, kein Überfahren, Folgenreiches per Halten.
+   Abstände für Aussparung und Wischleiste über env(safe-area-inset-*). */
+
+.mobil {
+  --m-bg: #eef1f5;
+  --m-flaeche: #ffffff;
+  --m-flaeche-2: #f3f5f8;
+  --m-rand: #dde3ea;
+  --m-text: #1b2735;
+  --m-text-2: #5d6b7b;
+  --m-text-3: #8593a2;
+  --m-akzent: #2f7ce0;
+  --m-akzent-weich: #e6f0fd;
+  --m-akzent-text: #ffffff;
+  --m-ordner: #f0b34a;
+  --m-gefahr: #df524f;
+  --m-gefahr-weich: #fbe7e6;
+  --m-gut: #2faf5b;
+  --m-schleier: rgba(15, 20, 25, 0.45);
+  --m-schrift: 17px;
+  --m-klein: 15px;
+  --m-marke: 13px;
+  --m-tipp: 48px;
+  --m-zeile: 64px;
+  --m-r: 14px;
+  --m-a: 16px;
+  --m-oben: env(safe-area-inset-top, 0px);
+  --m-unten: env(safe-area-inset-bottom, 0px);
+}
+
+:root[data-theme="dunkel"] .mobil {
+  --m-bg: #0b0f14;
+  --m-flaeche: #141a22;
+  --m-flaeche-2: #1b232e;
+  --m-rand: #263140;
+  --m-text: #e7edf3;
+  --m-text-2: #9aa8b8;
+  --m-text-3: #6b7a8a;
+  --m-akzent: #4aa8ff;
+  --m-akzent-weich: #15324d;
+  --m-akzent-text: #06121f;
+  --m-ordner: #e8b54a;
+  --m-gefahr: #ff6b6b;
+  --m-gefahr-weich: #3a1d1d;
+  --m-gut: #4ade80;
+  --m-schleier: rgba(0, 0, 0, 0.6);
+}
+
+/* ----- Schale ----- */
+.mobil {
+  position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--m-bg); color: var(--m-text); font-size: var(--m-schrift);
+  padding-top: var(--m-oben); -webkit-tap-highlight-color: transparent;
+}
+/* Grundwerte ohne Gewicht: jede Baustein-Klasse darf Farbe und Schrift selbst setzen */
+:where(.mobil button) { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.m-kopf {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; min-height: 60px;
+  background: var(--m-bg);
+}
+.m-kopf h1 { font-size: 22px; margin: 0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-kopf h1.ohne-zurueck { padding-left: 8px; }
+.m-kopf .m-unter { display: block; font-size: var(--m-marke); color: var(--m-text-3); font-weight: 500; }
+.m-knopf {
+  width: var(--m-tipp); height: var(--m-tipp); border: none; background: none; border-radius: 50%; padding: 0;
+  color: var(--m-text); font-size: 20px; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  cursor: pointer;
+}
+.m-knopf:active { background: var(--m-flaeche-2); }
+.m-knopf.akzent { color: var(--m-akzent); }
+.m-suche {
+  margin: 0 var(--m-a) 8px; height: 44px; border-radius: 12px; background: var(--m-flaeche-2); border: none;
+  display: flex; align-items: center; gap: 10px; padding: 0 14px; color: var(--m-text-3); font-size: var(--m-klein);
+  flex: none; text-align: left; cursor: pointer;
+}
+.m-suche.aktiv { background: var(--m-flaeche); box-shadow: 0 0 0 2px var(--m-akzent); color: var(--m-text); cursor: text; }
+/* 16 px und mehr: iOS vergrößert beim Antippen sonst die Seite */
+.m-suche input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--m-text); font: inherit; font-size: 17px; padding: 0; }
+.m-suche input::-webkit-search-cancel-button { display: none; }
+.m-rahmen { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.m-inhalt { flex: 1; overflow-y: auto; overflow-x: clip; overscroll-behavior: contain; padding-bottom: 96px; }
+.m-tabs {
+  flex: none; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 4px calc(6px + var(--m-unten));
+  background: var(--m-flaeche); border-top: 1px solid var(--m-rand);
+}
+.m-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--m-text-3);
+  padding: 6px 0; border: none; background: none; min-height: var(--m-tipp); cursor: pointer;
+}
+.m-tab i { font-size: 21px; }
+.m-tab.aktiv { color: var(--m-akzent); font-weight: 600; }
+
+/* ----- Liste ----- */
+.m-gruppe { font-size: var(--m-marke); color: var(--m-text-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 14px var(--m-a) 6px; }
+.m-liste { margin: 0 var(--m-a); background: var(--m-flaeche); border-radius: var(--m-r); overflow: hidden; }
+.m-zeile {
+  display: flex; align-items: center; gap: 14px; min-height: var(--m-zeile); padding: 8px 6px 8px 14px;
+  width: 100%; border: none; background: none; text-align: left; cursor: pointer;
+}
+.m-zeile:active { background: var(--m-flaeche-2); }
+.m-liste > * + * { border-top: 1px solid var(--m-rand); }
+.m-zeile .m-symbol { width: 36px; text-align: center; font-size: 26px; flex: none; color: var(--m-text-3); }
+.m-symbol.ordner { color: var(--m-ordner); }
+.m-symbol.bild { color: #7a5cf0; }
+.m-symbol.ton { color: #e0569b; }
+.m-symbol.video { color: #0f9b8e; }
+.m-symbol.pdf { color: #df524f; }
+.m-vorschaubild { width: 40px; height: 40px; border-radius: 8px; flex: none; overflow: hidden; background: var(--m-flaeche-2); display: grid; place-items: center; color: var(--m-text-3); }
+.m-vorschaubild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.m-text { flex: 1; min-width: 0; }
+.m-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-meta { font-size: var(--m-marke); color: var(--m-text-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-meta .fa-star { color: #f0b34a; margin-right: 4px; }
+.m-mehr {
+  width: var(--m-tipp); height: var(--m-tipp); display: inline-flex; align-items: center; justify-content: center;
+  color: var(--m-text-3); flex: none; border: none; background: none; border-radius: 50%; cursor: pointer; padding: 0;
+}
+.m-mehr:active { background: var(--m-flaeche-2); }
+.m-weitere { display: block; width: calc(100% - 2 * var(--m-a)); margin: 10px var(--m-a); height: 48px; border: none; border-radius: 12px; background: var(--m-flaeche); color: var(--m-akzent); font-weight: 600; cursor: pointer; }
+
+/* Schwebeknopf: hochladen oder Ordner anlegen */
+.m-plus {
+  position: absolute; right: 20px; bottom: 20px; width: 60px; height: 60px; border-radius: 50%; border: none;
+  background: var(--m-akzent); color: var(--m-akzent-text); font-size: 26px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 24px rgba(47, 124, 224, 0.4); cursor: pointer; z-index: 5;
+}
+
+/* Verschieben: Ziel durch Navigieren wählen */
+.m-verschieben {
+  flex: none; display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 8px 8px 8px 14px;
+  background: var(--m-akzent-weich); color: var(--m-text); border-radius: 14px; font-size: var(--m-klein);
+}
+.m-verschieben span { flex: 1; min-width: 0; }
+.m-pille { height: 44px; padding: 0 16px; border-radius: 22px; border: none; font-weight: 600; cursor: pointer; flex: none; }
+.m-pille.primaer { background: var(--m-akzent); color: var(--m-akzent-text); }
+.m-pille.still { background: transparent; color: var(--m-text-2); }
+.m-pille:disabled { opacity: 0.45; }
+
+/* ----- Blatt von unten ----- */
+.m-schleier { position: fixed; inset: 0; background: var(--m-schleier); z-index: 60; animation: m-ein 0.15s ease; }
+.m-blatt {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--m-flaeche); color: var(--m-text);
+  border-radius: 22px 22px 0 0; padding: 10px 0 calc(16px + var(--m-unten)); max-height: 88dvh; overflow-y: auto;
+  animation: m-hoch 0.18s ease; font-size: var(--m-schrift);
+}
+@keyframes m-ein { from { opacity: 0; } }
+@keyframes m-hoch { from { transform: translateY(40px); opacity: 0.6; } }
+.m-griff { width: 40px; height: 5px; border-radius: 3px; background: var(--m-rand); margin: 0 auto 10px; }
+.m-blatt-kopf { display: flex; align-items: center; gap: 12px; padding: 4px var(--m-a) 12px; border-bottom: 1px solid var(--m-rand); }
+.m-blatt-kopf .m-symbol { font-size: 30px; width: 36px; text-align: center; color: var(--m-text-3); }
+.m-blatt-titel { font-size: 19px; font-weight: 600; padding: 4px var(--m-a) 12px; margin: 0; }
+.m-aktion {
+  display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 0 var(--m-a); width: 100%;
+  border: none; background: none; text-align: left; cursor: pointer;
+}
+.m-aktion:active { background: var(--m-flaeche-2); }
+.m-aktion i { width: 24px; text-align: center; font-size: 20px; color: var(--m-text-2); }
+.m-aktion.gefahr, .m-aktion.gefahr i { color: var(--m-gefahr); }
+.m-aktion.an i { color: var(--m-akzent); }
+.m-aktion .m-hinweis { margin-left: auto; font-size: var(--m-marke); color: var(--m-text-3); }
+.m-feld {
+  display: block; width: calc(100% - 2 * var(--m-a)); margin: 4px var(--m-a) 12px; height: 50px; border-radius: 12px;
+  border: 1px solid var(--m-rand); background: var(--m-flaeche-2); color: var(--m-text); font: inherit; font-size: 17px; padding: 0 14px;
+}
+.m-feld:focus { outline: none; border-color: var(--m-akzent); }
+.m-knopfreihe { display: flex; gap: 10px; justify-content: flex-end; padding: 0 var(--m-a); }
+.m-fehler { margin: 0 var(--m-a) 10px; color: var(--m-gefahr); font-size: var(--m-klein); }
+
+/* Halten zum Bestätigen: der Ring füllt sich, losgelassen vor dem Ende passiert nichts */
+.m-halten {
+  margin: 8px var(--m-a) 0; width: calc(100% - 2 * var(--m-a)); height: 56px; border-radius: 14px; border: none;
+  background: var(--m-gefahr-weich); color: var(--m-gefahr); font-weight: 600; position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 12px; cursor: pointer;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.m-halten .m-fuellung { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(223, 82, 79, 0.18); }
+.m-ring { width: 30px; height: 30px; border-radius: 50%; position: relative; flex: none; background: conic-gradient(var(--m-gefahr) calc(var(--anteil) * 1%), color-mix(in srgb, var(--m-gefahr) 28%, transparent) 0); }
+.m-ring::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--m-gefahr-weich); }
+.m-halten > span:not(.m-fuellung):not(.m-ring) { position: relative; }
+.m-leise { display: block; text-align: center; color: var(--m-text-2); padding: 14px var(--m-a) 4px; font-size: var(--m-klein); }
+
+/* ----- Vollbild ----- */
+.m-vollbild {
+  position: fixed; inset: 0; z-index: 50; background: #000; color: #fff; display: flex; flex-direction: column;
+  padding-top: var(--m-oben);
+}
+.m-vollbild .m-kopf { background: transparent; color: #fff; }
+.m-vollbild .m-knopf { color: #fff; }
+.m-vollbild .m-knopf:active { background: rgba(255, 255, 255, 0.14); }
+.m-vollbild .m-kopf .m-unter { color: #aab; }
+.m-bild { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; touch-action: pan-y; overflow: hidden; }
+.m-bild img, .m-bild video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.m-bild-fehler { text-align: center; padding: 24px 32px; color: #dde; font-size: var(--m-klein); }
+.m-bild-fehler i { display: block; font-size: 34px; color: #fbbf24; margin-bottom: 10px; }
+.m-leiste { flex: none; display: flex; justify-content: space-around; padding: 10px 0 calc(10px + var(--m-unten)); }
+.m-punkte { text-align: center; font-size: 13px; color: #aab; padding-bottom: 6px; }
+.m-info { margin: 0 var(--m-a) 8px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.08); font-size: var(--m-klein); }
+.m-info div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.m-info span:first-child { color: #aab; }
+
+/* ----- Medien ----- */
+.m-segment { display: flex; margin: 0 var(--m-a) 10px; background: var(--m-flaeche-2); border-radius: 10px; padding: 3px; flex: none; }
+.m-segment button { flex: 1; text-align: center; padding: 8px 0; min-height: 40px; border-radius: 8px; border: none; background: none; font-size: var(--m-klein); color: var(--m-text-2); cursor: pointer; }
+.m-segment button.an { background: var(--m-flaeche); color: var(--m-text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.m-raster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
+.m-raster button { aspect-ratio: 1; border: none; padding: 0; background: var(--m-flaeche-2); position: relative; overflow: hidden; cursor: pointer; color: var(--m-text-3); }
+.m-raster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.m-raster .m-film { position: absolute; right: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; display: grid; place-items: center; font-size: 11px; }
+.m-datum { font-size: var(--m-klein); font-weight: 600; padding: 14px var(--m-a) 8px; }
+.m-spieler {
+  flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; margin: 0 8px 6px;
+  background: var(--m-flaeche); border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); border: none; text-align: left;
+}
+.m-spieler .m-text { cursor: pointer; }
+.m-cover { width: 44px; height: 44px; border-radius: 8px; background: linear-gradient(135deg, #e0569b, #f0b34a); flex: none; display: grid; place-items: center; color: #fff; }
+.m-fortschritt { height: 3px; border-radius: 2px; background: var(--m-rand); margin-top: 6px; }
+.m-fortschritt span { display: block; height: 100%; border-radius: 2px; background: var(--m-akzent); }
+
+/* ----- Hochladen ----- */
+.m-quelle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px var(--m-a) 14px; }
+.m-quelle label, .m-quelle button {
+  background: var(--m-flaeche-2); border-radius: 14px; padding: 18px 12px; text-align: center; font-size: var(--m-klein);
+  border: none; cursor: pointer; color: var(--m-text);
+}
+.m-quelle i { display: block; font-size: 26px; color: var(--m-akzent); margin-bottom: 8px; }
+.m-quelle input { display: none; }
+.m-ziel { margin: 0 var(--m-a) 10px; font-size: var(--m-klein); color: var(--m-text-2); }
+.m-ziel b { color: var(--m-text); }
+.m-upload { display: flex; align-items: center; gap: 12px; padding: 10px var(--m-a); }
+.m-upload .m-text { font-size: var(--m-klein); }
+.m-upload .ok { color: var(--m-gut); }
+.m-upload .nein { color: var(--m-gefahr); }
+.m-upload-band {
+  flex: none; display: flex; align-items: center; gap: 12px; margin: 0 8px 6px; padding: 10px 14px; border: none; width: calc(100% - 16px);
+  background: var(--m-flaeche); border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); text-align: left; cursor: pointer; font-size: var(--m-klein);
+}
+
+/* ----- Leer und Fehler ----- */
+.m-leer { text-align: center; padding: 64px 32px; color: var(--m-text-2); }
+.m-leer > i { font-size: 44px; color: var(--m-text-3); margin-bottom: 14px; display: block; }
+.m-leer h2 { font-size: 20px; color: var(--m-text); margin: 0 0 8px; }
+.m-leer p { margin: 0; font-size: var(--m-klein); }
+.m-wieder { margin-top: 18px; display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 24px; border: none; background: var(--m-akzent); color: var(--m-akzent-text); font-weight: 600; cursor: pointer; }
+.m-band { flex: none; margin: 0 var(--m-a) 10px; padding: 10px 14px; border-radius: 12px; background: var(--m-gefahr-weich); color: var(--m-gefahr); font-size: var(--m-klein); display: flex; gap: 10px; align-items: center; }
+.m-band span { flex: 1; min-width: 0; }
+.m-band button { border: none; background: none; color: inherit; width: 32px; height: 32px; cursor: pointer; flex: none; }
+.m-fusszeile { text-align: center; padding: 18px 32px; font-size: var(--m-marke); color: var(--m-text-3); }

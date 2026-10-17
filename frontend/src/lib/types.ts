@@ -30,6 +30,9 @@ export interface Knoten {
   besitzer_name?: string | null;
   // Bild, Audio oder Video (vom Server bestimmt), sonst null.
   medienart?: Medienart | null;
+  // Nur in Suchergebnissen: Ordnerkette über dem Treffer und ob der Name traf (sonst der Inhalt).
+  ort?: string[] | null;
+  im_namen?: boolean | null;
 }
 
 export type Medienart = "bild" | "audio" | "video";

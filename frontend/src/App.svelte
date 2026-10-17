@@ -31,10 +31,14 @@
   import Logo from "./lib/Logo.svelte";
   import AppLeiste from "./lib/AppLeiste.svelte";
   import PlayerLeiste from "./lib/PlayerLeiste.svelte";
+  import PlayerKern from "./lib/PlayerKern.svelte";
   import Meldung from "./lib/Meldung.svelte";
   import Medien from "./lib/medien/Medien.svelte";
   import Vollansicht from "./lib/medien/Vollansicht.svelte";
   import { knotenOeffnen } from "./lib/medien/oeffnen";
+  import MobilApp from "./lib/mobil/MobilApp.svelte";
+  import { geraet } from "./lib/geraet.svelte";
+  import { verbindung } from "./lib/verbindung.svelte";
   import { aktuelleSpur } from "./lib/player.svelte";
   import { ansicht, waehleAnsicht, medienEinstellung, MEDIEN_BEREICHE } from "./lib/ansicht.svelte";
   import type { Knoten } from "./lib/types";
@@ -151,6 +155,10 @@
   <div class="start-laden"><i class="fa-solid fa-cloud fa-beat-fade"></i></div>
 {:else if !auth.angemeldet}
   <Login />
+{:else if geraet.mobil}
+  <!-- Telefon: eigene, reduzierte Oberfläche; Wiedergabe wie am Rechner -->
+  <MobilApp />
+  <PlayerKern />
 {:else if verwaltungOffen}
   <Einstellungen schliessen={() => (verwaltungOffen = false)} />
 {:else}
@@ -228,7 +236,15 @@
     <Navigation />
 
     <section class="inhalt">
-      {#if zustand.speicher?.verfuegbar === false}
+      {#if !verbindung.ok}
+        <div class="speicher-warnung" role="alert">
+          <i class="fa-solid fa-wifi"></i>
+          <span>
+            <strong>Keine Verbindung zur Kellerwolke.</strong>
+            Sobald der Server wieder erreichbar ist, geht es von selbst weiter.
+          </span>
+        </div>
+      {:else if zustand.speicher?.verfuegbar === false}
         <div class="speicher-warnung" role="alert">
           <i class="fa-solid fa-triangle-exclamation"></i>
           <span>
@@ -278,6 +294,7 @@
       />
     {/if}
 
+    <PlayerKern />
     <PlayerLeiste />
 
     <!-- Die eine Vollansicht für Bilder und Videos, von überall geöffnet. -->

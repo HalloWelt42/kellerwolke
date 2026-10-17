@@ -96,4 +96,4 @@ Alle Wege im Browser prüfen (Einzel- und Splitscreen, alle Bereiche, beide Them
 
 ### E6 Mobile Ansicht
 
-Nach Freigabe des Entwurfs `mockups/mobil.html`. Dazu gehört `viewport-fit=cover` mit Abständen für Aussparung und Wischleiste; bis dahin bleibt die PWA im sicheren Bereich.
+Stand: umgesetzt nach dem freigegebenen Entwurf `mockups/mobil.html` (Freigabe 17.10.2026), alle neun Zustände in Telefonbreite in hell und dunkel geprüft. Eigene Oberfläche in `frontend/src/lib/mobil/`, gewählt nach Breite (bis 760 Punkte, Telefon quer über die Höhe); dieselbe Fläche, dieselben Rechte, derselbe Player und dieselbe Vollansicht-Liste wie am Rechner. `viewport-fit=cover` mit Abständen für Aussparung und Wischleiste. Abweichungen vom Entwurf: die Suche heißt "In allen Dateien suchen" (sie sucht immer überall), statt eines Textausschnitts steht "im Inhalt gefunden" (der Suchindex hält keinen Text), externe Quellen gibt es nur am Rechner, "Thema" kennt zusätzlich hell und dunkel.

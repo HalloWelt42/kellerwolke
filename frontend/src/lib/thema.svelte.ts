@@ -1,27 +1,50 @@
-// Hell/dunkel-Umschaltung. Das gewaehlte Thema steht als data-theme auf <html>
-// und wird in localStorage gemerkt. Standard ist hell.
+// Hell, dunkel oder wie das Gerät. Das wirksame Thema steht als data-theme auf
+// <html>, die Wahl wird in localStorage gemerkt. Standard ist hell; "system"
+// folgt der Einstellung des Geräts und wechselt mit ihr.
 
 export type Thema = "hell" | "dunkel";
+export type ThemaWahl = Thema | "system";
 
 const SCHLUESSEL = "kw_thema";
+const dunkelAbfrage = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
 
-function gemerktes(): Thema {
-  const wert = localStorage.getItem(SCHLUESSEL);
-  return wert === "dunkel" ? "dunkel" : "hell";
+function gemerkte(): ThemaWahl {
+  let wert: string | null = null;
+  try {
+    wert = localStorage.getItem(SCHLUESSEL);
+  } catch {
+    // ohne Speicher gilt der Standard
+  }
+  return wert === "dunkel" || wert === "system" ? wert : "hell";
 }
 
-export const thema = $state<{ aktuell: Thema }>({ aktuell: gemerktes() });
+function wirksam(wahl: ThemaWahl): Thema {
+  if (wahl !== "system") return wahl;
+  return dunkelAbfrage?.matches ? "dunkel" : "hell";
+}
+
+const start = gemerkte();
+export const thema = $state<{ wahl: ThemaWahl; aktuell: Thema }>({ wahl: start, aktuell: wirksam(start) });
 
 export function themaAnwenden(): void {
+  thema.aktuell = wirksam(thema.wahl);
   document.documentElement.dataset.theme = thema.aktuell;
 }
 
-export function themaSetzen(neu: Thema): void {
-  thema.aktuell = neu;
-  localStorage.setItem(SCHLUESSEL, neu);
+dunkelAbfrage?.addEventListener("change", () => {
+  if (thema.wahl === "system") themaAnwenden();
+});
+
+export function themaWaehlen(wahl: ThemaWahl): void {
+  thema.wahl = wahl;
+  try {
+    localStorage.setItem(SCHLUESSEL, wahl);
+  } catch {
+    // Merken ist Komfort
+  }
   themaAnwenden();
 }
 
 export function themaUmschalten(): void {
-  themaSetzen(thema.aktuell === "hell" ? "dunkel" : "hell");
+  themaWaehlen(thema.aktuell === "hell" ? "dunkel" : "hell");
 }

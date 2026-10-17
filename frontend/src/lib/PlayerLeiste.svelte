@@ -1,114 +1,18 @@
 <script lang="ts">
-  // Durchgehende Player-Leiste am unteren Rand - eigene Optik (kein natives
-  // <audio controls>). Wird einmalig von App.svelte gerendert und überlebt so
-  // jede Navigation.
-  import { onMount } from "svelte";
+  // Durchgehende Player-Leiste am unteren Rand (Rechner) - eigene Optik. Sie
+  // zeigt und steuert die Wiedergabe aus PlayerKern; das Audio-Element liegt dort.
   import {
-    player, aktuelleSpur, spurWeiter, spurZurueck, playerBeenden,
-    beiEnde, wiederholungWeiter, zustandLaden, zustandSpeichern,
-    audioElement, umschalten, springen, spurUrl,
+    player, aktuelleSpur, spurWeiter, spurZurueck, playerBeenden, wiederholungWeiter, umschalten, suchenZu,
   } from "./player.svelte";
-  import NowPlaying from "./NowPlaying.svelte";
   import { zumOrdner as zumOrdnerGehen } from "./medien/oeffnen";
-  import { ursache } from "./medien/adressen";
-  import { vollansichtOffen } from "./vorschau.svelte";
-  import { auth } from "./auth.svelte";
 
-  let audioEl: HTMLAudioElement;
-  let geladeneUrl = "";
-  let laden = $state(false); // puffert gerade
-  let fehler = $state(""); // z.B. Format nicht abspielbar
   const spur = $derived(aktuelleSpur());
+  const stummWirkt = $derived(player.stumm || player.lautstaerke === 0);
 
-  // Reload-Persistenz synchron beim Init einlesen (vor dem ersten Effekt).
-  let startSekunde = zustandLaden(auth.benutzer?.id ?? "");
-  let autoAbspielen = player.index < 0; // wiederhergestellte Spur NICHT automatisch starten
-
-  // Nur bei echtem Spurwechsel neu laden. Wiederhergestellte erste Spur nicht auto.
-  $effect(() => {
-    const s = spur;
-    if (!audioEl) return;
-    const url = s ? spurUrl(s) : "";
-    if (s && url !== geladeneUrl) {
-      geladeneUrl = url;
-      fehler = "";
-      audioEl.src = url;
-      if (autoAbspielen) audioEl.play().catch(() => {});
-      autoAbspielen = true;
-    } else if (!s) {
-      geladeneUrl = "";
-      audioEl.pause();
-      audioEl.removeAttribute("src");
-    }
-  });
-
-  // Lautstärke/Stumm auf das Element spiegeln.
-  $effect(() => {
-    if (audioEl) {
-      audioEl.volume = player.lautstaerke;
-      audioEl.muted = player.stumm;
-    }
-  });
-
-  // Tempo auf das Element spiegeln.
-  $effect(() => {
-    if (audioEl) audioEl.playbackRate = player.tempo;
-  });
-
-  // Media Session: Titel + Wiedergabestatus.
-  $effect(() => {
-    const s = spur;
-    if (!("mediaSession" in navigator)) return;
-    if (s) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: s.titel,
-        artist: s.pfad && s.pfad.length ? s.pfad.map((x) => x.name).join(" / ") : "Kellerwolke",
-      });
-      navigator.mediaSession.playbackState = player.laeuft ? "playing" : "paused";
-    } else {
-      navigator.mediaSession.metadata = null;
-    }
-  });
-
-  // Strukturzustand sichern, sobald er sich ändert (Position kommt zusätzlich
-  // beim Verlassen der Seite dazu - kein Speichern im Sekundentakt).
-  $effect(() => {
-    player.index;
-    player.liste;
-    player.wiederholung;
-    player.zufall;
-    zustandSpeichern();
-  });
-
-  onMount(() => {
-    audioElement(audioEl);
-    const sichern = () => zustandSpeichern();
-    window.addEventListener("beforeunload", sichern);
-    // Media Session: Betriebssystem-/Kopfhörer-/Sperrbildschirm-Steuerung.
-    if ("mediaSession" in navigator) {
-      const ms = navigator.mediaSession;
-      ms.setActionHandler("play", () => umschalten());
-      ms.setActionHandler("pause", () => umschalten());
-      ms.setActionHandler("previoustrack", () => spurZurueck());
-      ms.setActionHandler("nexttrack", () => spurWeiter());
-      ms.setActionHandler("seekbackward", () => springen(-10));
-      ms.setActionHandler("seekforward", () => springen(10));
-    }
-    return () => {
-      window.removeEventListener("beforeunload", sichern);
-      audioElement(null);
-    };
-  });
-
-  function toggle() {
-    if (!audioEl) return;
-    if (audioEl.paused) audioEl.play().catch(() => {});
-    else audioEl.pause();
-  }
   function suche(e: MouseEvent) {
-    if (!audioEl || !player.dauer) return;
+    if (!player.dauer) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    audioEl.currentTime = ((e.clientX - r.left) / r.width) * player.dauer;
+    suchenZu(((e.clientX - r.left) / r.width) * player.dauer);
   }
   function mmss(s: number) {
     if (!isFinite(s)) return "0:00";
@@ -119,62 +23,7 @@
   function zumOrdner() {
     if (spur?.pfad) zumOrdnerGehen(spur.pfad, spur.id);
   }
-  async function beiFehler() {
-    laden = false;
-    player.laeuft = false;
-    fehler = await ursache(geladeneUrl);
-  }
-  function amEnde() {
-    const was = beiEnde();
-    if (was === "wiederhole") {
-      if (audioEl) {
-        audioEl.currentTime = 0;
-        audioEl.play().catch(() => {});
-      }
-    } else if (was === "stopp") {
-      player.laeuft = false;
-    }
-    // "weiter": Index wurde geändert -> der Lade-Effekt spielt die nächste Spur
-  }
-  function beiMetadaten() {
-    player.dauer = audioEl.duration;
-    fehler = "";
-    if (startSekunde > 0 && startSekunde < audioEl.duration) audioEl.currentTime = startSekunde;
-    startSekunde = 0;
-  }
-
-  const stummWirkt = $derived(player.stumm || player.lautstaerke === 0);
-
-  // Tastatur: nur wenn eine Spur aktiv ist und der Fokus NICHT in einem Eingabefeld
-  // sitzt. Bewusst nur Leertaste (Play/Pause) und m (Stumm) - Pfeile bleiben den
-  // Ansichten (z.B. Bild-Lightbox); Seek/Sprung kommt in die Now-Playing-Ansicht.
-  function tastatur(e: KeyboardEvent) {
-    if (!spur || vollansichtOffen()) return; // die offene Vollansicht hat Vorrang
-    const z = e.target as HTMLElement | null;
-    if (z && (z.tagName === "INPUT" || z.tagName === "TEXTAREA" || z.tagName === "SELECT" || z.isContentEditable)) return;
-    if (e.key === " ") {
-      e.preventDefault();
-      toggle();
-    } else if (e.key === "m" || e.key === "M") {
-      player.stumm = !player.stumm;
-    }
-  }
 </script>
-
-<svelte:window onkeydown={tastatur} />
-
-<audio
-  bind:this={audioEl}
-  onplay={() => { player.laeuft = true; fehler = ""; }}
-  onpause={() => (player.laeuft = false)}
-  ontimeupdate={() => (player.zeit = audioEl.currentTime)}
-  onloadedmetadata={beiMetadaten}
-  onwaiting={() => (laden = true)}
-  onplaying={() => { laden = false; fehler = ""; }}
-  oncanplay={() => (laden = false)}
-  onerror={beiFehler}
-  onended={amEnde}
-></audio>
 
 {#if spur}
   <div class="spieler" role="region" aria-label="Wiedergabe">
@@ -182,8 +31,8 @@
       <div class="s-cover"><i class="fa-solid fa-music"></i></div>
       <div class="s-text">
         <div class="s-titel">{spur.titel}</div>
-        {#if fehler}
-          <div class="s-fehler"><i class="fa-solid fa-triangle-exclamation"></i> {fehler}</div>
+        {#if player.fehler}
+          <div class="s-fehler"><i class="fa-solid fa-triangle-exclamation"></i> {player.fehler}</div>
         {:else if spur.pfad}
           <div class="s-pfad">{spur.pfad.length ? spur.pfad.map((x) => x.name).join(" / ") : "Meine Dateien"}</div>
         {/if}
@@ -195,8 +44,8 @@
       <div class="s-tasten">
         <button class="klein" class:an={player.zufall} aria-label="Zufall" aria-pressed={player.zufall} title="Zufallswiedergabe" onclick={() => (player.zufall = !player.zufall)}><i class="fa-solid fa-shuffle"></i></button>
         <button aria-label="Zurück" onclick={spurZurueck}><i class="fa-solid fa-backward-step"></i></button>
-        <button class="gross" aria-label={player.laeuft ? "Pause" : "Abspielen"} onclick={toggle}>
-          {#if laden}<i class="fa-solid fa-circle-notch fa-spin"></i>{:else}<i class="fa-solid {player.laeuft ? 'fa-pause' : 'fa-play'}"></i>{/if}
+        <button class="gross" aria-label={player.laeuft ? "Pause" : "Abspielen"} onclick={umschalten}>
+          {#if player.laden}<i class="fa-solid fa-circle-notch fa-spin"></i>{:else}<i class="fa-solid {player.laeuft ? 'fa-pause' : 'fa-play'}"></i>{/if}
         </button>
         <button aria-label="Weiter" onclick={spurWeiter}><i class="fa-solid fa-forward-step"></i></button>
         <button class="klein wdh" class:an={player.wiederholung !== 'aus'} aria-label="Wiederholen" title={player.wiederholung === 'eine' ? 'Titel wiederholen' : player.wiederholung === 'alle' ? 'Alle wiederholen' : 'Wiederholen aus'} onclick={wiederholungWeiter}>
@@ -223,12 +72,7 @@
   </div>
 {/if}
 
-{#if player.voll}
-  <NowPlaying />
-{/if}
-
 <style>
-  audio { display: none; }
   /* Eigene, letzte Rasterzeile im .app-Grid - hebt die Ansicht an statt zu überlagern. */
   .spieler { grid-column: 1 / -1; grid-row: 3; height: 78px; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(320px, 1.6fr) minmax(160px, 1fr); align-items: center; gap: var(--a4); padding: 0 var(--a4); background: var(--flaeche); border-top: 1px solid var(--rand); }
   .s-jetzt { display: flex; align-items: center; gap: var(--a3); min-width: 0; }

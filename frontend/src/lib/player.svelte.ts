@@ -30,6 +30,8 @@ export const player = $state<{
   zufall: boolean;
   tempo: number; // Wiedergabegeschwindigkeit, 1 = normal
   voll: boolean; // Now-Playing-Ansicht offen
+  laden: boolean; // puffert gerade
+  fehler: string; // warum es nicht spielt (leer = alles gut)
 }>({
   liste: [],
   index: -1,
@@ -42,6 +44,8 @@ export const player = $state<{
   zufall: false,
   tempo: 1,
   voll: false,
+  laden: false,
+  fehler: "",
 });
 
 export function aktuelleSpur(): Spur | null {
