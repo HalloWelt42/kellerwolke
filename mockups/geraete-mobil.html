@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Kellerwolke - Gerät koppeln</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/mobil.css" />
+    <style>
+      .m-anmeldung { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 28px 40px; gap: 14px; }
+      .m-marke-gross { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 26px; font-weight: 600; margin-bottom: 4px; }
+      .m-marke-gross i { color: var(--m-akzent); }
+      .m-unterzeile { text-align: center; color: var(--m-text-2); font-size: var(--m-klein); margin: 0 0 14px; }
+      .m-feldname { font-size: var(--m-marke); color: var(--m-text-3); margin-bottom: -8px; }
+      .m-eingabe { height: 52px; border-radius: 12px; border: 1px solid var(--m-rand); background: var(--m-flaeche); padding: 0 14px; display: flex; align-items: center; color: var(--m-text); }
+      .m-eingabe.leer { color: var(--m-text-3); }
+      .m-haupt { height: 52px; border-radius: 26px; background: var(--m-akzent); color: var(--m-akzent-text); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .m-zweit { height: 52px; border-radius: 26px; background: var(--m-akzent-weich); color: var(--m-akzent); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .m-oder { display: flex; align-items: center; gap: 12px; color: var(--m-text-3); font-size: var(--m-marke); }
+      .m-oder::before, .m-oder::after { content: ""; flex: 1; height: 1px; background: var(--m-rand); }
+      .m-code { display: flex; gap: 6px; justify-content: center; }
+      .m-code span { width: 36px; height: 52px; border-radius: 10px; border: 1px solid var(--m-rand); background: var(--m-flaeche); display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; font-size: 24px; font-weight: 600; }
+      .m-code span.aktiv { border-color: var(--m-akzent); box-shadow: 0 0 0 3px var(--m-akzent-weich); }
+      .m-code .luecke { width: 10px; border: 0; background: transparent; }
+      .m-erklaerung { color: var(--m-text-2); font-size: var(--m-klein); line-height: 1.4; margin: 0; }
+      .m-fehler { padding: 12px 14px; border-radius: 12px; background: var(--m-gefahr-weich); color: var(--m-gefahr); font-size: var(--m-klein); display: flex; gap: 10px; align-items: flex-start; }
+      .m-tastatur { flex: none; height: 250px; background: var(--m-flaeche-2); border-top: 1px solid var(--m-rand); display: flex; align-items: center; justify-content: center; color: var(--m-text-3); font-size: var(--m-marke); }
+      .m-geraet-marke { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--m-akzent-weich); color: var(--m-akzent); margin-left: 6px; vertical-align: 2px; }
+      .m-zeile.gefahr .m-name, .m-zeile.gefahr .m-symbol { color: var(--m-gefahr); }
+    </style>
+  </head>
+  <body>
+    <div class="buehne">
+
+      <!-- 1. Anmeldeseite -->
+      <div>
+        <p class="zustand-titel">1. Anmeldung: Passwort oder Code</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-anmeldung">
+            <div class="m-marke-gross"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+            <p class="m-unterzeile">Die eigene Wolke im Keller</p>
+            <div class="m-feldname">Name</div>
+            <div class="m-eingabe leer">Name oder Kürzel</div>
+            <div class="m-feldname">Passwort</div>
+            <div class="m-eingabe leer">Passwort</div>
+            <div class="m-haupt">Anmelden</div>
+            <div class="m-oder">oder</div>
+            <div class="m-zweit"><i class="fa-solid fa-link"></i> Mit Code koppeln</div>
+            <p class="m-erklaerung" style="text-align:center">Den Code zeigt die Kellerwolke am Rechner unter Einstellungen, Geräte.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Code eintippen -->
+      <div>
+        <p class="zustand-titel">2. Code eintippen (per QR-Code geöffnet: schon ausgefüllt)</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>Gerät koppeln</h1></div>
+          <div class="m-anmeldung" style="justify-content:flex-start; padding-top: 18px">
+            <p class="m-erklaerung">Tipp den Code vom Rechner ein. Danach bleibt dieses Gerät angemeldet, bis du es trennst; dein Passwort wird hier nicht gespeichert.</p>
+            <div class="m-code"><span>K</span><span>7</span><span>Q</span><span>F</span><span class="luecke"></span><span>2</span><span>M</span><span class="aktiv"></span><span></span></div>
+            <div class="m-feldname">Name des Geräts</div>
+            <div class="m-eingabe">Telefon</div>
+            <div class="m-haupt"><i class="fa-solid fa-link"></i> Koppeln</div>
+          </div>
+          <div class="m-tastatur">Tastatur</div>
+        </div>
+      </div>
+
+      <!-- 3. Code abgelaufen oder falsch -->
+      <div>
+        <p class="zustand-titel">3. Code abgelaufen, schon benutzt oder falsch</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>Gerät koppeln</h1></div>
+          <div class="m-anmeldung" style="justify-content:flex-start; padding-top: 18px">
+            <div class="m-fehler"><i class="fa-solid fa-circle-exclamation" style="margin-top:3px"></i><span>Dieser Code gilt nicht (mehr). Er gilt zehn Minuten und nur einmal; erzeug am Rechner einen neuen.</span></div>
+            <div class="m-code"><span>K</span><span>7</span><span>Q</span><span>F</span><span class="luecke"></span><span>2</span><span>M</span><span>9</span><span>X</span></div>
+            <div class="m-feldname">Name des Geräts</div>
+            <div class="m-eingabe">Telefon</div>
+            <div class="m-haupt"><i class="fa-solid fa-link"></i> Koppeln</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Mehr auf einem gekoppelten Gerät -->
+      <div>
+        <p class="zustand-titel">4. Mehr: dieses Gerät, trennen</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><h1 style="padding-left:8px">Mehr</h1></div>
+          <div class="m-inhalt">
+            <div class="m-liste" style="margin-top:6px">
+              <div class="m-zeile"><i class="fa-solid fa-user-group m-symbol"></i><div class="m-text"><div class="m-name">Mit mir geteilt</div><div class="m-meta">3 Ordner</div></div><span class="m-mehr"><i class="fa-solid fa-chevron-right"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-trash-can m-symbol"></i><div class="m-text"><div class="m-name">Papierkorb</div><div class="m-meta">14 Einträge</div></div><span class="m-mehr"><i class="fa-solid fa-chevron-right"></i></span></div>
+            </div>
+            <div class="m-gruppe">Konto</div>
+            <div class="m-liste">
+              <div class="m-zeile"><i class="fa-solid fa-circle-half-stroke m-symbol"></i><div class="m-text"><div class="m-name">Thema</div><div class="m-meta">wie das Telefon</div></div></div>
+              <div class="m-zeile"><i class="fa-solid fa-mobile-screen m-symbol"></i><div class="m-text"><div class="m-name">Telefon<span class="m-geraet-marke">dieses Gerät</span></div><div class="m-meta">gekoppelt seit 17.10.2026 · Konto admin</div></div></div>
+              <div class="m-zeile gefahr"><i class="fa-solid fa-link-slash m-symbol"></i><div class="m-text"><div class="m-name">Gerät trennen</div><div class="m-meta">meldet ab; zum Wiederkommen neu koppeln</div></div></div>
+            </div>
+            <p class="m-meta" style="text-align:center; padding: 18px 32px">Weitere Geräte koppelst und trennst du am Rechner unter Einstellungen, Geräte.</p>
+          </div>
+          <nav class="m-tabs">
+            <span class="m-tab"><i class="fa-solid fa-folder"></i>Dateien</span>
+            <span class="m-tab"><i class="fa-solid fa-images"></i>Medien</span>
+            <span class="m-tab"><i class="fa-solid fa-star"></i>Favoriten</span>
+            <span class="m-tab aktiv"><i class="fa-solid fa-ellipsis"></i>Mehr</span>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button onclick="location.href='/mockups/geraete.html'" title="Rechner"><i class="fa-solid fa-display"></i></button>
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>

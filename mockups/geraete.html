@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Geräte</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      .koppel-box {
+        max-width: 880px; margin-bottom: var(--a4); padding: var(--a4); border-radius: var(--r3);
+        border: 1px solid var(--akzent); background: var(--akzent-weich);
+        display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--a4); align-items: start;
+      }
+      .qr { width: 184px; height: 184px; padding: 10px; background: #fff; border-radius: var(--r2); }
+      .qr svg { width: 100%; height: 100%; display: block; }
+      .kb-kopf { display: flex; align-items: center; gap: var(--a2); font-weight: 600; margin-bottom: var(--a2); }
+      .kb-kopf i { color: var(--akzent); }
+      .kb-code { font-family: ui-monospace, monospace; font-size: 2rem; letter-spacing: 0.12em; font-weight: 600; }
+      .kb-gueltig { font-size: 0.85rem; color: var(--text-2); margin: 2px 0 var(--a3); }
+      .kb-wege { margin: 0 0 var(--a3); padding-left: 1.2em; color: var(--text-2); font-size: 0.92rem; }
+      .kb-wege li + li { margin-top: 4px; }
+      .kb-fuss { display: flex; align-items: center; gap: var(--a3); }
+      .kb-warten { color: var(--text-2); font-size: 0.9rem; display: inline-flex; gap: 8px; align-items: center; }
+      .zugang.neu { outline: 2px solid var(--gut, #2faf5b); outline-offset: -2px; border-radius: var(--r2); }
+      .zugang.alt .so-name, .zugang.alt .zg-zeit { color: var(--text-3); }
+      .marke-neu { font-size: 0.75rem; padding: 1px 8px; border-radius: 10px; background: #e3f6ea; color: #1f7a40; }
+      :root[data-theme="dunkel"] .marke-neu { background: #16301f; color: #6ee7a0; }
+      .zg-meta { font-size: 0.85rem; color: var(--text-2); margin-top: 2px; }
+      .umbenennen { display: flex; gap: var(--a2); align-items: center; }
+      .umbenennen .feld { max-width: 260px; }
+      .fussnote { max-width: 880px; font-size: 0.85rem; color: var(--text-2); margin-top: var(--a3); }
+      .zustand-hinweis { font-size: 0.78rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; margin: var(--a4) 0 var(--a2); }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <nav class="breadcrumb" style="padding: 0;">
+          <i class="fa-solid fa-gear"></i> <span class="aktuell">Einstellungen</span>
+        </nav>
+        <div class="kopf-rechts">
+          <button class="knopf still" title="Zu den Dateien"><i class="fa-solid fa-arrow-left"></i> Zu den Dateien</button>
+        </div>
+      </header>
+
+      <nav class="einst-nav">
+        <div class="nav-titel">Einstellungen</div>
+        <a class="einst-eintrag"><i class="fa-solid fa-users"></i> Konten</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-hard-drive"></i> Speicherorte</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="einst-eintrag"><i class="fa-solid fa-key"></i> Zugänge</a>
+        <a class="einst-eintrag aktiv"><i class="fa-solid fa-mobile-screen"></i> Geräte</a>
+      </nav>
+
+      <section class="einst-inhalt">
+        <h1>Geräte</h1>
+        <p class="unter">
+          Telefon und Tablet bleiben angemeldet, ohne dass dort dein Passwort liegt. Jedes Gerät bekommt beim Koppeln
+          einen eigenen Schlüssel und darf damit alles, was dein Konto darf. Geht eines verloren, trennst du es hier;
+          sein Schlüssel gilt sofort nicht mehr.
+        </p>
+
+        <p class="zustand-hinweis">Zustand: Gerät koppeln gestartet</p>
+        <div class="koppel-box">
+          <div class="qr" id="qr"></div>
+          <div>
+            <div class="kb-kopf"><i class="fa-solid fa-link"></i> Neues Gerät koppeln</div>
+            <div class="kb-code">K7QF 2M9X</div>
+            <div class="kb-gueltig">gilt noch 9:42 Minuten und nur für ein Gerät</div>
+            <ol class="kb-wege">
+              <li>Web-App auf dem Home-Bildschirm: auf der Anmeldeseite <b>Mit Code koppeln</b> wählen und den Code eintippen.</li>
+              <li>Browser auf dem Telefon: die Kamera auf den QR-Code halten, der Code ist dann schon eingetragen.</li>
+            </ol>
+            <div class="kb-fuss">
+              <span class="kb-warten"><i class="fa-solid fa-circle-notch fa-spin"></i> Wartet auf das Gerät</span>
+              <button class="knopf still">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="karte">
+          <h2><i class="fa-solid fa-mobile-screen"></i> Gekoppelte Geräte</h2>
+          <p class="karte-unter">Zuletzt gesehen heißt: die letzte Anfrage dieses Geräts an die Kellerwolke.</p>
+
+          <!-- Zustand: gerade gekoppelt (die Koppelbox schließt sich, das Gerät erscheint oben) -->
+          <div class="zugang neu">
+            <div class="so-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Telefon</span>
+                <span class="marke-neu">gerade gekoppelt</span>
+                <span class="zg-zeit">zuletzt gesehen gerade eben</span>
+              </div>
+              <div class="zg-meta">Web-App · gekoppelt am 17.10.2026, 14:05 · aus 192.168.178.57</div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="Trennen (das Gerät ist sofort abgemeldet)"><i class="fa-solid fa-link-slash"></i></button>
+            </div>
+          </div>
+
+          <!-- Zustand: umbenennen -->
+          <div class="zugang">
+            <div class="so-icon"><i class="fa-solid fa-tablet-screen-button"></i></div>
+            <div class="so-haupt">
+              <div class="umbenennen">
+                <input class="feld" type="text" value="Tablet Küche" />
+                <button class="knopf still">Abbrechen</button>
+                <button class="knopf primaer"><i class="fa-solid fa-check"></i> Speichern</button>
+              </div>
+              <div class="zg-meta">Web-App · gekoppelt am 02.10.2026 · zuletzt gestern, 20:31 aus 192.168.178.61</div>
+            </div>
+          </div>
+
+          <div class="zugang">
+            <div class="so-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Telefon unterwegs</span>
+                <span class="zg-zeit">zuletzt gesehen vor 3 Tagen</span>
+              </div>
+              <div class="zg-meta">Browser · gekoppelt am 21.09.2026 · aus 192.168.178.57</div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="Trennen"><i class="fa-solid fa-link-slash"></i></button>
+            </div>
+          </div>
+
+          <!-- Zustand: lange nicht gesehen (nur als Hinweis, nichts geschieht von selbst) -->
+          <div class="zugang alt">
+            <div class="so-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+            <div class="so-haupt">
+              <div class="so-kopf">
+                <span class="so-name">Altes Telefon</span>
+                <span class="marke-ro">lange nicht gesehen</span>
+                <span class="zg-zeit">zuletzt am 04.06.2026</span>
+              </div>
+              <div class="zg-meta">Web-App · gekoppelt am 11.03.2026 · Wird es nicht mehr benutzt, trenn es.</div>
+            </div>
+            <div class="so-akt">
+              <button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button>
+              <button class="icon-knopf gefahr" title="Trennen"><i class="fa-solid fa-link-slash"></i></button>
+            </div>
+          </div>
+
+          <div class="formzeile">
+            <button class="knopf primaer"><i class="fa-solid fa-link"></i> Gerät koppeln</button>
+          </div>
+        </div>
+
+        <p class="fussnote">
+          Ein Code gilt zehn Minuten und nur einmal; mehrere falsche Versuche hintereinander bremsen die Kopplung kurz
+          aus. Anmeldungen im Browser mit Passwort bleiben, wie sie sind, und erscheinen hier nicht.
+        </p>
+      </section>
+    </div>
+
+    <div class="mock-leiste">
+      <button onclick="location.href='/mockups/geraete-mobil.html'" title="Telefon"><i class="fa-solid fa-mobile-screen"></i></button>
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      // Nur ein Platzhalter mit QR-Gestalt (Suchmarken in drei Ecken); die App erzeugt den echten Code.
+      (function () {
+        const n = 29, z = 1 / n;
+        let s = 7, teile = [];
+        const zufall = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+        const marke = (x, y) => (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8);
+        for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!marke(x, y) && zufall() > 0.52) teile.push(`M${x} ${y}h1v1h-1z`);
+        const suche = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="#111"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="#fff"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" fill="#111"/>`;
+        document.getElementById("qr").innerHTML =
+          `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><path d="${teile.join("")}" fill="#111"/>${suche(0, 0)}${suche(n - 7, 0)}${suche(0, n - 7)}</svg>`;
+      })();
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
