@@ -95,7 +95,16 @@ class SucheEingabe(BaseModel):
 class IchAus(BaseModel):
     app: str
     konto: str
+    konto_id: UUID
     rechte: list[RechtAus]
+
+
+class VersionAus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: UUID
+    groesse: int
+    erstellt_am: datetime
+    aktuell: bool
 
 
 class OrdnerPfadEingabe(BaseModel):
@@ -186,6 +195,26 @@ async def ordner(eingabe: OrdnerPfadEingabe, akteur=Depends(aktuelle_app), ablag
 async def inhalt(knoten_id: UUID, request: Request, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     try:
         knoten, stand = await ablage.datei_kopf(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+    return inhalt_antwort(request, gesamt=stand.groesse, inhaltstyp=knoten["inhaltstyp"], dateiname=knoten["name"],
+                          etag=stand.etag, strom=lambda start, laenge: ablage.stand_stroemen(stand, start, laenge))
+
+
+@router.get("/knoten/{knoten_id}/versionen", response_model=list[VersionAus])
+async def versionen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Versionen einer Datei, neueste zuerst. Zurückholen heißt: alten Inhalt lesen und als neue Version schreiben."""
+    try:
+        return await ablage.versionen(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/knoten/{knoten_id}/versionen/{version_id}/inhalt")
+async def version_inhalt(knoten_id: UUID, version_id: UUID, request: Request, akteur=Depends(aktuelle_app),
+                         ablage=Depends(hole_ablage)):
+    try:
+        knoten, stand = await ablage.version_kopf(akteur, knoten_id, version_id)
     except _FEHLER as f:
         raise _fehler(f) from None
     return inhalt_antwort(request, gesamt=stand.groesse, inhaltstyp=knoten["inhaltstyp"], dateiname=knoten["name"],

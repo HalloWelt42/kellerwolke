@@ -532,3 +532,39 @@ async def test_app_loescht_weder_anker_noch_fremd_gesperrtes_noch_nur_lesbares(u
     fremd = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Vertonung/v.txt"}, content=b"x", headers=v)).json()
     assert (await client.delete(f"/api/v1/ablage/knoten/{fremd['id']}", headers=t)).status_code == 403   # nur lesbar
     assert (await client.delete(f"/api/v1/ablage/knoten/{d}", headers=t)).status_code == 204             # eigene Sperre
+
+
+async def test_versionen_lesen_und_ich_mit_konto(umgebung):
+    """Apps sehen die Versionen ihrer Dateien und lesen jede alte Fassung; fremde oder unbekannte Versionen nicht."""
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    weg = "/api/v1/ablage/datei"
+    erst = (await client.put(weg, params={"pfad": "Apps/Transkription/t.json"}, content=b"eins", headers=t)).json()
+    zweit = (await client.put(weg, params={"pfad": "Apps/Transkription/t.json"}, content=b"zwei!",
+                              headers={**t, "If-Match": erst["etag"]})).json()
+    r = await client.get(f"/api/v1/ablage/knoten/{erst['id']}/versionen", headers=t)
+    assert r.status_code == 200, r.text
+    liste = r.json()
+    assert [v["groesse"] for v in liste] == [5, 4] and [v["aktuell"] for v in liste] == [True, False]
+    alt = await client.get(f"/api/v1/ablage/knoten/{erst['id']}/versionen/{liste[1]['id']}/inhalt", headers=t)
+    assert alt.status_code == 200 and alt.content == b"eins" and alt.headers["etag"].strip('"') == liste[1]["id"]
+    teil = await client.get(f"/api/v1/ablage/knoten/{erst['id']}/versionen/{liste[1]['id']}/inhalt",
+                            headers={**t, "Range": "bytes=1-2"})
+    assert teil.status_code == 206 and teil.content == b"in"
+    # Zurückholen: alten Inhalt als neue Version schreiben
+    r = await client.put(f"/api/v1/ablage/knoten/{erst['id']}/inhalt", content=alt.content,
+                         headers={**t, "If-Match": zweit["etag"]})
+    assert r.status_code == 200
+    assert len((await client.get(f"/api/v1/ablage/knoten/{erst['id']}/versionen", headers=t)).json()) == 3
+    # Version einer anderen Datei oder unbekannt: nicht gefunden
+    andere = (await client.put(weg, params={"pfad": "Apps/Transkription/u.json"}, content=b"x", headers=t)).json()
+    fremd = (await client.get(f"/api/v1/ablage/knoten/{andere['id']}/versionen", headers=t)).json()[0]["id"]
+    assert (await client.get(f"/api/v1/ablage/knoten/{erst['id']}/versionen/{fremd}/inhalt", headers=t)).status_code == 404
+    # andere Apps lesen mit (Vorgabe: Apps lesend), Dateien außerhalb der Rechte gibt es nicht
+    _, t2 = await zugang(client, sitzung, "Vertonung")
+    assert (await client.get(f"/api/v1/ablage/knoten/{erst['id']}/versionen", headers=t2)).status_code == 200
+    privat = await datei(client, sitzung, "geheim.txt", b"nur fuer mich", await ordner(client, sitzung, "Privat"))
+    assert (await client.get(f"/api/v1/ablage/knoten/{privat}/versionen", headers=t)).status_code == 404
+    ich = (await client.get("/api/v1/ablage/ich", headers=t)).json()
+    konto = (await client.get("/api/v1/auth/status", headers=sitzung)).json()["benutzer"]
+    assert ich["konto"] == "chef" and ich["konto_id"] == str(konto["id"])

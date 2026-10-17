@@ -713,6 +713,20 @@ class SpeicherDienst:
                 return None
             return await self._stand(repo, knoten)
 
+    async def version_stand(self, besitzer_id, knoten_id, version_id) -> DateiStand | None:
+        """Stand einer früheren (oder der aktuellen) Version einer lebenden Datei des Kontos - sonst None. Eine
+        Version ändert sich nie; ihr ETag ist ihre Kennung."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["typ"] != "datei" or knoten["geloescht"]:
+                return None
+            version = await repo.version_holen(version_id)
+            if not version or version["knoten_id"] != knoten["id"]:
+                return None
+            teile = await repo.chunks(version["id"])
+            return DateiStand(knoten={**knoten, "etag": str(version["id"])}, teile=tuple(teile))
+
     async def lesbare_datei(self, leser_id, knoten_id) -> DateiStand | None:
         """Stand einer lebenden Datei, die das Konto lesen darf: eigene oder freigegebene (am Knoten oder einem
         Vorfahren) - sonst None."""

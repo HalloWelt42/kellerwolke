@@ -307,6 +307,24 @@ class AblageDienst:
             meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
         return {**stand.knoten, **_meta_felder(stand.knoten, meta)}, stand
 
+    async def versionen(self, akteur: AppAkteur, knoten_id) -> list[dict]:
+        """Versionen einer lesbaren Datei, neueste zuerst; die aktuelle ist markiert."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id)
+        if knoten["typ"] != "datei":
+            raise Unsichtbar("Keine Datei")
+        liste = await self.speicher.versionen(akteur.benutzer_id, knoten_id) or []
+        return [{**v, "aktuell": v["id"] == knoten["aktuelle_version_id"]} for v in liste]
+
+    async def version_kopf(self, akteur: AppAkteur, knoten_id, version_id):
+        """Knoten und Stand einer bestimmten Version einer lesbaren Datei."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id)
+        stand = await self.speicher.version_stand(akteur.benutzer_id, knoten_id, version_id) if knoten["typ"] == "datei" else None
+        if stand is None:
+            raise Unsichtbar("Version nicht gefunden")
+        async with self.pool.connection() as conn:
+            meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
+        return {**stand.knoten, **_meta_felder(stand.knoten, meta)}, stand
+
     def stand_stroemen(self, stand, start: int = 0, laenge: int = -1):
         """Nur mit einem Stand aus datei_kopf (dort ist das Recht geprüft)."""
         return self.speicher.stand_stroemen(stand, start, laenge)
@@ -335,4 +353,5 @@ class AblageDienst:
 
     async def ich(self, akteur: AppAkteur) -> dict:
         zugang = await self.zugang.zugang(akteur.benutzer_id, akteur.zugang_id)
-        return {"app": akteur.app, "konto": akteur.benutzer["name"], "rechte": zugang["rechte"] if zugang else []}
+        return {"app": akteur.app, "konto": akteur.benutzer["name"], "konto_id": akteur.benutzer_id,
+                "rechte": zugang["rechte"] if zugang else []}
