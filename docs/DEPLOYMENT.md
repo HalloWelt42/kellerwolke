@@ -82,3 +82,20 @@ python3 tools/recovery.py --ausgabe /pfad/zur/sicherung
 
 Das Werkzeug liest die Datenbank read-only und den Objekt-Pool und baut den
 Dateibaum jedes Nutzers wieder auf.
+
+## Viele Dateien einspielen (Übernahme aus einer früheren App)
+
+`tools/einspielen.py` spielt Dateien nach einem Plan ein, auf dem Rechner der Kellerwolke neben der laufenden App und
+durch den Speicherdienst (Journal, Begleitdateien, Suchindex wie beim Hochladen). Plan und Dateien liegen in einem
+Ordner; der Plan (`plan.json`, Aufbau in `backend/module/einspielen/plan.py`) nennt je Datei das Ziel unter "Meine
+Dateien", die Prüfsumme (SHA-256), frühere Stände (werden Versionen), Inhaltstyp, erzeugende App, Felder und für eine
+Begleitdatei ihre Hauptdatei mit Rolle und Zusatz.
+
+```bash
+backend/.venv/bin/python tools/einspielen.py /mnt/data/einspielen/<lauf>/plan.json               # Vorschau
+backend/.venv/bin/python tools/einspielen.py /mnt/data/einspielen/<lauf>/plan.json --ausfuehren  # einspielen
+```
+
+Die Vorschau sagt je Eintrag neu, vorhanden, fortsetzen, Konflikt oder fehlt und ändert nichts. Überschrieben wird
+nie: liegt am Ziel etwas anderes, bleibt es, und der Eintrag entfällt. Jeder Stand wird nur mit seiner Prüfsumme
+eingetragen; nach einem Abbruch setzt ein neuer Lauf beim nächsten Stand fort. Vorher sichern (`tools/pi/sichern.sh`).
