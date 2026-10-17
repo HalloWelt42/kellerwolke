@@ -36,13 +36,10 @@ async def pool():
     await p.open()
     async with p.connection() as conn:
         await dbmod.schema_aus_ordner_anwenden(conn, dbmod.SCHEMA_DIR)
-        # Alle Tabellen leeren - Kern (public) UND etwaige Plugin-Schemata
-        # (plugin_*). Keine Pflege-Liste mehr; neue Plugins lecken nicht
-        # zwischen Tests.
+        # Alle Tabellen leeren, ohne Pflege-Liste: neue Tabellen lecken nicht zwischen Tests.
         async with conn.cursor() as cur:
             await cur.execute(
-                "SELECT format('%I.%I', schemaname, tablename) FROM pg_tables "
-                "WHERE schemaname = 'public' OR schemaname LIKE 'plugin\\_%'"
+                "SELECT format('%I.%I', schemaname, tablename) FROM pg_tables WHERE schemaname = 'public'"
             )
             tabellen = [r[0] for r in await cur.fetchall()]
         if tabellen:

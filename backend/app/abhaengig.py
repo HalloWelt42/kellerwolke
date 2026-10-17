@@ -36,8 +36,21 @@ def hole_melder(request: Request):
     return request.app.state.melder
 
 
+def hole_medien(request: Request):
+    return request.app.state.medien
+
+
 async def aktueller_benutzer(request: Request) -> dict:
     token = request.headers.get("x-kellerwolke-sitzung", "")
+    benutzer = await request.app.state.auth.sitzung_pruefen(token)
+    if not benutzer:
+        raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
+    return benutzer
+
+
+async def medien_benutzer(request: Request) -> dict:
+    """Für Medienadressen (<img>, <audio>, <video>): der Medien-Zugang als Cookie oder der Sitzungskopf."""
+    token = request.headers.get("x-kellerwolke-sitzung") or request.cookies.get("kw_medien", "")
     benutzer = await request.app.state.auth.sitzung_pruefen(token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")

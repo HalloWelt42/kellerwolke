@@ -16,7 +16,6 @@ from fastapi.responses import JSONResponse
 
 from . import db
 from . import io_pool
-from . import plugins as plugin_lader
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
 from .melder import JournalMelder
@@ -29,11 +28,12 @@ from module.appzugang.api import router as appzugang_router
 from module.appzugang.dienst import AppZugangDienst
 from module.auth.api import router as auth_router
 from module.auth.dienst import AuthDienst
+from module.medien.api import router as medien_router
+from module.medien.vorschau import VorschauDienst
 from module.speicher.api import router as datei_router
 from module.speicher.dienst import SpeicherDienst
 from module.suche.api import router as suche_router
 from module.suche.dienst import SuchDienst
-from module.plugins.api import router as plugins_router
 from module.sync.api import router as sync_router
 from module.vorgaenge.api import router as vorgaenge_router
 from module.vorgaenge.dienst import VorgangRegistry
@@ -52,17 +52,18 @@ async def _admin_seed(auth: AuthDienst) -> None:
     )
 
 
-async def _journal_pflegen(speicher) -> None:
-    """Räumt alte Journal-Einträge beim Start und dann täglich auf (Grenze KELLERWOLKE_JOURNAL_TAGE)."""
+async def _taeglich(name: str, arbeit) -> None:
+    """Pflege beim Start und dann täglich; ein Fehler wird protokolliert und beim nächsten Mal erneut versucht."""
+    log = logging.getLogger("kellerwolke")
     while True:
         try:
-            weg = await speicher.journal_aufraeumen(EINSTELLUNGEN.journal_tage)
+            weg = await arbeit()
             if weg:
-                logging.getLogger("kellerwolke").info("Journal: %d alte Einträge aufgeräumt", weg)
+                log.info("%s: %d aufgeräumt", name, weg)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logging.getLogger("kellerwolke").exception("Journal aufräumen fehlgeschlagen")
+            log.exception("%s fehlgeschlagen", name)
         await asyncio.sleep(24 * 3600)
 
 
@@ -84,16 +85,19 @@ async def lebenszyklus(app: FastAPI):
     app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
     app.state.melder = JournalMelder(EINSTELLUNGEN.dsn)
     app.state.melder.starten()
-    journal_pflege = asyncio.create_task(_journal_pflegen(app.state.speicher), name="journal-pflege")
+    app.state.medien = VorschauDienst(pool, app.state.speicher, EINSTELLUNGEN.vorschau_pfad,
+                                      EINSTELLUNGEN.vorschau_gleichzeitig, EINSTELLUNGEN.ffmpeg)
+    pflege = [
+        asyncio.create_task(_taeglich("Journal", lambda: app.state.speicher.journal_aufraeumen(EINSTELLUNGEN.journal_tage)),
+                            name="journal-pflege"),
+        asyncio.create_task(_taeglich("Vorschauen", app.state.medien.aufraeumen), name="vorschau-pflege"),
+    ]
     await _admin_seed(app.state.auth)
-    # Plugins entdecken + aktive einbinden (jedes isoliert; ein defektes Plugin
-    # deaktiviert nur sich selbst, der Kern startet weiter).
-    await plugin_lader.plugins_laden(app)
     try:
         yield
     finally:
-        await plugin_lader.plugins_stoppen(app)
-        journal_pflege.cancel()
+        for aufgabe in pflege:
+            aufgabe.cancel()
         await app.state.melder.stoppen()
         await app.state.vorgaenge.stoppen()
         io_pool.herunterfahren()
@@ -134,7 +138,7 @@ def app_bauen() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(sync_router)
     app.include_router(vorgaenge_router)
-    app.include_router(plugins_router)
+    app.include_router(medien_router)
     app.include_router(appzugang_router)
     app.include_router(ablage_router)
     webdav_einbinden(app)

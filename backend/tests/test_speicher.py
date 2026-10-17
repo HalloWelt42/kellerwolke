@@ -54,7 +54,7 @@ async def test_dedup_ueber_refcount(dienst, benutzer_id, pool):
     assert len(kinder) == 2
 
 
-async def test_dateien_nach_endung_baumweit(dienst, benutzer_id):
+async def test_medien_im_baum(dienst, benutzer_id):
     # Baum: /Bilder/Urlaub/strand.jpg, /Bilder/logo.png, /notiz.txt, /wurzel.JPG
     bilder = await dienst.ordner_anlegen(benutzer_id, None, "Bilder")
     urlaub = await dienst.ordner_anlegen(benutzer_id, bilder["id"], "Urlaub")
@@ -63,8 +63,10 @@ async def test_dateien_nach_endung_baumweit(dienst, benutzer_id):
     await dienst.datei_hochladen(benutzer_id, None, "notiz.txt", b"c")
     await dienst.datei_hochladen(benutzer_id, None, "wurzel.JPG", b"d")  # Grossschreibung
 
-    treffer = await dienst.dateien_nach_endung(benutzer_id, ["%.jpg", "%.png"])
+    await dienst.datei_hochladen(benutzer_id, None, "lied.mp3", b"e")
+    treffer = await dienst.medien_im_baum(benutzer_id)
     nach_name = {t["name"]: t for t in treffer}
+    assert nach_name.pop("lied.mp3")["etag"]
     # notiz.txt faellt raus, JPG wird case-insensitiv erkannt.
     assert set(nach_name) == {"strand.jpg", "logo.png", "wurzel.JPG"}
     # Voller Ordnerpfad je Datei (Ahnenkette ohne die Datei selbst).
@@ -73,14 +75,14 @@ async def test_dateien_nach_endung_baumweit(dienst, benutzer_id):
     assert nach_name["wurzel.JPG"]["pfad"] == []  # Wurzelebene
 
 
-async def test_dateien_nach_endung_isolation(dienst, benutzer_id, pool):
+async def test_medien_im_baum_isolation(dienst, benutzer_id, pool):
     # Bilder eines anderen Nutzers duerfen NIE in der Trefferliste auftauchen.
     async with pool.connection() as conn:
         repo = PostgresMetadataRepository(conn)
         fremd = (await repo.benutzer_anlegen("fremd"))["id"]
     await dienst.datei_hochladen(fremd, None, "geheim.jpg", b"x")
     await dienst.datei_hochladen(benutzer_id, None, "meins.jpg", b"y")
-    treffer = await dienst.dateien_nach_endung(benutzer_id, ["%.jpg"])
+    treffer = await dienst.medien_im_baum(benutzer_id)
     assert {t["name"] for t in treffer} == {"meins.jpg"}
 
 

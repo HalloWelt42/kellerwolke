@@ -23,6 +23,9 @@ Wird über Umgebungsvariablen gesetzt (oder eine `.env` neben `compose.pi.yml`):
 - `KELLERWOLKE_DB_PASS`, `KELLERWOLKE_APP_SECRET` - Geheimnisse, echte Werte setzen
 - `KELLERWOLKE_EXTERN_PFAD` - Pfad des read-only eingehängten Datenträgers
 - `KELLERWOLKE_MAX_UPLOAD` - Obergrenze je Upload in Bytes
+- `KELLERWOLKE_VORSCHAU_PFAD` - Ablage der Vorschau- und Vollbilder (abgeleitet, jederzeit neu erzeugbar, Standard `data/vorschau`)
+- `KELLERWOLKE_VORSCHAU_GLEICHZEITIG` - wie viele Vorschauen gleichzeitig entstehen (Standard 2)
+- `KELLERWOLKE_FFMPEG` - Pfad zu ffmpeg für Standbilder aus Videos; ohne ffmpeg zeigen Videos nur ihr Symbol
 
 ## Auf einem Server mit großer Platte
 

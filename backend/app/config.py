@@ -78,6 +78,11 @@ class Einstellungen:
     pool_muss_extern: bool = _bool("KELLERWOLKE_POOL_MUSS_EXTERN", False)
     # So lange bleiben Einträge im Änderungs-Journal; wer länger nicht gefragt hat, bekommt "luecke" und liest neu.
     journal_tage: int = _zahl("KELLERWOLKE_JOURNAL_TAGE", 90)
+    # Abgelegte Vorschau- und Vollbilder (abgeleitet, jederzeit neu erzeugbar) und wie viele gleichzeitig entstehen.
+    vorschau_pfad: str = _text("KELLERWOLKE_VORSCHAU_PFAD", str(WURZEL / "data" / "vorschau"))
+    vorschau_gleichzeitig: int = _zahl("KELLERWOLKE_VORSCHAU_GLEICHZEITIG", 2)
+    # ffmpeg für Standbilder aus Videos; leer heißt: im Suchpfad suchen, fehlt es, gibt es nur das Film-Symbol.
+    ffmpeg: str = _text("KELLERWOLKE_FFMPEG", "")
 
     @property
     def dsn(self) -> str:

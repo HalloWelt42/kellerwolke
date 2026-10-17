@@ -3,7 +3,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+
+from module.medien.arten import Medienart, medienart
 
 
 def _sauberer_name(wert: str) -> str:
@@ -38,6 +40,12 @@ class KnotenAus(BaseModel):
     geteilt: bool = False
     # Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
     besitzer_name: str | None = None
+
+    @computed_field
+    @property
+    def medienart(self) -> Medienart | None:
+        """Bild, Audio oder Video - die Oberfläche kennt die Endungen nicht selbst."""
+        return medienart(self.name) if self.typ == "datei" else None
 
 
 class TeilenEingabe(BaseModel):
