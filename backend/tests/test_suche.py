@@ -33,7 +33,7 @@ async def _user(pool, name):
 
 async def _ablegen(speicher, such, benutzer, name, daten):
     knoten = await speicher.datei_hochladen(benutzer, None, name, daten)
-    await such.indexieren(benutzer, knoten["id"], name, daten)
+    await such.datei_indexieren(speicher, benutzer, knoten["id"])
     return knoten
 
 
@@ -74,8 +74,9 @@ async def test_geloeschte_datei_nicht_in_suche(such, speicher, pool):
 async def test_neuindexierung_aktualisiert(such, speicher, pool):
     benutzer = await _user(pool, "a")
     knoten = await speicher.datei_hochladen(benutzer, None, "v.txt", b"apfel")
-    await such.indexieren(benutzer, knoten["id"], "v.txt", b"apfel")
-    await such.indexieren(benutzer, knoten["id"], "v.txt", b"birne")
+    await such.datei_indexieren(speicher, benutzer, knoten["id"])
+    await speicher.datei_hochladen(benutzer, None, "v.txt", b"birne")
+    await such.datei_indexieren(speicher, benutzer, knoten["id"])
     assert await such.suchen(benutzer, "apfel") == []
     assert any(t["id"] == knoten["id"] for t in await such.suchen(benutzer, "birne"))
 
@@ -84,29 +85,29 @@ async def test_indexieren_fremder_knoten_wird_ignoriert(such, speicher, pool):
     a = await _user(pool, "a")
     b = await _user(pool, "b")
     kb = await speicher.datei_hochladen(b, None, "b.txt", b"geheim")
-    # A versucht, B's Knoten unter eigenem Namen zu indexieren - muss wirkungslos sein.
-    await such.indexieren(a, kb["id"], "b.txt", b"geheim")
+    # A versucht, B's Knoten zu indexieren - muss wirkungslos sein.
+    await such.datei_indexieren(speicher, a, kb["id"])
     assert await such.suchen(a, "geheim") == []
 
 
 def test_grosser_text_wird_begrenzt():
     gross = ("a" * 2_000_000).encode()
-    assert len(text_extrahieren("x.txt", gross)) <= 1_000_000
+    assert len(text_extrahieren("x.txt", BytesIO(gross))) <= 1_000_000
 
 
 def test_extraktion_text():
-    assert "Hallo" in text_extrahieren("a.txt", "Hallo Welt".encode())
+    assert "Hallo" in text_extrahieren("a.txt", BytesIO("Hallo Welt".encode()))
 
 
 def test_extraktion_binaer_leer():
-    assert text_extrahieren("bild.png", b"\x89PNG\x00\x01") == ""
+    assert text_extrahieren("bild.png", BytesIO(b"\x89PNG\x00\x01")) == ""
 
 
 def test_extraktion_entfernt_nul_bytes():
     # Eine Textdatei mit eingebettetem NUL (z.B. UTF-16) darf keine 0x00-Bytes
     # liefern - PostgreSQL-Textfelder wuerden sonst die Indexierung sprengen.
     roh = "Rechnung".encode("utf-16-le")  # enthaelt 0x00 zwischen den Zeichen
-    text = text_extrahieren("vertrag.txt", roh)
+    text = text_extrahieren("vertrag.txt", BytesIO(roh))
     assert "\x00" not in text
 
 
@@ -117,4 +118,27 @@ def test_extraktion_docx():
     dok.add_paragraph("Vertragsabschluss im Mai")
     puffer = BytesIO()
     dok.save(puffer)
-    assert "Vertragsabschluss" in text_extrahieren("x.docx", puffer.getvalue())
+    assert "Vertragsabschluss" in text_extrahieren("x.docx", BytesIO(puffer.getvalue()))
+
+
+async def test_pdf_wird_aus_dem_pfad_gelesen(such, speicher, pool):
+    """PDF und docx brauchen die ganze Datei: sie kommen aus dem Pfad des Blocks, nicht als Kopie in den Speicher."""
+    from docx import Document
+
+    benutzer = await _user(pool, "a")
+    dok = Document()
+    dok.add_paragraph("Kaufvertrag Gartenhaus")
+    puffer = BytesIO()
+    dok.save(puffer)
+    knoten = await _ablegen(such=such, speicher=speicher, benutzer=benutzer, name="vertrag.docx", daten=puffer.getvalue())
+    assert any(t["id"] == knoten["id"] for t in await such.suchen(benutzer, "Gartenhaus"))
+
+
+async def test_grosse_datei_nur_mit_namen(such, speicher, pool, monkeypatch):
+    import module.suche.extraktion as ex
+
+    monkeypatch.setattr(ex, "_MAX_DATEI", 10)
+    benutzer = await _user(pool, "a")
+    knoten = await _ablegen(such=such, speicher=speicher, benutzer=benutzer, name="lang.txt", daten=b"Rechnung " * 10)
+    assert await such.suchen(benutzer, "Rechnung") == []
+    assert any(t["id"] == knoten["id"] for t in await such.suchen(benutzer, "lang"))

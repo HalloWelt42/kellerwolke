@@ -21,6 +21,7 @@ from app.config import EINSTELLUNGEN
 from app.inhaltstyp import inhaltstyp_aus_name
 from app.ports import DateiZuGross
 from module.speicher.dienst import ArchivZuGross, NameBelegt, ZielUngueltig
+from module.suche.dienst import indizierung_starten
 from module.speicher.modelle import (
     ExternEintragAus,
     FreigabeAus,
@@ -166,7 +167,7 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
     name = datei.filename or "datei"
     await datei.seek(0)
     try:
-        knoten, blob_hash, groesse = await speicher.datei_hochladen_strom(
+        knoten, _, _ = await speicher.datei_hochladen_strom(
             benutzer["id"], parent_id, name, datei.file, EINSTELLUNGEN.max_upload
         )
     except DateiZuGross:
@@ -176,17 +177,7 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
     except NameBelegt as f:
         raise HTTPException(status_code=409, detail=str(f))
 
-    # Indizierung laeuft als Hintergrund-Vorgang, damit der Upload nicht darauf
-    # wartet und ein Index-Fehler den Upload nicht scheitern laesst. Der Inhalt
-    # wird NUR nachgelesen, wenn die Extraktion ihn auch nutzt - sonst wuerde eine
-    # grosse Datei allein fuer den Index im Speicher gehalten.
-    async def _indizieren(_vorgang):
-        inhalt = b""
-        if suche.braucht_inhalt(name, groesse):
-            inhalt = await speicher.blob_get(str(benutzer["id"]), blob_hash, groesse)
-        await suche.indexieren(benutzer["id"], knoten["id"], name, inhalt)
-
-    vorgaenge.starte(benutzer["id"], "indizierung", f"{name} indizieren", _indizieren)
+    indizierung_starten(vorgaenge, suche, speicher, benutzer["id"], knoten)
     return KnotenAus.model_validate(knoten)
 
 

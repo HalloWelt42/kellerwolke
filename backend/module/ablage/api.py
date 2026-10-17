@@ -17,6 +17,7 @@ from app.ports import DateiZuGross
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
 from module.speicher.dienst import Gesperrt, NameBelegt, VorbedingungVerletzt, ZielUngueltig
+from module.suche.dienst import indizierung_starten
 from module.appzugang.modelle import RechtAus
 
 router = APIRouter(prefix="/api/v1/ablage", tags=["ablage"])
@@ -135,18 +136,10 @@ def _bedingung(request: Request) -> tuple[str | None, bool]:
 async def _schreiben(request: Request, pfad: str, akteur, ablage, suche, vorgaenge) -> dict:
     etag, nur_neu = _bedingung(request)
     quelle = StromLeser(request.stream(), asyncio.get_running_loop())
-    knoten, blob_hash, groesse = await ablage.datei_schreiben(akteur, pfad, quelle, EINSTELLUNGEN.max_upload, etag, nur_neu,
+    knoten, _, _ = await ablage.datei_schreiben(akteur, pfad, quelle, EINSTELLUNGEN.max_upload, etag, nur_neu,
                                                               request.headers.get("content-type"))
 
-    # Wie beim Hochladen im Browser: der Suchindex läuft als Hintergrund-Vorgang und liest den Inhalt nur, wenn die
-    # Extraktion ihn nutzt.
-    async def _indizieren(_vorgang):
-        inhalt = b""
-        if suche.braucht_inhalt(knoten["name"], groesse):
-            inhalt = await ablage.speicher.blob_get(str(akteur.benutzer_id), blob_hash, groesse)
-        await suche.indexieren(akteur.benutzer_id, knoten["id"], knoten["name"], inhalt)
-
-    vorgaenge.starte(akteur.benutzer_id, "indizierung", f"{knoten['name']} indizieren", _indizieren)
+    indizierung_starten(vorgaenge, suche, ablage.speicher, akteur.benutzer_id, knoten)
     return knoten
 
 

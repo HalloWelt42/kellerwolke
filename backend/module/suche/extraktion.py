@@ -9,7 +9,7 @@ docx-Entpackgroesse (Zip-Bombe) werden gedeckelt, bevor teuer geparst wird.
 """
 
 import zipfile
-from io import BytesIO
+from typing import BinaryIO
 
 _TEXT_ENDUNGEN = {
     "txt", "md", "markdown", "csv", "tsv", "log", "json", "xml", "yaml", "yml",
@@ -42,11 +42,16 @@ def inhalt_noetig(name: str, groesse: int) -> bool:
     return _endung(name) in _TEXT_ENDUNGEN or _endung(name) in ("pdf", "docx")
 
 
-def _pdf_text(daten: bytes) -> str:
+def lesemenge(name: str) -> int:
+    """Wie viele Bytes die Extraktion vom Anfang braucht; -1 heißt die ganze Datei (PDF und docx springen darin)."""
+    return _MAX_BYTES if _endung(name) in _TEXT_ENDUNGEN else -1
+
+
+def _pdf_text(datei: BinaryIO) -> str:
     try:
         from pypdf import PdfReader
 
-        leser = PdfReader(BytesIO(daten))
+        leser = PdfReader(datei)
         teile = []
         gesamt = 0
         for seite in leser.pages[:_MAX_SEITEN]:
@@ -60,10 +65,10 @@ def _pdf_text(daten: bytes) -> str:
         return ""
 
 
-def _docx_text(daten: bytes) -> str:
+def _docx_text(datei: BinaryIO) -> str:
     try:
         # Zip-Bombe abwehren, bevor python-docx den Baum vollstaendig aufbaut.
-        with zipfile.ZipFile(BytesIO(daten)) as zf:
+        with zipfile.ZipFile(datei) as zf:
             gesamt = 0
             for eintrag in zf.infolist():
                 gesamt += eintrag.file_size
@@ -75,7 +80,8 @@ def _docx_text(daten: bytes) -> str:
 
         from docx import Document
 
-        dok = Document(BytesIO(daten))
+        datei.seek(0)
+        dok = Document(datei)
         teile = []
         gesamt = 0
         for absatz in dok.paragraphs:
@@ -88,16 +94,16 @@ def _docx_text(daten: bytes) -> str:
         return ""
 
 
-def text_extrahieren(name: str, daten: bytes) -> str:
-    if len(daten) > _MAX_DATEI:
-        return ""  # zu gross: nur der Name wird indexiert
+def text_extrahieren(name: str, datei: BinaryIO) -> str:
+    """Text aus einer geöffneten Datei (oder einem Puffer); gelesen wird nur, was die Art braucht. Ob sich das
+    überhaupt lohnt, sagt vorher inhalt_noetig."""
     endung = _endung(name)
     if endung in _TEXT_ENDUNGEN:
-        text = daten[:_MAX_BYTES].decode("utf-8", errors="ignore")
+        text = datei.read(_MAX_BYTES).decode("utf-8", errors="ignore")
     elif endung == "pdf":
-        text = _pdf_text(daten)
+        text = _pdf_text(datei)
     elif endung == "docx":
-        text = _docx_text(daten)
+        text = _docx_text(datei)
     else:
         text = ""
     # PostgreSQL-Textfelder vertragen keine NUL-Bytes (0x00). Sie tauchen etwa in

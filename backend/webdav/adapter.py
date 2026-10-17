@@ -6,6 +6,7 @@ oder Kuerzel + Passwort), passend fuer jeden Dateimanager mit WebDAV-Unterstuetz
 Bewusst minimal, aber funktional: OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, MOVE.
 """
 
+import asyncio
 import base64
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -18,8 +19,10 @@ from starlette.responses import Response, StreamingResponse
 
 from app.auslieferung import inhalt_antwort
 from app.config import EINSTELLUNGEN
-from app.ports import SpeicherNichtVerfuegbar
+from app.ports import DateiZuGross, SpeicherNichtVerfuegbar
+from module.ablage.strom import StromLeser
 from module.speicher.dienst import NameBelegt, ZielUngueltig
+from module.suche.dienst import indizierung_starten
 
 BASIS = "/webdav"
 _METHODEN = ["OPTIONS", "GET", "HEAD", "PUT", "DELETE", "PROPFIND", "MKCOL", "MOVE", "COPY"]
@@ -151,8 +154,8 @@ async def _get(request, benutzer, pfad, mit_koerper) -> Response:
 
 
 async def _put(request, benutzer, pfad) -> Response:
+    """Hochladen strömt direkt vom Netz in den Pool (Obergrenze beim Lesen), der Index zieht im Hintergrund nach."""
     speicher = request.app.state.speicher
-    suche = request.app.state.suche
     eltern, name = _eltern_und_name(pfad)
     if not name:
         return Response(status_code=400)
@@ -163,24 +166,20 @@ async def _put(request, benutzer, pfad) -> Response:
             return Response(status_code=409)
         parent = elt["id"]
     laenge = request.headers.get("content-length")
-    if laenge and int(laenge) > EINSTELLUNGEN.max_upload:
+    if laenge and laenge.isdigit() and int(laenge) > EINSTELLUNGEN.max_upload:
         return Response(status_code=413)
     vorher = await speicher.knoten_per_pfad(benutzer["id"], pfad)
     existierte = bool(vorher and not vorher["geloescht"] and vorher["typ"] == "datei")
-    # Body streamend lesen und die Grenze laufend pruefen (Speicher-Schutz, auch
-    # bei chunked Transfer ohne Content-Length).
-    stuecke, gesamt = [], 0
-    async for stueck in request.stream():
-        gesamt += len(stueck)
-        if gesamt > EINSTELLUNGEN.max_upload:
-            return Response(status_code=413)
-        stuecke.append(stueck)
-    daten = b"".join(stuecke)
+    quelle = StromLeser(request.stream(), asyncio.get_running_loop())
     try:
-        knoten = await speicher.datei_hochladen(benutzer["id"], parent, name, daten)
+        knoten, _hash, _groesse = await speicher.datei_hochladen_strom(
+            benutzer["id"], parent, name, quelle, EINSTELLUNGEN.max_upload)
+    except DateiZuGross:
+        return Response(status_code=413)
     except (NameBelegt, ZielUngueltig):
         return Response(status_code=409)
-    await suche.indexieren(benutzer["id"], knoten["id"], name, daten)
+    app = request.app
+    indizierung_starten(app.state.vorgaenge, app.state.suche, speicher, benutzer["id"], knoten)
     return Response(status_code=204 if existierte else 201)
 
 

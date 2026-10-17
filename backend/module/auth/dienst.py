@@ -5,8 +5,11 @@ liegt nur der SHA256-Hash des Tokens - das Klartext-Token verlaesst nie den
 Client-Austausch. Anmeldung ueber Name oder Kuerzel.
 """
 
+import asyncio
 import hashlib
+import hmac
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 
 from psycopg.rows import dict_row
@@ -14,6 +17,12 @@ from psycopg.rows import dict_row
 from module.auth import passwort
 
 _GUELTIG_TAGE = 30
+
+# WebDAV schickt Name und Passwort mit jeder Anfrage; ein Dateimanager stellt Hunderte davon. Eine erfolgreiche Prüfung
+# gilt deshalb kurz weiter (nur im Speicher dieses Prozesses, unter einem Schlüssel, den nur er bilden kann). Ein
+# gesperrtes Konto fällt sofort heraus, weil bei jedem Treffer der Kontostand gelesen wird.
+_BASIS_GUELTIG_S = 300
+_BASIS_HOECHSTENS = 256
 
 # Fester Dummy-Hash: wird gegen einen unbekannten Benutzer geprueft, damit der
 # Anmelde-Pfad gleich lange dauert (kein Timing-Orakel zur Benutzer-Enumeration).
@@ -27,9 +36,16 @@ def _token_hash(token: str) -> str:
 class AuthDienst:
     def __init__(self, pool) -> None:
         self.pool = pool
+        self._basis_geheim = secrets.token_bytes(32)
+        self._basis: dict[str, tuple[str, float]] = {}  # Schlüssel -> (Konto, gültig bis)
+
+    @staticmethod
+    async def _passwort_pruefen(klartext: str, gespeichert: str | None) -> bool:
+        """PBKDF2 kostet bewusst Rechenzeit - im Faden, damit die Ereignisschleife derweil weiter bedient."""
+        return await asyncio.to_thread(passwort.pruefe, klartext, gespeichert)
 
     async def benutzer_anlegen(self, name, klartext_passwort=None, rolle="mitglied", kuerzel=None):
-        passwort_hash = passwort.hash_passwort(klartext_passwort) if klartext_passwort else None
+        passwort_hash = await asyncio.to_thread(passwort.hash_passwort, klartext_passwort) if klartext_passwort else None
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 async with conn.cursor(row_factory=dict_row) as cur:
@@ -94,7 +110,7 @@ class AuthDienst:
                 benutzer = await cur.fetchone()
             # Immer einen Hash pruefen (echt oder Dummy) - konstante Zeit.
             gespeichert = (benutzer["passwort_hash"] if benutzer else None) or _DUMMY_HASH
-            passwort_ok = passwort.pruefe(klartext, gespeichert)
+            passwort_ok = await self._passwort_pruefen(klartext, gespeichert)
             if not benutzer or not benutzer["passwort_hash"] or not passwort_ok:
                 return None
             token = secrets.token_urlsafe(32)
@@ -107,8 +123,16 @@ class AuthDienst:
             return token
 
     async def pruefe_basis(self, kennung, klartext) -> dict | None:
-        """Stateless Pruefung von Name/Kuerzel + Passwort (fuer WebDAV-Basic-Auth),
-        ohne eine Sitzung anzulegen. Konstante Zeit wie bei anmelden."""
+        """Prüfung von Name/Kürzel + Passwort (WebDAV-Basic-Auth) ohne Sitzung. Eine erfolgreiche Prüfung gilt kurz
+        weiter; sonst konstante Zeit wie bei anmelden."""
+        schluessel = hmac.new(self._basis_geheim, f"{kennung.lower()}\x00{klartext}".encode("utf-8"),
+                              hashlib.sha256).hexdigest()
+        treffer = self._basis.get(schluessel)
+        if treffer and treffer[1] > time.monotonic():
+            benutzer = await self._aktives_konto(treffer[0])
+            if benutzer:
+                return benutzer
+        self._basis.pop(schluessel, None)
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
@@ -118,10 +142,19 @@ class AuthDienst:
                 )
                 benutzer = await cur.fetchone()
         gespeichert = (benutzer["passwort_hash"] if benutzer else None) or _DUMMY_HASH
-        ok = passwort.pruefe(klartext, gespeichert)
+        ok = await self._passwort_pruefen(klartext, gespeichert)
         if not benutzer or not benutzer["passwort_hash"] or not ok:
             return None
+        if len(self._basis) >= _BASIS_HOECHSTENS:
+            self._basis.pop(next(iter(self._basis)))  # ältester Eintrag zuerst
+        self._basis[schluessel] = (str(benutzer["id"]), time.monotonic() + _BASIS_GUELTIG_S)
         return benutzer
+
+    async def _aktives_konto(self, benutzer_id) -> dict | None:
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT * FROM benutzer WHERE id=%s AND aktiv", (benutzer_id,))
+                return await cur.fetchone()
 
     async def sitzung_pruefen(self, token) -> dict | None:
         if not token:

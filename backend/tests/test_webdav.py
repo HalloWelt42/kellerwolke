@@ -6,6 +6,7 @@ import pytest
 
 from app.main import app_bauen
 from module.auth.dienst import AuthDienst
+from module.vorgaenge.dienst import VorgangRegistry
 from module.speicher.dienst import SpeicherDienst
 from module.suche.dienst import SuchDienst
 from tests.hilfen import markierter_blobstore
@@ -20,6 +21,7 @@ async def client(pool, tmp_path):
     app.state.auth = AuthDienst(pool)
     app.state.speicher = SpeicherDienst(pool, markierter_blobstore(tmp_path))
     app.state.suche = SuchDienst(pool)
+    app.state.vorgaenge = VorgangRegistry()
     await app.state.auth.benutzer_anlegen("chef", "geheim", rolle="admin")
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -99,3 +101,63 @@ async def test_move_in_ordner_mit_neuem_namen(client):
     assert r.status_code == 201
     assert (await client.get("/webdav/Ziel/umbenannt.txt", auth=AUTH)).content == b"inhalt"
     assert (await client.get("/webdav/quelle.txt", auth=AUTH)).status_code == 404
+
+
+async def test_put_stroemt_in_stuecken_und_wird_indexiert(client):
+    """Der Körper kommt in Stücken an und geht ohne Gesamtpuffer in den Pool; der Index zieht im Hintergrund nach."""
+    import asyncio
+
+    async def stuecke():
+        for i in range(50):
+            yield (f"Zeile {i} mit Wasserzähler\n").encode() * 200
+
+    r = await client.request("PUT", "/webdav/lang.txt", content=stuecke(), auth=AUTH)
+    assert r.status_code == 201
+    r = await client.get("/webdav/lang.txt", auth=AUTH)
+    assert len(r.content) == sum(len((f"Zeile {i} mit Wasserzähler\n").encode()) * 200 for i in range(50))
+    app = client._transport.app
+    benutzer = (await app.state.auth.liste_benutzer())[0]
+    for _ in range(50):
+        if await app.state.suche.suchen(benutzer["id"], "Wasserzähler"):
+            break
+        await asyncio.sleep(0.05)
+    assert await app.state.suche.suchen(benutzer["id"], "Wasserzähler")
+
+
+async def test_put_ueber_der_grenze_413(client, monkeypatch):
+    import dataclasses
+
+    import app.config as konfig
+    import webdav.adapter as dav
+
+    monkeypatch.setattr(dav, "EINSTELLUNGEN", dataclasses.replace(konfig.EINSTELLUNGEN, max_upload=100))
+
+    async def stuecke():
+        for _ in range(10):
+            yield b"x" * 50
+
+    r = await client.request("PUT", "/webdav/zu_gross.bin", content=stuecke(), auth=AUTH)
+    assert r.status_code == 413
+    assert (await client.get("/webdav/zu_gross.bin", auth=AUTH)).status_code == 404
+
+
+async def test_anmeldung_gilt_kurz_weiter_aber_nicht_fuer_gesperrte(client, monkeypatch):
+    import module.auth.passwort as pw
+
+    app = client._transport.app
+    zaehler = {"n": 0}
+    echt = pw.pruefe
+
+    def gezaehlt(*a):
+        zaehler["n"] += 1
+        return echt(*a)
+
+    monkeypatch.setattr(pw, "pruefe", gezaehlt)
+    for _ in range(5):
+        assert (await client.request("PROPFIND", "/webdav/", headers={"Depth": "0"}, auth=AUTH)).status_code == 207
+    assert zaehler["n"] == 1  # nur die erste Anfrage rechnet PBKDF2
+    assert (await client.request("PROPFIND", "/webdav/", auth=("chef", "falsch"))).status_code == 401
+    benutzer = (await app.state.auth.liste_benutzer())[0]
+    async with app.state.pool.connection() as conn:
+        await conn.execute("UPDATE benutzer SET aktiv=false WHERE id=%s", (benutzer["id"],))
+    assert (await client.request("PROPFIND", "/webdav/", headers={"Depth": "0"}, auth=AUTH)).status_code == 401
