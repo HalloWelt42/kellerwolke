@@ -1,6 +1,7 @@
 """Ablage-Schnittstelle für eigene Apps (ohne Browser). Anmeldung mit dem App-Schlüssel als
 `Authorization: Bearer kw_app_...`; jede Anfrage wird gegen die Rechte des Zugangs geprüft."""
 
+import asyncio
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -9,8 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.abhaengig import aktuelle_app, hole_ablage
-from module.ablage.dienst import KeinSchreibrecht, Unsichtbar
+from app.abhaengig import aktuelle_app, hole_ablage, hole_suche, hole_vorgaenge
+from app.config import EINSTELLUNGEN
+from app.ports import DateiZuGross
+from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
+from module.ablage.strom import StromLeser
+from module.speicher.dienst import VorbedingungVerletzt
 from module.appzugang.modelle import RechtAus
 from module.speicher.api import bereich_aus_kopf, dateiname_kopf
 
@@ -48,10 +53,40 @@ def _fehler(f: Exception) -> HTTPException:
         return HTTPException(status_code=403, detail=str(f))
     if isinstance(f, FileExistsError):
         return HTTPException(status_code=409, detail=str(f))
+    if isinstance(f, VorbedingungVerletzt):
+        return HTTPException(status_code=412, detail=str(f))
+    if isinstance(f, VorbedingungFehlt):
+        return HTTPException(status_code=428, detail=str(f))
+    if isinstance(f, DateiZuGross):
+        return HTTPException(status_code=413, detail="Datei zu groß")
     return HTTPException(status_code=422, detail=str(f))
 
 
-_FEHLER = (Unsichtbar, KeinSchreibrecht, FileExistsError, ValueError)
+_FEHLER = (Unsichtbar, KeinSchreibrecht, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross)
+
+
+def _bedingung(request: Request) -> tuple[str | None, bool]:
+    """If-Match (genau dieser Stand) und If-None-Match: * (nur neu anlegen) aus den Köpfen."""
+    etag = (request.headers.get("if-match") or "").strip().strip('"') or None
+    nur_neu = (request.headers.get("if-none-match") or "").strip() == "*"
+    return etag, nur_neu
+
+
+async def _schreiben(request: Request, pfad: str, akteur, ablage, suche, vorgaenge) -> dict:
+    etag, nur_neu = _bedingung(request)
+    quelle = StromLeser(request.stream(), asyncio.get_running_loop())
+    knoten, blob_hash, groesse = await ablage.datei_schreiben(akteur, pfad, quelle, EINSTELLUNGEN.max_upload, etag, nur_neu)
+
+    # Wie beim Hochladen im Browser: der Suchindex läuft als Hintergrund-Vorgang und liest den Inhalt nur, wenn die
+    # Extraktion ihn nutzt.
+    async def _indizieren(_vorgang):
+        inhalt = b""
+        if suche.braucht_inhalt(knoten["name"], groesse):
+            inhalt = await ablage.speicher.blob_get(str(akteur.benutzer_id), blob_hash, groesse)
+        await suche.indexieren(akteur.benutzer_id, knoten["id"], knoten["name"], inhalt)
+
+    vorgaenge.starte(akteur.benutzer_id, "indizierung", f"{knoten['name']} indizieren", _indizieren)
+    return knoten
 
 
 @router.get("/ich", response_model=IchAus)
@@ -108,3 +143,27 @@ async def inhalt(knoten_id: UUID, request: Request, akteur=Depends(aktuelle_app)
     kopf["Content-Length"] = str(ende - start + 1)
     return StreamingResponse(ablage.datei_stroemen(akteur, knoten_id, start, ende - start + 1), status_code=206,
                              media_type="application/octet-stream", headers=kopf)
+
+
+@router.put("/datei", response_model=AblageKnotenAus)
+async def datei_schreiben(request: Request, pfad: str = Query(min_length=1, max_length=4000), akteur=Depends(aktuelle_app),
+                          ablage=Depends(hole_ablage), suche=Depends(hole_suche), vorgaenge=Depends(hole_vorgaenge)):
+    """Datei anlegen oder neue Version schreiben; der Körper ist der Inhalt (roh, gestreamt). Vorhandene Dateien nur
+    mit If-Match (zuletzt gelesener ETag); If-None-Match: * legt nur neu an."""
+    try:
+        return await _schreiben(request, pfad, akteur, ablage, suche, vorgaenge)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.put("/knoten/{knoten_id}/inhalt", response_model=AblageKnotenAus)
+async def inhalt_schreiben(knoten_id: UUID, request: Request, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage),
+                           suche=Depends(hole_suche), vorgaenge=Depends(hole_vorgaenge)):
+    """Neue Version einer vorhandenen Datei per Kennung; braucht If-Match."""
+    try:
+        if not request.headers.get("if-match"):
+            raise VorbedingungFehlt("Überschreiben nur mit If-Match (zuletzt gelesener ETag)")
+        pfad = await ablage.pfad_von(akteur, knoten_id)
+        return await _schreiben(request, pfad, akteur, ablage, suche, vorgaenge)
+    except _FEHLER as f:
+        raise _fehler(f) from None

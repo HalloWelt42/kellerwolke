@@ -12,6 +12,7 @@ import os
 import shutil
 import uuid
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.adapters.externe_quelle import DateibaumQuelle
@@ -161,6 +162,22 @@ def _pool_pruefen_fs(wurzel, soll, tief):
         if (b, h) not in gesehen
     ]
     return {"verwaist": verwaist, "fehlend": fehlend, "beschaedigt": beschaedigt, "geprueft": geprueft}
+
+
+class VorbedingungVerletzt(Exception):
+    """Der Stand der Datei passt nicht zur Bedingung des Schreibers (If-Match oder If-None-Match)."""
+
+
+@dataclass(frozen=True)
+class Bedingung:
+    """Bedingung für das Schreiben einer Datei, geprüft unter Zeilensperre in derselben Transaktion wie das
+    Eintragen der Version: so gewinnt von zwei gleichzeitigen Schreibern mit demselben Stand genau einer.
+
+    etag: nur schreiben, wenn die Datei genau diesen Stand hat (If-Match); nur_neu: nur anlegen, nie überschreiben
+    (If-None-Match: *)."""
+
+    etag: str | None = None
+    nur_neu: bool = False
 
 
 class SpeicherDienst:
@@ -596,18 +613,20 @@ class SpeicherDienst:
             besitzer_id, parent_id, name, blob_hash, neu, len(daten)
         )
 
-    async def datei_hochladen_strom(self, besitzer_id, parent_id, name, quelle, max_bytes: int = 0):
+    async def datei_hochladen_strom(self, besitzer_id, parent_id, name, quelle, max_bytes: int = 0,
+                                    bedingung: Bedingung | None = None):
         """Wie datei_hochladen, nimmt den Inhalt aber als Datei-Objekt und streamt
         ihn auf die Platte - der Speicherbedarf haengt NICHT an der Dateigroesse.
         Liefert (knoten, blob_hash, groesse); Hash und Groesse braucht der Aufrufer
         fuer die Indizierung, ohne die Bytes festhalten zu muessen."""
         blob_hash, neu, groesse = await self.blob_put_strom(str(besitzer_id), quelle, max_bytes)
         knoten = await self._datei_eintragen(
-            besitzer_id, parent_id, name, blob_hash, neu, groesse
+            besitzer_id, parent_id, name, blob_hash, neu, groesse, bedingung
         )
         return knoten, blob_hash, groesse
 
-    async def _datei_eintragen(self, besitzer_id, parent_id, name, blob_hash, neu, groesse):
+    async def _datei_eintragen(self, besitzer_id, parent_id, name, blob_hash, neu, groesse,
+                               bedingung: Bedingung | None = None):
         """Traegt einen bereits geschriebenen Block als Datei-Version ein. Geteilt
         von der Bytes- und der Strom-Variante, damit Idempotenz, Journal und die
         Kompensation nur an einer Stelle stehen."""
@@ -618,6 +637,12 @@ class SpeicherDienst:
                     # Atomar anlegen/finden (kein Check-then-act-Race).
                     knoten = await repo.datei_upsert(besitzer_id, parent_id, name)
                     war_neu = knoten["eingefuegt"]
+                    # Die Zeile ist ab hier bis zum Ende der Transaktion gesperrt (ON CONFLICT DO UPDATE),
+                    # der gelesene ETag ist also der gültige Stand.
+                    if bedingung and bedingung.nur_neu and not war_neu:
+                        raise VorbedingungVerletzt("Die Datei gibt es schon")
+                    if bedingung and bedingung.etag is not None and (war_neu or knoten["etag"] != bedingung.etag):
+                        raise VorbedingungVerletzt("Die Datei wurde inzwischen geändert")
                     # Idempotenz: identischer Inhalt wie aktuelle Version -> No-Op.
                     if not war_neu and knoten["aktuelle_version_id"]:
                         aktuell = await repo.version_holen(knoten["aktuelle_version_id"])

@@ -189,3 +189,91 @@ async def test_rechte_nur_auf_eigene_ordner(umgebung):
     gast_ordner = await ordner(client, gast, "Gast")
     r = await client.put(f"/api/v1/app-zugaenge/{z['id']}/rechte", json={"rechte": [{"knoten_id": gast_ordner, "recht": "lesen"}]}, headers=sitzung)
     assert r.status_code == 422                                           # fremder Ordner
+
+
+# --- K3: Hochladen als Strom, Überschreiben nur mit dem gelesenen Stand -------------------------------------------
+
+async def test_datei_schreiben_und_ueberschreiben_nur_mit_stand(umgebung):
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    weg = "/api/v1/ablage/datei"
+    r = await client.put(weg, params={"pfad": "Apps/Transkription/a.json"}, content=b'{"v": 1}', headers=t)
+    assert r.status_code == 200, r.text
+    erst = r.json()
+    assert erst["pfad"] == "Apps/Transkription/a.json" and erst["groesse"] == 8 and erst["etag"]
+    # ohne Stand: kein stilles Überschreiben
+    assert (await client.put(weg, params={"pfad": "Apps/Transkription/a.json"}, content=b"x", headers=t)).status_code == 428
+    # veralteter Stand: abgewiesen
+    r = await client.put(weg, params={"pfad": "Apps/Transkription/a.json"}, content=b"x", headers={**t, "If-Match": "veraltet"})
+    assert r.status_code == 412
+    # gelesener Stand: neue Version, neuer ETag
+    r = await client.put(weg, params={"pfad": "Apps/Transkription/a.json"}, content=b'{"v": 2}', headers={**t, "If-Match": erst["etag"]})
+    assert r.status_code == 200 and r.json()["etag"] != erst["etag"]
+    assert (await client.get(f"/api/v1/ablage/knoten/{erst['id']}/inhalt", headers=t)).content == b'{"v": 2}'
+    versionen = (await client.get(f"/api/v1/dateien/{erst['id']}/versionen", headers=sitzung)).json()
+    assert len(versionen) == 2
+    # nur neu anlegen
+    assert (await client.put(weg, params={"pfad": "Apps/Transkription/a.json"}, content=b"x", headers={**t, "If-None-Match": "*"})).status_code == 412
+    assert (await client.put(weg, params={"pfad": "Apps/Transkription/b.json"}, content=b"x", headers={**t, "If-None-Match": "*"})).status_code == 200
+    # per Kennung: nur mit If-Match
+    neu = (await client.get(f"/api/v1/ablage/knoten/{erst['id']}", headers=t)).json()
+    assert (await client.put(f"/api/v1/ablage/knoten/{erst['id']}/inhalt", content=b"y", headers=t)).status_code == 428
+    r = await client.put(f"/api/v1/ablage/knoten/{erst['id']}/inhalt", content=b"y", headers={**t, "If-Match": neu["etag"]})
+    assert r.status_code == 200 and r.json()["id"] == erst["id"]
+
+
+async def test_gleichzeitig_mit_demselben_stand_gewinnt_genau_einer(umgebung):
+    """Zwei Apps bearbeiten dieselbe Datei im gemeinsamen Ordner und schreiben gleichzeitig mit demselben Stand."""
+    import asyncio
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    erst = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/geteilt.txt"}, content=b"0", headers=t)).json()
+
+    async def schreiben(inhalt: bytes):
+        return await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/geteilt.txt"}, content=inhalt,
+                                headers={**t, "If-Match": erst["etag"]})
+
+    ergebnisse = await asyncio.gather(*(schreiben(f"stand {i}".encode()) for i in range(5)))
+    assert sorted(r.status_code for r in ergebnisse) == [200, 412, 412, 412, 412]
+    gewinner = next(r for r in ergebnisse if r.status_code == 200).json()
+    inhalt = (await client.get(f"/api/v1/ablage/knoten/{gewinner['id']}/inhalt", headers=t)).content
+    assert inhalt.startswith(b"stand ")
+
+
+async def test_schreiben_nur_wo_erlaubt(umgebung):
+    client, sitzung = umgebung
+    await ordner(client, sitzung, "Privat")
+    _, t = await zugang(client, sitzung, "Transkription")
+    await zugang(client, sitzung, "Stimmenausgabe")
+    weg = "/api/v1/ablage/datei"
+    assert (await client.put(weg, params={"pfad": "Apps/Stimmenausgabe/x.txt"}, content=b"x", headers=t)).status_code == 403
+    assert (await client.put(weg, params={"pfad": "Privat/x.txt"}, content=b"x", headers=t)).status_code == 404
+    assert (await client.put(weg, params={"pfad": "x.txt"}, content=b"x", headers=t)).status_code == 404
+    assert (await client.put(weg, params={"pfad": "Apps/Transkription/fehlt/x.txt"}, content=b"x", headers=t)).status_code == 404
+    await client.post("/api/v1/ablage/ordner", json={"pfad": "Apps/Transkription/ordner"}, headers=t)
+    assert (await client.put(weg, params={"pfad": "Apps/Transkription/ordner"}, content=b"x", headers=t)).status_code == 409
+
+
+async def test_grosser_strom_und_grenze(umgebung, tmp_path, monkeypatch):
+    """Ein Körper in vielen Stücken kommt vollständig an; über der Grenze bleibt nichts zurück."""
+    from app.config import EINSTELLUNGEN
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    stueck = bytes(range(256)) * 4096                                    # 1 MiB
+
+    async def koerper(anzahl):
+        for _ in range(anzahl):
+            yield stueck
+
+    r = await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/gross.bin"}, content=koerper(6), headers=t)
+    assert r.status_code == 200 and r.json()["groesse"] == 6 * len(stueck), r.text
+    inhalt = (await client.get(f"/api/v1/ablage/knoten/{r.json()['id']}/inhalt", headers=t)).content
+    assert inhalt == stueck * 6
+    vorher = sorted(p.name for p in tmp_path.rglob("*") if p.is_file())
+    import dataclasses
+    import module.ablage.api as ablage_api
+    monkeypatch.setattr(ablage_api, "EINSTELLUNGEN", dataclasses.replace(EINSTELLUNGEN, max_upload=2 * len(stueck)))
+    r = await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/zu-gross.bin"}, content=koerper(4), headers=t)
+    assert r.status_code == 413
+    assert sorted(p.name for p in tmp_path.rglob("*") if p.is_file()) == vorher                # keine Reste im Pool
+    assert (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Transkription/zu-gross.bin"}, headers=t)).status_code == 404

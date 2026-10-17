@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 from module.appzugang.dienst import AppAkteur, AppZugangDienst
+from module.speicher.dienst import Bedingung
 
 MAX_SEITE = 500
 
@@ -19,6 +20,10 @@ class Unsichtbar(Exception):
 
 class KeinSchreibrecht(Exception):
     """Lesen ja, schreiben nein (403)."""
+
+
+class VorbedingungFehlt(Exception):
+    """Überschreiben ohne Angabe des gelesenen Stands (428): Apps überschreiben nur mit If-Match."""
 
 
 def name_pruefen(name: str) -> str:
@@ -115,6 +120,38 @@ class AblageDienst:
             await self.mit_recht(akteur, aktuell, "schreiben")
             aktuell = (await self.speicher.ordner_anlegen(akteur.benutzer_id, aktuell, teil))["id"]
         return await self.knoten(akteur, aktuell)
+
+    async def datei_schreiben(self, akteur: AppAkteur, pfad: str, quelle, max_bytes: int,
+                              etag: str | None = None, nur_neu: bool = False) -> tuple[dict, str, int]:
+        """Legt eine Datei an oder schreibt eine neue Version. Der Elternordner muss existieren und beschreibbar sein.
+        Eine vorhandene Datei überschreibt eine App nur mit dem zuletzt gelesenen Stand (etag) oder gar nicht
+        (nur_neu); geprüft wird endgültig im Speicherkern unter Sperre. Liefert (Knoten, Blob-Hash, Größe)."""
+        teile = pfad_teile(pfad)
+        if len(teile) < 2:
+            raise Unsichtbar("Dateien legen Apps nur in Ordnern an")
+        eltern = await self.speicher.knoten_per_pfad(akteur.benutzer_id, "/".join(teile[:-1]))
+        if not eltern:
+            raise Unsichtbar("Ordner nicht gefunden")
+        eltern, _ = await self.mit_recht(akteur, eltern["id"], "schreiben")
+        if eltern["typ"] != "ordner":
+            raise ValueError("Ziel ist kein Ordner")
+        async with self.pool.connection() as conn:
+            vorhanden = await PostgresMetadataRepository(conn).knoten_finden(akteur.benutzer_id, eltern["id"], teile[-1])
+        if vorhanden and vorhanden["typ"] != "datei":
+            raise FileExistsError(f"{teile[-1]} ist ein Ordner")
+        if vorhanden and etag is None and not nur_neu:
+            raise VorbedingungFehlt("Die Datei gibt es schon: überschreiben nur mit If-Match (zuletzt gelesener ETag)")
+        knoten, blob_hash, groesse = await self.speicher.datei_hochladen_strom(
+            akteur.benutzer_id, eltern["id"], teile[-1], quelle, max_bytes, Bedingung(etag=etag, nur_neu=nur_neu))
+        return await self._ansicht(knoten, "schreiben"), blob_hash, groesse
+
+    async def pfad_von(self, akteur: AppAkteur, knoten_id) -> str:
+        """Pfad einer Datei, auf die die App schreiben darf (für Schreiben per Kennung)."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id, "schreiben")
+        if knoten["typ"] != "datei":
+            raise Unsichtbar("Keine Datei")
+        async with self.pool.connection() as conn:
+            return "/".join(await PostgresMetadataRepository(conn).pfad_namen(knoten_id))
 
     async def datei_kopf(self, akteur: AppAkteur, knoten_id) -> tuple[dict, int]:
         knoten, _ = await self.mit_recht(akteur, knoten_id)
