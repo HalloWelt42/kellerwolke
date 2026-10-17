@@ -1,6 +1,8 @@
-# Nur die Datenbank laeuft in Docker. Das benannte Volume wird ueber den
+# Die Datenbank laeuft in Docker. Das benannte Volume wird ueber den
 # eindeutigen COMPOSE_PROJECT_NAME je Klon isoliert (vermeidet das macOS-
-# Bind-Mount-Risiko bei DB-Dateien). Backend und Frontend startet ./start.sh.
+# Bind-Mount-Risiko bei DB-Dateien). Das Backend laeuft daneben (uvicorn).
+# Auf dem Pi steht zusaetzlich "web" vorne (Profil web): gebaute Oberflaeche,
+# Weiterleitung von /api und /webdav, TLS aus der Hausstelle.
 name: ${COMPOSE_PROJECT_NAME:-kellerwolke}
 
 services:
@@ -22,6 +24,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+  web:
+    image: caddy:2.11.6-alpine
+    profiles: ["web"]
+    restart: unless-stopped
+    # Im Netz des Rechners: Backend und Ports liegen dort, kein eigenes Docker-Netz noetig.
+    network_mode: host
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      KELLERWOLKE_HAUPTADRESSE: ${KELLERWOLKE_HAUPTADRESSE:-192.168.178.49}
+      KELLERWOLKE_BACKEND_PORT: ${KELLERWOLKE_BACKEND_PORT:-8460}
+      KELLERWOLKE_FRONTEND_PORT: ${KELLERWOLKE_FRONTEND_PORT:-5200}
+      KELLERWOLKE_TLS_PORT: ${KELLERWOLKE_TLS_PORT:-5201}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/oberflaeche:ro
+      - type: bind
+        source: ${KELLERWOLKE_ZERTIFIKATE:-./data/zertifikate}
+        target: /zertifikate
+        read_only: true
+        bind: { create_host_path: false }
+    deploy: { resources: { limits: { memory: 128M } } }
 
 volumes:
   pgdata:

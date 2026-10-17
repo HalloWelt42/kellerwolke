@@ -1,5 +1,30 @@
 # Deployment
 
+## Betrieb auf dem Pi (so läuft die Kellerwolke)
+
+Die Datenbank läuft in Docker, das Backend als Dienst daneben, vorne ein Caddy im Container (`docker compose`
+Profil `web`): er liefert die gebaute Oberfläche aus, reicht `/api` und `/webdav` ans Backend weiter und spricht
+TLS mit einem Zertifikat aus der Hausstelle. Die Dienste richtet `tools/systemd-einrichten.sh` einmal ein
+(`kellerwolke-db`, `kellerwolke-backend`, `kellerwolke-web`, zusammengefasst in `kellerwolke.target`).
+
+| Adresse | Zweck |
+|---|---|
+| `http://<pi>:KELLERWOLKE_FRONTEND_PORT` | Oberfläche ohne TLS (bisherige Adresse) |
+| `https://<pi>:KELLERWOLKE_TLS_PORT` | Oberfläche mit TLS; nötig für das iPhone (App auf dem Home-Bildschirm, Teilen-Menü) |
+| `http://<pi>:KELLERWOLKE_BACKEND_PORT` | Backend direkt (Schnittstelle, WebDAV) |
+
+Vom Mac aus:
+
+- `tools/zertifikat.sh` stellt das Blattzertifikat aus der Hausstelle (mkcert) aus und bringt es nach
+  `data/zertifikate` auf dem Pi; `--pruefen` meldet, wenn es in weniger als 60 Tagen abläuft. Der Schlüssel der
+  Hausstelle bleibt auf dem Mac. Ein Telefon, das der Hausstelle schon vertraut (etwa für die Kiste), vertraut damit
+  auch der Kellerwolke; sonst das Hauszertifikat einmal installieren und in den Einstellungen unter Info,
+  Zertifikatsvertrauen einschalten.
+- `tools/ausrollen.sh` rollt einen gepushten Stand aus: Sicherung der Datenbank (`tools/pi/sichern.sh`), Stand holen,
+  auf dem Pi Abhängigkeiten, Oberfläche bauen, Dienste neu starten und prüfen (`tools/pi/ausrollen.sh`).
+
+## Alles in Containern (Alternative)
+
 Der vollständige Stack (Datenbank, Backend, Frontend) läuft über
 `compose.pi.yml`. Nur das Frontend wird nach außen veröffentlicht; es leitet
 `/api` und `/webdav` intern an das Backend weiter.

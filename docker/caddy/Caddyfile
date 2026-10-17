@@ -1,0 +1,46 @@
+# Vorne auf dem Pi: liefert die gebaute Oberfläche aus und reicht Schnittstelle und WebDAV an das Backend weiter.
+# Einmal ohne TLS (bisherige Adresse) und einmal mit TLS aus der Hausstelle (Zertifikat: tools/zertifikat.sh).
+# Beim Zugriff per IP steht kein Servername im Handschlag, darum default_sni. Kein HSTS: unter einem Rechnernamen
+# würde es alle Ports des Pi auf HTTPS zwingen.
+{
+	admin off
+	auto_https off
+	default_sni {$KELLERWOLKE_HAUPTADRESSE}
+}
+
+(kellerwolke) {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		-Server
+	}
+	# Schnittstelle und WebDAV: strömen in beide Richtungen, nichts wird gepuffert (große Uploads, Ereignisstrom).
+	@backend path /api/* /webdav /webdav/*
+	handle @backend {
+		reverse_proxy 127.0.0.1:{$KELLERWOLKE_BACKEND_PORT} {
+			flush_interval -1
+		}
+	}
+	# Oberfläche: gebaute Dateien; Namen unter /assets tragen ihren Inhalt im Namen und dürfen ewig im Cache bleiben.
+	handle /assets/* {
+		root * /oberflaeche
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle {
+		root * /oberflaeche
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		encode zstd gzip
+		file_server
+	}
+}
+
+http://:{$KELLERWOLKE_FRONTEND_PORT} {
+	import kellerwolke
+}
+
+:{$KELLERWOLKE_TLS_PORT} {
+	tls /zertifikate/kellerwolke.pem /zertifikate/kellerwolke-schluessel.pem
+	import kellerwolke
+}

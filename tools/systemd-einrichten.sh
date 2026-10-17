@@ -12,7 +12,8 @@
 #
 #   kellerwolke-db.service        Datenbank (Docker) - einmalig hochfahren
 #   kellerwolke-backend.service   uvicorn, ueberwacht + Neustart
-#   kellerwolke-frontend.service  vite,    ueberwacht + Neustart
+#   kellerwolke-web.service       vorne (Caddy, Docker): gebaute Oberflaeche, Weiterleitung
+#                                 von /api und /webdav, TLS aus der Hausstelle
 #   kellerwolke.target            klammert alles zusammen
 #
 # Aufruf (auf dem Zielgeraet):  ./tools/systemd-einrichten.sh
@@ -43,7 +44,6 @@ envget() {
 }
 BIND="$(envget KELLERWOLKE_BIND 127.0.0.1)"
 BPORT="$(envget KELLERWOLKE_BACKEND_PORT 8460)"
-FPORT="$(envget KELLERWOLKE_FRONTEND_PORT 5200)"
 
 if [ ! -x "$DIR/backend/.venv/bin/uvicorn" ]; then
   echo "Backend-Umgebung fehlt ($DIR/backend/.venv)."
@@ -103,20 +103,24 @@ WantedBy=kellerwolke.target
 EOF
 )"
 
-schreibe "kellerwolke-frontend.service" "$(cat <<EOF
+# Vorne steht ein Caddy im Container: er liefert die gebaute Oberflaeche (frontend/dist,
+# gebaut von tools/pi/ausrollen.sh) und reicht /api und /webdav ans Backend. Mit TLS,
+# sobald tools/zertifikat.sh (auf dem Mac) das Zertifikat gebracht hat.
+schreibe "kellerwolke-web.service" "$(cat <<EOF
 [Unit]
-Description=Kellerwolke - Frontend (vite)
-After=kellerwolke-backend.service
+Description=Kellerwolke - vorne (Oberflaeche, Weiterleitung, TLS)
+After=docker.service kellerwolke-backend.service network-online.target
+Requires=docker.service
 PartOf=kellerwolke.target
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=yes
 User=${BENUTZER}
-WorkingDirectory=${DIR}/frontend
-EnvironmentFile=-${ENVFILE}
-ExecStart=/usr/bin/npm run dev -- --port ${FPORT} --strictPort
-Restart=always
-RestartSec=5
+WorkingDirectory=${DIR}
+ExecStart=/usr/bin/docker compose --env-file ${ENVFILE} --profile web up -d --force-recreate web
+ExecStop=/usr/bin/docker compose --env-file ${ENVFILE} --profile web stop web
+TimeoutStartSec=300
 
 [Install]
 WantedBy=kellerwolke.target
@@ -126,7 +130,7 @@ EOF
 schreibe "kellerwolke.target" "$(cat <<EOF
 [Unit]
 Description=Kellerwolke - eigene Dateiwolke
-Wants=kellerwolke-db.service kellerwolke-backend.service kellerwolke-frontend.service
+Wants=kellerwolke-db.service kellerwolke-backend.service kellerwolke-web.service
 After=kellerwolke-db.service
 
 [Install]
@@ -141,9 +145,16 @@ if systemctl list-unit-files | grep -q "^kellerwolke.service"; then
   sudo rm -f /etc/systemd/system/kellerwolke.service
 fi
 
+# Frueher lieferte der Entwicklungsserver (vite) die Oberflaeche aus; das macht jetzt "vorne".
+if systemctl list-unit-files | grep -q "^kellerwolke-frontend.service"; then
+  echo "Entwicklungsserver als Dienst abschalten (die Oberflaeche liefert jetzt kellerwolke-web) ..."
+  sudo systemctl disable --now kellerwolke-frontend.service 2>/dev/null || true
+  sudo rm -f /etc/systemd/system/kellerwolke-frontend.service
+fi
+
 sudo systemctl daemon-reload
 sudo systemctl enable kellerwolke.target kellerwolke-db.service \
-  kellerwolke-backend.service kellerwolke-frontend.service >/dev/null
+  kellerwolke-backend.service kellerwolke-web.service >/dev/null
 
 echo "Eingerichtet (Benutzer=${BENUTZER}, Verzeichnis=${DIR})."
 echo "  Starten : sudo systemctl start kellerwolke.target"
