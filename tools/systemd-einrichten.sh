@@ -139,14 +139,15 @@ EOF
 )"
 
 # Der alte Einzeldienst wuerde sonst parallel dieselben Ports belegen.
-if systemctl list-unit-files | grep -q "^kellerwolke.service"; then
+if [ -f /etc/systemd/system/kellerwolke.service ]; then
   echo "Alten Einzeldienst kellerwolke.service abschalten ..."
   sudo systemctl disable --now kellerwolke.service 2>/dev/null || true
   sudo rm -f /etc/systemd/system/kellerwolke.service
 fi
 
 # Frueher lieferte der Entwicklungsserver (vite) die Oberflaeche aus; das macht jetzt "vorne".
-if systemctl list-unit-files | grep -q "^kellerwolke-frontend.service"; then
+# Bewusst ohne Pipe: unter pipefail bricht "systemctl ... | grep -q" mit SIGPIPE ab und die Bedingung waere falsch.
+if [ -f /etc/systemd/system/kellerwolke-frontend.service ]; then
   echo "Entwicklungsserver als Dienst abschalten (die Oberflaeche liefert jetzt kellerwolke-web) ..."
   sudo systemctl disable --now kellerwolke-frontend.service 2>/dev/null || true
   sudo rm -f /etc/systemd/system/kellerwolke-frontend.service
