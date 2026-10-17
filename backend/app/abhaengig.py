@@ -43,6 +43,10 @@ def hole_medien(request: Request):
     return request.app.state.medien
 
 
+def hole_uploads(request: Request):
+    return request.app.state.uploads
+
+
 async def aktueller_benutzer(request: Request) -> dict:
     token = request.headers.get("x-kellerwolke-sitzung", "")
     benutzer = await request.app.state.auth.sitzung_pruefen(token)

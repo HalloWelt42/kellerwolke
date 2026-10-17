@@ -182,6 +182,10 @@ class NameBelegt(Exception):
     """Unter dem Namen liegt im Ordner schon ein Objekt anderer Art (Datei gegen Ordner)."""
 
 
+class PruefsummeFalsch(Exception):
+    """Der angekommene Inhalt hat eine andere Prüfsumme als angekündigt (Übertragung beschädigt)."""
+
+
 class VorbedingungVerletzt(Exception):
     """Der Stand der Datei passt nicht zur Bedingung des Schreibers (If-Match oder If-None-Match)."""
 
@@ -608,12 +612,21 @@ class SpeicherDienst:
         )
 
     async def datei_hochladen_strom(self, besitzer_id, parent_id, name, quelle, max_bytes: int = 0,
-                                    bedingung: Bedingung | None = None):
+                                    bedingung: Bedingung | None = None, pruefsumme: str | None = None):
         """Wie datei_hochladen, nimmt den Inhalt aber als Datei-Objekt und streamt
         ihn auf die Platte - der Speicherbedarf haengt NICHT an der Dateigroesse.
+        Mit pruefsumme (sha256, hex) wird nur eingetragen, wenn der Inhalt genau
+        diese hat; sonst PruefsummeFalsch und der neue Block verschwindet wieder.
         Liefert (knoten, blob_hash, groesse); Hash und Groesse braucht der Aufrufer
         fuer die Indizierung, ohne die Bytes festhalten zu muessen."""
         blob_hash, neu, groesse = await self.blob_put_strom(str(besitzer_id), quelle, max_bytes)
+        if pruefsumme is not None and blob_hash != pruefsumme:
+            if neu:
+                async with self.pool.connection() as conn:
+                    rest = await PostgresMetadataRepository(conn).blob_holen(besitzer_id, blob_hash)
+                if not rest:
+                    await self.blob_delete(str(besitzer_id), blob_hash)
+            raise PruefsummeFalsch("Der Inhalt passt nicht zur angegebenen Prüfsumme")
         knoten = await self._datei_eintragen(
             besitzer_id, parent_id, name, blob_hash, neu, groesse, bedingung
         )

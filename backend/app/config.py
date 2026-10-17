@@ -81,6 +81,9 @@ class Einstellungen:
     # Abgelegte Vorschau- und Vollbilder (abgeleitet, jederzeit neu erzeugbar) und wie viele gleichzeitig entstehen.
     vorschau_pfad: str = _text("KELLERWOLKE_VORSCHAU_PFAD", str(WURZEL / "data" / "vorschau"))
     vorschau_gleichzeitig: int = _zahl("KELLERWOLKE_VORSCHAU_GLEICHZEITIG", 2)
+    # Teile fortsetzbarer Uploads bis zum letzten Stück, und wie lange ein ruhender Upload liegen bleibt.
+    teile_pfad: str = _text("KELLERWOLKE_TEILE_PFAD", str(WURZEL / "data" / "teile"))
+    teile_tage: int = _zahl("KELLERWOLKE_TEILE_TAGE", 7)
     # ffmpeg für Standbilder aus Videos; leer heißt: im Suchpfad suchen, fehlt es, gibt es nur das Film-Symbol.
     ffmpeg: str = _text("KELLERWOLKE_FFMPEG", "")
 

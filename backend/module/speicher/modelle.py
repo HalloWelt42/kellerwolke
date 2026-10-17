@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 from module.medien.arten import Medienart, medienart
 
 
-def _sauberer_name(wert: str) -> str:
+def sauberer_name(wert: str) -> str:
     wert = wert.strip()
     if not wert:
         raise ValueError("Name darf nicht leer sein")
@@ -100,7 +100,7 @@ class OrdnerEingabe(BaseModel):
     @field_validator("name")
     @classmethod
     def _name(cls, wert: str) -> str:
-        return _sauberer_name(wert)
+        return sauberer_name(wert)
 
 
 class UmbenennenEingabe(BaseModel):
@@ -109,7 +109,7 @@ class UmbenennenEingabe(BaseModel):
     @field_validator("name")
     @classmethod
     def _name(cls, wert: str) -> str:
-        return _sauberer_name(wert)
+        return sauberer_name(wert)
 
 
 class VerschiebenEingabe(BaseModel):
