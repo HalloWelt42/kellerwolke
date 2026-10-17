@@ -206,6 +206,26 @@ class Bedingung:
     zugang_id: str | None = None      # schreibende App: eine Bearbeitungssperre einer anderen App weist ab
 
 
+@dataclass(frozen=True)
+class DateiStand:
+    """Eine Datei in genau einer Version: Knoten und Blöcke, festgehalten beim Nachschlagen."""
+
+    knoten: dict
+    teile: tuple
+
+    @property
+    def groesse(self) -> int:
+        return sum(c.get("groesse", 0) for c in self.teile)
+
+    @property
+    def eigentuemer(self) -> str:
+        return str(self.knoten["besitzer_id"])
+
+    @property
+    def etag(self) -> str | None:
+        return self.knoten["etag"]
+
+
 class SpeicherDienst:
     def __init__(self, pool, blobstore) -> None:
         self.pool = pool
@@ -306,64 +326,6 @@ class SpeicherDienst:
             if not await repo.lese_zugriff(leser_id, knoten_id):
                 return None
             return await repo.kinder_nach_parent(knoten_id)
-
-    async def geteilt_datei_lesen(self, leser_id, knoten_id):
-        """Inhalt einer geteilten Datei - nur bei Lesezugriff. Gelesen wird aus
-        dem Pool des EIGENTUEMERS (nicht des Lesers)."""
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            if not await repo.lese_zugriff(leser_id, knoten_id):
-                return None
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                return None
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-            eigentuemer = str(knoten["besitzer_id"])
-        bloecke = [await self.blob_get(eigentuemer, c["blob_hash"], c.get("groesse", 0)) for c in teile]
-        return (knoten, b"".join(bloecke))
-
-    async def geteilt_datei_kopf(self, leser_id, knoten_id):
-        """Prueft den Lesezugriff und liefert (knoten, groesse) - ohne Inhalt.
-        Damit kann die Auslieferung streamen, statt erst alles zu laden."""
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            if not await repo.lese_zugriff(leser_id, knoten_id):
-                return None
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                return None
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-        return knoten, sum(c.get("groesse", 0) for c in teile)
-
-    async def geteilt_datei_stroemen(self, leser_id, knoten_id, start: int = 0,
-                                     laenge: int = -1, stueck: int = 1024 * 1024):
-        """Stueckweiser Inhalt einer geteilten Datei - nur bei Lesezugriff.
-        Gelesen wird aus dem Pool des EIGENTUEMERS (nicht des Lesers)."""
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            if not await repo.lese_zugriff(leser_id, knoten_id):
-                raise PermissionError("Kein Lesezugriff")
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                raise FileNotFoundError("Datei nicht gefunden")
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-            eigentuemer = str(knoten["besitzer_id"])
-        gesamt = sum(c.get("groesse", 0) for c in teile)
-        ende = gesamt if laenge < 0 else min(start + laenge, gesamt)
-        pos = 0
-        for c in teile:
-            cg = c.get("groesse", 0)
-            c_start, c_ende = pos, pos + cg
-            pos = c_ende
-            if c_ende <= start:
-                continue
-            if c_start >= ende:
-                break
-            offen, bis = max(0, start - c_start), min(cg, ende - c_start)
-            while offen < bis:
-                nun = min(stueck, bis - offen)
-                yield await self.blob_get_bereich(eigentuemer, c["blob_hash"], offen, nun)
-                offen += nun
 
     # --- Konsistenz / Reparatur ----------------------------------------------
 
@@ -717,118 +679,74 @@ class SpeicherDienst:
             typ = await PostgresMetadataRepository(conn).inhaltstyp(knoten["id"])
         return typ or inhaltstyp_aus_name(knoten["name"])
 
-    async def datei_groesse(self, besitzer_id, knoten_id) -> int:
-        """Groesse der aktuellen Version, OHNE den Inhalt zu lesen. Der Range-
-        Kopf braucht die Gesamtgroesse - dafuer darf die Datei nicht angefasst
-        werden."""
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                raise FileNotFoundError("Datei nicht gefunden")
-            version = await repo.version_holen(knoten["aktuelle_version_id"])
-        if not version:
-            raise FileNotFoundError("Datei ohne Version")
-        return version["groesse"]
+    # --- Lesen: ein Weg für eigene und geteilte Dateien ----------------------------------------------------------
 
-    async def datei_bereich_lesen(self, besitzer_id, knoten_id, start: int, laenge: int) -> bytes:
-        """Liest NUR den angeforderten Ausschnitt. Angefasst werden ausschliesslich
-        die Bloecke, die den Bereich ueberlappen - ein Sprung im Player holt damit
-        nicht mehr die ganze Datei von der Platte."""
+    async def _stand(self, repo, knoten) -> DateiStand | None:
+        if not knoten or knoten["typ"] != "datei" or knoten["geloescht"] or not knoten["aktuelle_version_id"]:
+            return None
+        teile = await repo.chunks(knoten["aktuelle_version_id"])
+        return DateiStand(knoten=knoten, teile=tuple(teile))
+
+    async def eigene_datei(self, besitzer_id, knoten_id) -> DateiStand | None:
+        """Stand einer lebenden Datei des Kontos, ohne den Inhalt zu lesen - sonst None."""
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                raise FileNotFoundError("Datei nicht gefunden")
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-        ende = start + laenge
-        stuecke, pos = [], 0
-        for c in teile:
+            if not knoten or knoten["besitzer_id"] != besitzer_id:
+                return None
+            return await self._stand(repo, knoten)
+
+    async def lesbare_datei(self, leser_id, knoten_id) -> DateiStand | None:
+        """Stand einer lebenden Datei, die das Konto lesen darf: eigene oder freigegebene (am Knoten oder einem
+        Vorfahren) - sonst None."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if not await repo.lese_zugriff(leser_id, knoten_id):
+                return None
+            return await self._stand(repo, await repo.knoten_holen(knoten_id))
+
+    async def stand_stroemen(self, stand: DateiStand, start: int = 0, laenge: int = -1,
+                             stueck: int = 1024 * 1024):
+        """Inhalt eines Stands stückweise, aus dem Pool des Eigentümers. Der Stand hält die Version fest: wer den Kopf
+        mit ETag bekommen hat, bekommt auch genau diesen Inhalt, selbst wenn inzwischen eine neue Version kam."""
+        ende = stand.groesse if laenge < 0 else min(start + laenge, stand.groesse)
+        pos = 0
+        for c in stand.teile:
             cg = c.get("groesse", 0)
             c_start, c_ende = pos, pos + cg
             pos = c_ende
             if c_ende <= start:
-                continue  # liegt komplett vor dem Bereich
+                continue
             if c_start >= ende:
-                break  # ab hier liegt alles dahinter
-            von = max(0, start - c_start)
-            bis = min(cg, ende - c_start)
-            stuecke.append(
-                await self.blob_get_bereich(str(besitzer_id), c["blob_hash"], von, bis - von)
-            )
-        return b"".join(stuecke)
+                break
+            offen, bis = max(0, start - c_start), min(cg, ende - c_start)
+            # Auch innerhalb eines Blocks in Häppchen: ein großer Block landet nie am Stück im Speicher.
+            while offen < bis:
+                nun = min(stueck, bis - offen)
+                yield await self.blob_get_bereich(stand.eigentuemer, c["blob_hash"], offen, nun)
+                offen += nun
 
-    async def datei_pfad(self, besitzer_id, knoten_id):
-        """Lokaler Pfad der Datei - oder None.
-
-        Nur fuer Werkzeuge, die zwingend eine echte Datei brauchen (ffmpeg liest
-        daraus selbst gezielt einzelne Stellen, statt dass wir sie in den Speicher
-        holen). Liefert None, wenn die Datei aus mehreren Bloecken besteht oder
-        der Speicher gar keine Pfade kennt - der Aufrufer MUSS das vertragen.
-        """
+    async def stand_pfad(self, stand: DateiStand) -> str | None:
+        """Lokaler Pfad des Inhalts - oder None, wenn er aus mehreren Blöcken besteht oder der Speicher keine Pfade
+        kennt. Nur für Werkzeuge, die zwingend eine echte Datei brauchen (Bild- und Videobearbeitung lesen daraus
+        gezielt, statt dass die Datei in den Speicher kommt); der Aufrufer MUSS None vertragen."""
         holen = getattr(self.blobstore, "pfad", None)
-        if holen is None:
+        if holen is None or len(stand.teile) != 1:
             return None
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                raise FileNotFoundError("Datei nicht gefunden")
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-        if len(teile) != 1:
-            return None  # zusammengesetzt: es gibt keine eine Datei
-        return await im_thread(
-            holen, str(besitzer_id), teile[0]["blob_hash"], timeout=EINSTELLUNGEN.io_timeout
-        )
+        return await im_thread(holen, stand.eigentuemer, stand.teile[0]["blob_hash"], timeout=EINSTELLUNGEN.io_timeout)
 
     async def datei_stroemen(self, besitzer_id, knoten_id, start: int = 0, laenge: int = -1,
                              stueck: int = 1024 * 1024):
-        """Liefert den Inhalt STUECKWEISE als Generator - der Speicherbedarf bleibt
-        bei einem Stueck, egal ob die Datei 1 KB oder 10 GB hat.
+        """Eigene Datei stückweise (ZIP, WebDAV); wirft FileNotFoundError, wenn es sie nicht gibt."""
+        stand = await self.eigene_datei(besitzer_id, knoten_id)
+        if stand is None:
+            raise FileNotFoundError("Datei nicht gefunden")
+        async for brocken in self.stand_stroemen(stand, start, laenge, stueck):
+            yield brocken
 
-        Das ist der einzige Weg, auf dem grosse Dateien ausgeliefert werden
-        duerfen: ein Vollpuffer wuerde bei jeder Anfrage die ganze Datei in den
-        Speicher holen. laenge=-1 heisst "bis zum Ende".
-        """
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                raise FileNotFoundError("Datei nicht gefunden")
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-        gesamt = sum(c.get("groesse", 0) for c in teile)
-        ende = gesamt if laenge < 0 else min(start + laenge, gesamt)
-        pos = 0
-        for c in teile:
-            cg = c.get("groesse", 0)
-            c_start, c_ende = pos, pos + cg
-            pos = c_ende
-            if c_ende <= start:
-                continue  # liegt komplett vor dem Bereich
-            if c_start >= ende:
-                break  # ab hier liegt alles dahinter
-            von = max(0, start - c_start)
-            bis = min(cg, ende - c_start)
-            # Innerhalb des Blocks in Haeppchen lesen, damit auch ein einzelner
-            # grosser Block nie am Stueck im Speicher landet.
-            offen = von
-            while offen < bis:
-                nun = min(stueck, bis - offen)
-                yield await self.blob_get_bereich(str(besitzer_id), c["blob_hash"], offen, nun)
-                offen += nun
-
-    async def datei_lesen(self, besitzer_id, knoten_id):
-        async with self.pool.connection() as conn:
-            repo = PostgresMetadataRepository(conn)
-            knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-                raise FileNotFoundError("Datei nicht gefunden")
-            teile = await repo.chunks(knoten["aktuelle_version_id"])
-        bloecke = [
-            await self.blob_get(str(besitzer_id), c["blob_hash"], c.get("groesse", 0))
-            for c in teile
-        ]
-        return b"".join(bloecke)
+    async def datei_lesen(self, besitzer_id, knoten_id) -> bytes:
+        """Eigene Datei am Stück - nur für kleine Inhalte; ausgeliefert wird immer über stand_stroemen."""
+        return b"".join([b async for b in self.datei_stroemen(besitzer_id, knoten_id)])
 
     async def _datei_groesse(self, knoten):
         g = knoten.get("groesse")
@@ -1003,55 +921,32 @@ class SpeicherDienst:
         quelle = await self._externe_quelle(besitzer_id, knoten_id)
         if quelle is None:
             return None
-        return quelle.auflisten(unterpfad)
+        return await im_thread(quelle.auflisten, unterpfad, timeout=EINSTELLUNGEN.io_timeout)
 
-    async def externe_datei_lesen(self, besitzer_id, knoten_id, unterpfad):
+    async def externe_datei(self, besitzer_id, knoten_id, unterpfad):
+        """Quelle und Eintrag einer Datei in einer eigenen externen Quelle - None, wenn der Knoten keine ist.
+        Wirft FileNotFoundError, PermissionError oder IsADirectoryError für den Unterpfad."""
         quelle = await self._externe_quelle(besitzer_id, knoten_id)
         if quelle is None:
             return None
-        return quelle.lesen(unterpfad)
+        eintrag = await im_thread(quelle.info, unterpfad, timeout=EINSTELLUNGEN.io_timeout)
+        if eintrag.ist_ordner:
+            raise IsADirectoryError(unterpfad)
+        return quelle, eintrag
 
-    @staticmethod
-    def _basisname(name: str) -> str:
-        """Nur den reinen Dateinamen zulassen - keine Pfadanteile, kein '..'."""
-        rein = Path(name).name
-        if not rein or rein in (".", ".."):
-            raise ValueError("Ungueltiger Name")
-        return rein
-
-    def _externer_pfad(self, unterpfad: str, name: str) -> str:
-        basis = self._basisname(name)
-        unter = (unterpfad or "").strip("/")
-        return f"{unter}/{basis}" if unter else basis
-
-    async def externe_datei_schreiben(self, besitzer_id, knoten_id, unterpfad, name, daten):
-        """Schreibt eine Datei in eine schreibbare externe Quelle. Liefert False,
-        wenn der Knoten keine externe Quelle des Nutzers ist (Isolation)."""
-        quelle = await self._externe_quelle(besitzer_id, knoten_id)
-        if quelle is None:
-            return False
-        quelle.schreiben(self._externer_pfad(unterpfad, name), daten)
-        return True
-
-    async def externe_datei_schreiben_strom(self, besitzer_id, knoten_id, unterpfad, name,
-                                            strom, max_bytes: int = 0):
-        """Wie externe_datei_schreiben, streamt den Inhalt aber auf die Quelle,
-        statt ihn vorher komplett in den Speicher zu laden."""
-        quelle = await self._externe_quelle(besitzer_id, knoten_id)
-        if quelle is None:
-            return False
-        await im_thread(
-            quelle.schreiben_strom, self._externer_pfad(unterpfad, name), strom, max_bytes,
-            timeout=self._io_timeout(max_bytes or EINSTELLUNGEN.max_upload),
-        )
-        return True
-
-    async def externe_ordner_anlegen(self, besitzer_id, knoten_id, unterpfad, name):
-        quelle = await self._externe_quelle(besitzer_id, knoten_id)
-        if quelle is None:
-            return False
-        quelle.ordner_anlegen(self._externer_pfad(unterpfad, name))
-        return True
+    async def extern_stroemen(self, quelle, unterpfad, start: int = 0, laenge: int = -1,
+                              stueck: int = 1024 * 1024, gesamt: int = 0):
+        """Inhalt einer externen Datei stückweise; jedes Stück mit Zeitlimit, damit eine hängende Platte nichts
+        einfriert."""
+        ende = gesamt if laenge < 0 else start + laenge
+        pos = start
+        while pos < ende:
+            nun = min(stueck, ende - pos)
+            brocken = await im_thread(quelle.bereich_lesen, unterpfad, pos, nun, timeout=self._io_timeout(nun))
+            if not brocken:
+                break
+            yield brocken
+            pos += len(brocken)
 
     async def groesse(self, knoten) -> int:
         if knoten["typ"] != "datei" or not knoten["aktuelle_version_id"]:

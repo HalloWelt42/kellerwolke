@@ -164,19 +164,21 @@ async def test_als_zip_packt_ordner_rekursiv(dienst, benutzer_id):
     assert await dienst.als_zip(benutzer_id, []) is None
 
 
-async def test_externe_quelle_schreibbar(dienst, benutzer_id, tmp_path):
+async def test_externe_quelle_lesen_stueckweise(dienst, benutzer_id, tmp_path):
     import uuid
 
     extern_wurzel = tmp_path / "extern"
-    extern_wurzel.mkdir()
+    (extern_wurzel / "Neu").mkdir(parents=True)
+    (extern_wurzel / "Neu" / "a.txt").write_bytes(b"hallo welt")
     quelle = await dienst.externe_quelle_anlegen(benutzer_id, None, "Stick", str(extern_wurzel))
-    assert await dienst.externe_ordner_anlegen(benutzer_id, quelle["id"], "", "Neu") is True
-    assert await dienst.externe_datei_schreiben(benutzer_id, quelle["id"], "Neu", "a.txt", b"hallo") is True
-    # Auf der Platte und ueber den Lesepfad sichtbar.
-    assert (extern_wurzel / "Neu" / "a.txt").read_bytes() == b"hallo"
-    assert await dienst.externe_datei_lesen(benutzer_id, quelle["id"], "Neu/a.txt") == b"hallo"
-    # Fremder/fehlender Knoten -> False (Isolation).
-    assert await dienst.externe_datei_schreiben(benutzer_id, uuid.uuid4(), "", "x.txt", b"y") is False
+    q, eintrag = await dienst.externe_datei(benutzer_id, quelle["id"], "Neu/a.txt")
+    assert eintrag.groesse == 10
+    stuecke = [s async for s in dienst.extern_stroemen(q, "Neu/a.txt", 0, -1, stueck=4, gesamt=eintrag.groesse)]
+    assert stuecke == [b"hall", b"o we", b"lt"]
+    teil = [s async for s in dienst.extern_stroemen(q, "Neu/a.txt", 6, 4, gesamt=eintrag.groesse)]
+    assert teil == [b"welt"]
+    # Fremder/fehlender Knoten -> None (Isolation).
+    assert await dienst.externe_datei(benutzer_id, uuid.uuid4(), "Neu/a.txt") is None
 
 
 async def test_als_zip_kollision_und_leerer_ordner(dienst, benutzer_id):
@@ -221,9 +223,9 @@ async def test_externe_quelle_im_papierkorb_gesperrt(dienst, benutzer_id, tmp_pa
     wurzel.mkdir()
     quelle = await dienst.externe_quelle_anlegen(benutzer_id, None, "Stick", str(wurzel))
     await dienst.loeschen(benutzer_id, quelle["id"])  # in den Papierkorb
-    # Im Papierkorb weder lesbar noch beschreibbar.
+    # Im Papierkorb nicht lesbar.
     assert await dienst.externe_kinder(benutzer_id, quelle["id"]) is None
-    assert await dienst.externe_datei_schreiben(benutzer_id, quelle["id"], "", "x.txt", b"y") is False
+    assert await dienst.externe_datei(benutzer_id, quelle["id"], "x.txt") is None
 
 
 async def test_journal_zaehlt_monoton(dienst, benutzer_id):
@@ -457,7 +459,8 @@ async def test_datei_groesse_ohne_lesen(dienst, benutzer_id):
     """Der Range-Kopf braucht nur die Groesse - die darf die Datei nicht anfassen."""
     daten = b"x" * 5000
     knoten = await dienst.datei_hochladen(benutzer_id, None, "mass.bin", daten)
-    assert await dienst.datei_groesse(benutzer_id, knoten["id"]) == 5000
+    stand = await dienst.eigene_datei(benutzer_id, knoten["id"])
+    assert stand.groesse == 5000 and stand.etag == knoten["etag"]
 
 
 async def test_datei_pfad_fuer_werkzeuge(dienst, benutzer_id):
@@ -469,7 +472,7 @@ async def test_datei_pfad_fuer_werkzeuge(dienst, benutzer_id):
     daten = b"irgendwas" * 100
     knoten = await dienst.datei_hochladen(benutzer_id, None, "clip.mp4", daten)
 
-    pfad = await dienst.datei_pfad(benutzer_id, knoten["id"])
+    pfad = await dienst.stand_pfad(await dienst.eigene_datei(benutzer_id, knoten["id"]))
     assert pfad is not None, "dateibasierter Speicher muss einen Pfad liefern"
     assert pfad.exists()
     assert pfad.read_bytes() == daten, "der Pfad zeigt auf den falschen Block"
@@ -489,7 +492,7 @@ async def test_datei_pfad_ohne_pfadfaehigen_speicher(dienst, benutzer_id):
     original = dienst.blobstore
     dienst.blobstore = OhnePfad()
     try:
-        assert await dienst.datei_pfad(benutzer_id, knoten["id"]) is None
+        assert await dienst.stand_pfad(await dienst.eigene_datei(benutzer_id, knoten["id"])) is None
     finally:
         dienst.blobstore = original
 

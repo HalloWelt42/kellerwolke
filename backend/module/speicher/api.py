@@ -2,12 +2,11 @@
 Versionen. Jede Route prueft die Eigentuemerschaft des Knotens (Isolation).
 """
 
-import re
-from urllib.parse import quote
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 from psycopg.errors import UniqueViolation
 
 from app.abhaengig import (
@@ -17,12 +16,13 @@ from app.abhaengig import (
     hole_suche,
     hole_vorgaenge,
 )
+from app.auslieferung import dateiname_kopf, inhalt_antwort
 from app.config import EINSTELLUNGEN
+from app.inhaltstyp import inhaltstyp_aus_name
 from app.ports import DateiZuGross
 from module.speicher.dienst import ArchivZuGross, NameBelegt, ZielUngueltig
 from module.speicher.modelle import (
     ExternEintragAus,
-    ExternOrdnerEingabe,
     FreigabeAus,
     KnotenAus,
     KontoAus,
@@ -36,47 +36,6 @@ from module.speicher.modelle import (
 )
 
 router = APIRouter(prefix="/api/v1/dateien", tags=["dateien"])
-
-_RANGE_MUSTER = re.compile(r"bytes=(\d*)-(\d*)")
-
-
-def dateiname_kopf(name: str, art: str = "attachment") -> str:
-    """Baut den Content-Disposition-Wert mit sauber kodiertem Dateinamen.
-
-    Der Name wandert in einen HTTP-Kopf und darf dort weder mit Anfuehrungs-
-    zeichen noch mit Zeilenumbruechen ausbrechen. Umlaute gehen nur ueber die
-    RFC-5987-Form (filename*), deshalb zusaetzlich ein ASCII-Rueckfallname fuer
-    aeltere Empfaenger - sonst kommt "Uebergewicht.mp4" verstuemmelt an.
-    """
-    sicher = name.replace('"', "'").replace("\r", " ").replace("\n", " ")
-    ascii_name = sicher.encode("ascii", "replace").decode("ascii")
-    return f"{art}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(sicher, safe='')}"
-
-
-def bereich_aus_kopf(kopf: str | None, gesamt: int) -> tuple[int | None, int | None]:
-    """Wertet einen Range-Kopf aus und liefert (start, ende) oder (None, None),
-    wenn nichts oder nichts Gueltiges verlangt wurde."""
-    if not kopf or gesamt <= 0:
-        return None, None
-    m = _RANGE_MUSTER.search(kopf)
-    if not m:
-        return None, None
-    roh_start, roh_ende = m.group(1), m.group(2)
-    if not roh_start and not roh_ende:
-        return None, None
-    if not roh_start:
-        # Suffix-Form "bytes=-500": die letzten 500 Bytes.
-        n = int(roh_ende)
-        if n <= 0:
-            return None, None
-        start, ende = max(0, gesamt - n), gesamt - 1
-    else:
-        start = int(roh_start)
-        ende = min(int(roh_ende), gesamt - 1) if roh_ende else gesamt - 1
-    if start > ende or start >= gesamt:
-        return None, None
-    return start, ende
-
 
 @router.get("/speicher-status", response_model=SpeicherStatusAus)
 async def speicher_status(benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
@@ -130,30 +89,18 @@ async def geteilt_kinder(knoten_id: UUID, benutzer=Depends(aktueller_benutzer),
 
 
 @router.get("/geteilt/{knoten_id}/inhalt")
-async def geteilt_inhalt(knoten_id: UUID, request: Request,
-                         benutzer=Depends(aktueller_benutzer),
+async def geteilt_inhalt(knoten_id: UUID, request: Request, benutzer=Depends(aktueller_benutzer),
                          speicher=Depends(hole_speicher)):
-    ergebnis = await speicher.geteilt_datei_kopf(benutzer["id"], knoten_id)
-    if ergebnis is None:
-        raise HTTPException(status_code=404, detail="Nicht gefunden")
-    knoten, gesamt = ergebnis
-    typ = await speicher.inhaltstyp(knoten)
-    kopf = {
-        "Content-Disposition": dateiname_kopf(knoten["name"]),
-        "Accept-Ranges": "bytes",
-    }
-    start, ende = bereich_aus_kopf(request.headers.get("range"), gesamt)
-    if start is None:
-        kopf["Content-Length"] = str(gesamt)
-        return StreamingResponse(
-            speicher.geteilt_datei_stroemen(benutzer["id"], knoten_id),
-            media_type=typ, headers=kopf,
-        )
-    kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
-    kopf["Content-Length"] = str(ende - start + 1)
-    return StreamingResponse(
-        speicher.geteilt_datei_stroemen(benutzer["id"], knoten_id, start, ende - start + 1),
-        status_code=206, media_type=typ, headers=kopf,
+    return await _datei_ausliefern(request, speicher, await speicher.lesbare_datei(benutzer["id"], knoten_id))
+
+
+async def _datei_ausliefern(request: Request, speicher, stand):
+    """Download einer lesbaren Datei (eigene oder geteilte), ganz oder als Bereich."""
+    if stand is None:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+    return inhalt_antwort(
+        request, gesamt=stand.groesse, strom=lambda start, laenge: speicher.stand_stroemen(stand, start, laenge),
+        inhaltstyp=await speicher.inhaltstyp(stand.knoten), dateiname=stand.knoten["name"], etag=stand.etag,
     )
 
 
@@ -172,57 +119,27 @@ async def extern_auflisten(knoten_id: UUID, unterpfad: str = "",
     if eintraege is None:
         raise HTTPException(status_code=404, detail="Keine externe Quelle")
     return [
-        ExternEintragAus(name=e.name, ist_ordner=e.ist_ordner, groesse=e.groesse)
+        ExternEintragAus(name=e.name, ist_ordner=e.ist_ordner, groesse=e.groesse,
+                         geaendert_am=datetime.fromtimestamp(e.geaendert, timezone.utc) if e.geaendert else None)
         for e in eintraege
     ]
 
 
 @router.get("/extern/{knoten_id}/inhalt")
-async def extern_inhalt(knoten_id: UUID, unterpfad: str,
+async def extern_inhalt(knoten_id: UUID, unterpfad: str, request: Request,
                         benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    """Externe Quellen sind nur lesbar; der Inhalt strömt direkt von der Platte."""
     try:
-        daten = await speicher.externe_datei_lesen(benutzer["id"], knoten_id, unterpfad)
-    except (PermissionError, FileNotFoundError, IsADirectoryError):
+        gefunden = await speicher.externe_datei(benutzer["id"], knoten_id, unterpfad)
+    except (PermissionError, FileNotFoundError, IsADirectoryError, NotADirectoryError):
         raise HTTPException(status_code=404, detail="Nicht gefunden")
-    if daten is None:
+    if gefunden is None:
         raise HTTPException(status_code=404, detail="Keine externe Quelle")
-    name = unterpfad.rstrip("/").rsplit("/", 1)[-1] or "datei"
-    return Response(
-        content=daten,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    quelle, eintrag = gefunden
+    return inhalt_antwort(
+        request, gesamt=eintrag.groesse, inhaltstyp=inhaltstyp_aus_name(eintrag.name), dateiname=eintrag.name,
+        strom=lambda start, laenge: speicher.extern_stroemen(quelle, unterpfad, start, laenge, gesamt=eintrag.groesse),
     )
-
-
-@router.post("/extern/{knoten_id}/upload", status_code=204)
-async def extern_upload(knoten_id: UUID, datei: UploadFile, unterpfad: str = Form(default=""),
-                        benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
-    # Wie beim normalen Upload: direkt streamen, nichts vollstaendig im Speicher.
-    await datei.seek(0)
-    try:
-        ok = await speicher.externe_datei_schreiben_strom(
-            benutzer["id"], knoten_id, unterpfad, datei.filename or "datei",
-            datei.file, EINSTELLUNGEN.max_upload,
-        )
-    except DateiZuGross:
-        raise HTTPException(status_code=413, detail="Datei zu gross")
-    except (PermissionError, IsADirectoryError, OSError, ValueError):
-        raise HTTPException(status_code=400, detail="Schreiben nicht moeglich")
-    if not ok:
-        raise HTTPException(status_code=404, detail="Keine externe Quelle")
-
-
-@router.post("/extern/{knoten_id}/ordner", status_code=204)
-async def extern_ordner(knoten_id: UUID, eingabe: ExternOrdnerEingabe,
-                        benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
-    try:
-        ok = await speicher.externe_ordner_anlegen(
-            benutzer["id"], knoten_id, eingabe.unterpfad, eingabe.name
-        )
-    except (PermissionError, OSError, ValueError):
-        raise HTTPException(status_code=400, detail="Anlegen nicht moeglich")
-    if not ok:
-        raise HTTPException(status_code=404, detail="Keine externe Quelle")
 
 
 @router.post("/ordner", response_model=KnotenAus)
@@ -292,36 +209,9 @@ async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer),
 
 
 @router.get("/{knoten_id}/inhalt")
-async def herunterladen(knoten_id: UUID, request: Request,
-                        benutzer=Depends(aktueller_benutzer),
+async def herunterladen(knoten_id: UUID, request: Request, benutzer=Depends(aktueller_benutzer),
                         speicher=Depends(hole_speicher)):
-    knoten = await speicher.knoten_des_nutzers(benutzer["id"], knoten_id)
-    if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
-    gesamt = await speicher.datei_groesse(benutzer["id"], knoten_id)
-    typ = await speicher.inhaltstyp(knoten)
-    kopf = {
-        "Content-Disposition": dateiname_kopf(knoten["name"]),
-        "ETag": knoten["etag"] or "",
-        # Range melden: so kann ein abgebrochener Download fortgesetzt werden,
-        # statt bei einer grossen Datei wieder bei 0 zu beginnen.
-        "Accept-Ranges": "bytes",
-    }
-
-    start, ende = bereich_aus_kopf(request.headers.get("range"), gesamt)
-    if start is None:
-        # Ganze Datei - aber STUECKWEISE, nie als Vollpuffer im Speicher.
-        kopf["Content-Length"] = str(gesamt)
-        return StreamingResponse(
-            speicher.datei_stroemen(benutzer["id"], knoten_id),
-            media_type=typ, headers=kopf,
-        )
-    kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
-    kopf["Content-Length"] = str(ende - start + 1)
-    return StreamingResponse(
-        speicher.datei_stroemen(benutzer["id"], knoten_id, start, ende - start + 1),
-        status_code=206, media_type=typ, headers=kopf,
-    )
+    return await _datei_ausliefern(request, speicher, await speicher.eigene_datei(benutzer["id"], knoten_id))
 
 
 @router.get("/{knoten_id}/versionen", response_model=list[VersionAus])

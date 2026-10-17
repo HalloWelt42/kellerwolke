@@ -67,6 +67,7 @@ class Eintrag:
     name: str
     ist_ordner: bool
     groesse: int
+    geaendert: float | None = None  # Unix-Zeit der letzten Änderung
 
 
 @runtime_checkable

@@ -79,6 +79,7 @@ class ExternEintragAus(BaseModel):
     name: str
     ist_ordner: bool
     groesse: int
+    geaendert_am: datetime | None = None
 
 
 class OrdnerEingabe(BaseModel):
@@ -106,13 +107,3 @@ class VerschiebenEingabe(BaseModel):
 
 class ZipEingabe(BaseModel):
     ids: list[UUID]
-
-
-class ExternOrdnerEingabe(BaseModel):
-    name: str
-    unterpfad: str = ""
-
-    @field_validator("name")
-    @classmethod
-    def _name(cls, wert: str) -> str:
-        return _sauberer_name(wert)

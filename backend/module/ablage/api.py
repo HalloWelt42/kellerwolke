@@ -11,13 +11,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.abhaengig import aktuelle_app, hole_ablage, hole_melder, hole_suche, hole_vorgaenge
+from app.auslieferung import inhalt_antwort
 from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
 from module.speicher.dienst import Gesperrt, NameBelegt, VorbedingungVerletzt, ZielUngueltig
 from module.appzugang.modelle import RechtAus
-from module.speicher.api import bereich_aus_kopf, dateiname_kopf
 
 router = APIRouter(prefix="/api/v1/ablage", tags=["ablage"])
 
@@ -192,18 +192,11 @@ async def ordner(eingabe: OrdnerPfadEingabe, akteur=Depends(aktuelle_app), ablag
 @router.get("/knoten/{knoten_id}/inhalt")
 async def inhalt(knoten_id: UUID, request: Request, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     try:
-        knoten, gesamt = await ablage.datei_kopf(akteur, knoten_id)
+        knoten, stand = await ablage.datei_kopf(akteur, knoten_id)
     except _FEHLER as f:
         raise _fehler(f) from None
-    kopf = {"Content-Disposition": dateiname_kopf(knoten["name"]), "ETag": knoten["etag"] or "", "Accept-Ranges": "bytes"}
-    start, ende = bereich_aus_kopf(request.headers.get("range"), gesamt)
-    if start is None:
-        kopf["Content-Length"] = str(gesamt)
-        return StreamingResponse(ablage.datei_stroemen(akteur, knoten_id), media_type=knoten["inhaltstyp"], headers=kopf)
-    kopf["Content-Range"] = f"bytes {start}-{ende}/{gesamt}"
-    kopf["Content-Length"] = str(ende - start + 1)
-    return StreamingResponse(ablage.datei_stroemen(akteur, knoten_id, start, ende - start + 1), status_code=206,
-                             media_type=knoten["inhaltstyp"], headers=kopf)
+    return inhalt_antwort(request, gesamt=stand.groesse, inhaltstyp=knoten["inhaltstyp"], dateiname=knoten["name"],
+                          etag=stand.etag, strom=lambda start, laenge: ablage.stand_stroemen(stand, start, laenge))
 
 
 @router.put("/datei", response_model=AblageKnotenAus)

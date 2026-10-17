@@ -16,6 +16,7 @@ from psycopg.errors import UniqueViolation
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
+from app.auslieferung import inhalt_antwort
 from app.config import EINSTELLUNGEN
 from app.ports import SpeicherNichtVerfuegbar
 from module.speicher.dienst import NameBelegt, ZielUngueltig
@@ -140,20 +141,13 @@ async def _propfind(request, benutzer, pfad) -> Response:
 async def _get(request, benutzer, pfad, mit_koerper) -> Response:
     speicher = request.app.state.speicher
     knoten = await speicher.knoten_per_pfad(benutzer["id"], pfad)
-    if not knoten or knoten["geloescht"] or knoten["typ"] != "datei":
+    stand = await speicher.eigene_datei(benutzer["id"], knoten["id"]) if knoten else None
+    if stand is None:
         return Response(status_code=404)
-    # Groesse aus den Metadaten - fuer HEAD wird die Datei damit gar nicht mehr
-    # angefasst, und fuer GET geht der Inhalt stueckweise raus statt am Stueck.
-    gesamt = await speicher.datei_groesse(benutzer["id"], knoten["id"])
-    kopf = {"Content-Length": str(gesamt), "Accept-Ranges": "bytes"}
-    if knoten["etag"]:
-        kopf["ETag"] = f'"{knoten["etag"]}"'
-    if not mit_koerper:
-        return Response(status_code=200, headers=kopf)
-    return StreamingResponse(
-        speicher.datei_stroemen(benutzer["id"], knoten["id"]),
-        media_type="application/octet-stream", headers=kopf,
-    )
+    # Größe aus den Metadaten: HEAD fasst die Datei gar nicht an, GET liefert stückweise (auch als Bereich).
+    return inhalt_antwort(request, gesamt=stand.groesse, inhaltstyp="application/octet-stream", etag=stand.etag,
+                          strom=lambda start, laenge: speicher.stand_stroemen(stand, start, laenge),
+                          mit_koerper=mit_koerper)
 
 
 async def _put(request, benutzer, pfad) -> Response:

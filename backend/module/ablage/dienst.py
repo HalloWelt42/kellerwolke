@@ -276,18 +276,19 @@ class AblageDienst:
         async with self.pool.connection() as conn:
             return "/".join(await PostgresMetadataRepository(conn).pfad_namen(knoten_id))
 
-    async def datei_kopf(self, akteur: AppAkteur, knoten_id) -> tuple[dict, int]:
-        """Knoten (mit Inhaltstyp) und Größe einer lesbaren Datei."""
+    async def datei_kopf(self, akteur: AppAkteur, knoten_id):
+        """Knoten (mit Inhaltstyp) und festgehaltener Stand einer lesbaren Datei."""
         knoten, recht = await self.mit_recht(akteur, knoten_id)
-        if knoten["typ"] != "datei":
+        stand = await self.speicher.eigene_datei(akteur.benutzer_id, knoten_id) if knoten["typ"] == "datei" else None
+        if stand is None:
             raise Unsichtbar("Keine Datei")
         async with self.pool.connection() as conn:
             meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
-        return {**knoten, **_meta_felder(knoten, meta)}, await self.speicher.datei_groesse(akteur.benutzer_id, knoten_id)
+        return {**stand.knoten, **_meta_felder(stand.knoten, meta)}, stand
 
-    def datei_stroemen(self, akteur: AppAkteur, knoten_id, start: int = 0, laenge: int = -1):
-        """Nur nach datei_kopf aufrufen (dort ist das Recht geprüft)."""
-        return self.speicher.datei_stroemen(akteur.benutzer_id, knoten_id, start, laenge)
+    def stand_stroemen(self, stand, start: int = 0, laenge: int = -1):
+        """Nur mit einem Stand aus datei_kopf (dort ist das Recht geprüft)."""
+        return self.speicher.stand_stroemen(stand, start, laenge)
 
     # --- Änderungen beobachten --------------------------------------------------------------------------------
 

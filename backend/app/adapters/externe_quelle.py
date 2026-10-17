@@ -8,7 +8,7 @@ Testordner.
 
 from pathlib import Path
 
-from app.ports import DateiZuGross, Eintrag
+from app.ports import Eintrag
 
 
 class DateibaumQuelle:
@@ -27,67 +27,25 @@ class DateibaumQuelle:
         for kind in sorted(ordner.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
             try:
                 ist_ordner = kind.is_dir()
-                groesse = 0 if ist_ordner else kind.stat().st_size
+                st = kind.stat()
             except OSError:
                 continue
-            eintraege.append(Eintrag(name=kind.name, ist_ordner=ist_ordner, groesse=groesse))
+            eintraege.append(Eintrag(name=kind.name, ist_ordner=ist_ordner, groesse=0 if ist_ordner else st.st_size,
+                                     geaendert=st.st_mtime))
         return eintraege
-
-    def lesen(self, relativ: str) -> bytes:
-        ziel = self._aufloesen(relativ)
-        if ziel.is_dir():
-            raise IsADirectoryError(relativ)
-        return ziel.read_bytes()
 
     def info(self, relativ: str) -> Eintrag:
         ziel = self._aufloesen(relativ)
         ist_ordner = ziel.is_dir()
-        return Eintrag(
-            name=ziel.name,
-            ist_ordner=ist_ordner,
-            groesse=0 if ist_ordner else ziel.stat().st_size,
-        )
+        st = ziel.stat()
+        return Eintrag(name=ziel.name, ist_ordner=ist_ordner, groesse=0 if ist_ordner else st.st_size,
+                       geaendert=st.st_mtime)
 
-    def schreiben(self, relativ: str, daten: bytes) -> None:
-        """Legt eine Datei an oder ueberschreibt sie. Pfad bleibt durch
-        _aufloesen in der Quelle eingegrenzt (kein '..', kein Symlink-Ausbruch)."""
+    def bereich_lesen(self, relativ: str, start: int, laenge: int) -> bytes:
+        """Nur den Ausschnitt lesen; Auslieferungen holen sich so Stück für Stück, nie die ganze Datei."""
         ziel = self._aufloesen(relativ)
-        if ziel == self.wurzel or ziel.is_dir():
+        if ziel.is_dir():
             raise IsADirectoryError(relativ)
-        ziel.parent.mkdir(parents=True, exist_ok=True)
-        ziel.write_bytes(daten)
-
-    def schreiben_strom(self, relativ: str, quelle, max_bytes: int = 0,
-                        stueck: int = 1024 * 1024) -> int:
-        """Wie schreiben, aber stueckweise aus einem Datei-Objekt - der Inhalt
-        landet nie vollstaendig im Speicher. Liefert die geschriebene Groesse.
-        Ueberschreitet der Strom max_bytes, wird abgebrochen und die angefangene
-        Datei wieder entfernt (keine halbe Datei in der fremden Quelle)."""
-        ziel = self._aufloesen(relativ)
-        if ziel == self.wurzel or ziel.is_dir():
-            raise IsADirectoryError(relativ)
-        ziel.parent.mkdir(parents=True, exist_ok=True)
-        groesse = 0
-        try:
-            with open(ziel, "wb") as f:
-                while True:
-                    brocken = quelle.read(stueck)
-                    if not brocken:
-                        break
-                    groesse += len(brocken)
-                    if max_bytes and groesse > max_bytes:
-                        raise DateiZuGross(f"Datei groesser als {max_bytes} Bytes")
-                    f.write(brocken)
-            return groesse
-        except BaseException:
-            try:
-                ziel.unlink()
-            except OSError:
-                pass
-            raise
-
-    def ordner_anlegen(self, relativ: str) -> None:
-        ziel = self._aufloesen(relativ)
-        if ziel == self.wurzel:
-            raise PermissionError("Wurzel kann nicht angelegt werden")
-        ziel.mkdir(parents=True, exist_ok=True)
+        with open(ziel, "rb") as f:
+            f.seek(start)
+            return f.read(laenge)

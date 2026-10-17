@@ -25,8 +25,8 @@ def test_auflisten_ordner_zuerst(tmp_path):
 def test_lesen_liefert_bytes(tmp_path):
     _baum(tmp_path)
     quelle = DateibaumQuelle(tmp_path)
-    assert quelle.lesen("datei.txt") == b"hallo"
-    assert quelle.lesen("unterordner/tief.txt") == b"tief"
+    assert quelle.bereich_lesen("datei.txt", 0, 100) == b"hallo"
+    assert quelle.bereich_lesen("unterordner/tief.txt", 1, 2) == b"ie"
 
 
 def test_kein_ausbruch_mit_punkt_punkt(tmp_path):
@@ -35,7 +35,7 @@ def test_kein_ausbruch_mit_punkt_punkt(tmp_path):
     (tmp_path / "geheim.txt").write_bytes(b"nicht lesen")
     quelle = DateibaumQuelle(wurzel)
     with pytest.raises(PermissionError):
-        quelle.lesen("../geheim.txt")
+        quelle.bereich_lesen("../geheim.txt", 0, 10)
 
 
 def test_info(tmp_path):
@@ -43,22 +43,11 @@ def test_info(tmp_path):
     quelle = DateibaumQuelle(tmp_path)
     assert quelle.info("unterordner").ist_ordner is True
     assert quelle.info("datei.txt").groesse == 5
+    assert quelle.info("datei.txt").geaendert > 0
 
 
-def test_schreiben_und_ordner_anlegen(tmp_path):
+def test_nur_lesbar(tmp_path):
+    """Externe Quellen werden nur gelesen, nie verändert: es gibt keinen Schreibweg."""
     quelle = DateibaumQuelle(tmp_path)
-    quelle.ordner_anlegen("neu")
-    quelle.schreiben("neu/bericht.txt", b"Inhalt")
-    assert (tmp_path / "neu").is_dir()
-    assert (tmp_path / "neu" / "bericht.txt").read_bytes() == b"Inhalt"
-    # ueber den Lesepfad wieder sichtbar
-    assert quelle.lesen("neu/bericht.txt") == b"Inhalt"
-
-
-def test_schreiben_kein_ausbruch(tmp_path):
-    wurzel = tmp_path / "quelle"
-    wurzel.mkdir()
-    quelle = DateibaumQuelle(wurzel)
-    with pytest.raises(PermissionError):
-        quelle.schreiben("../eindringling.txt", b"boese")
-    assert not (tmp_path / "eindringling.txt").exists()
+    for name in ("schreiben", "schreiben_strom", "ordner_anlegen", "loeschen"):
+        assert not hasattr(quelle, name)
