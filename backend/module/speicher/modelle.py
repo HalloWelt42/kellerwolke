@@ -43,6 +43,10 @@ class KnotenAus(BaseModel):
     # Nur in Suchergebnissen: Ordnerkette über dem Treffer und ob der Name traf (sonst der Inhalt).
     ort: list[str] | None = None
     im_namen: bool | None = None
+    # Begleitdateien (Liste): ein Begleiter nennt seine Hauptdatei und Rolle, eine Hauptdatei die Zahl ihrer Begleiter.
+    haupt_id: UUID | None = None
+    rolle: str | None = None
+    begleiter_anzahl: int = 0
 
     @computed_field
     @property

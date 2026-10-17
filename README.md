@@ -17,3 +17,5 @@ Frühe Aufbauphase. In dieser Phase entsteht der Datei-Kern mit Web-Oberfläche 
 - Betrieb: Docker
 
 Oberfläche und Schnittstelle sind strikt getrennt: das Backend liefert nur Daten, die Oberfläche ist austauschbar.
+
+Eigene Apps legen ihre Dateien über die Ablage-Schnittstelle ab, Ergebnisse als Begleitdateien neben der Quelle: `docs/APPS.md`.

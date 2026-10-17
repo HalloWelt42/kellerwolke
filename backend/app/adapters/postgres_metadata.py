@@ -102,12 +102,16 @@ class PostgresMetadataRepository:
             "EXISTS(SELECT 1 FROM favorit f "
             "WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit, "
             "EXISTS(SELECT 1 FROM freigabe fr "
-            "WHERE fr.knoten_id = k.id) AS geteilt"
+            "WHERE fr.knoten_id = k.id) AS geteilt, "
+            "bg.haupt_id, bg.rolle, "
+            "(SELECT count(*) FROM begleiter b JOIN knoten c ON c.id = b.begleiter_id AND NOT c.geloescht "
+            "WHERE b.haupt_id = k.id) AS begleiter_anzahl"
         )
         if parent_id is None:
             return await self._alle(
                 f"SELECT k.*, v.groesse, {zusatz} FROM knoten k "
                 "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+                "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
                 "WHERE k.besitzer_id=%s AND k.parent_id IS NULL "
                 "AND NOT k.geloescht "
                 "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
@@ -117,6 +121,7 @@ class PostgresMetadataRepository:
         return await self._alle(
             f"SELECT k.*, v.groesse, {zusatz} FROM knoten k "
             "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "WHERE k.besitzer_id=%s AND k.parent_id=%s "
             "AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
@@ -307,12 +312,13 @@ class PostgresMetadataRepository:
             (knoten_id, besitzer_id, knoten_id, knoten_id),
         )
 
-    async def knoten_wiederherstellen(self, besitzer_id, knoten_id, name, parent_id):
-        """Holt den Teilbaum einer Papierkorb-Wurzel zurück; die Wurzel selbst unter name in parent_id."""
+    async def knoten_wiederherstellen(self, besitzer_id, knoten_id, name, parent_id, ausser=()):
+        """Holt den Teilbaum einer Papierkorb-Wurzel zurück; die Wurzel selbst unter name in parent_id. Was in ausser
+        steht (Begleiter, die eigens neben die Wurzel kommen), bleibt vorerst im Papierkorb."""
         await self.conn.execute(
             "UPDATE knoten SET geloescht=false, geloescht_wurzel=NULL "
-            "WHERE geloescht_wurzel=%s AND besitzer_id=%s AND id<>%s",
-            (knoten_id, besitzer_id, knoten_id),
+            "WHERE geloescht_wurzel=%s AND besitzer_id=%s AND id<>%s AND NOT (id = ANY(%s))",
+            (knoten_id, besitzer_id, knoten_id, list(ausser)),
         )
         await self.conn.execute(
             "UPDATE knoten SET geloescht=false, geloescht_wurzel=NULL, name=%s, parent_id=%s, geaendert_am=now() "
@@ -426,7 +432,8 @@ class PostgresMetadataRepository:
         """Eine Seite der lebenden Kinder eines Ordners in fester Reihenfolge (Ordner vor Dateien, Name, Kennung),
         mit Größe der aktuellen Version. Der Zugriff auf den Ordner ist vorher geprüft."""
         return await self._alle(
-            "SELECT k.*, v.groesse FROM knoten k LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "SELECT k.*, v.groesse, bg.haupt_id, bg.rolle FROM knoten k "
+            "LEFT JOIN version v ON v.id = k.aktuelle_version_id LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "WHERE k.parent_id=%s AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, lower(k.name), k.id "
             "LIMIT %s OFFSET %s",
@@ -542,3 +549,63 @@ class PostgresMetadataRepository:
     async def journal_aufraeumen(self, tage: int) -> int:
         cur = await self.conn.execute("DELETE FROM aenderung WHERE zeit < now() - make_interval(days => %s)", (tage,))
         return cur.rowcount
+
+    # --- Begleitdateien (Regeln in module/speicher/begleiter.py) --------------
+
+    async def begleiter_der_haupt(self, haupt_id, nur_lebende: bool = True):
+        """Begleiter einer Hauptdatei samt Rolle, nach Rolle geordnet."""
+        lebend = "AND NOT k.geloescht " if nur_lebende else ""
+        return await self._alle(
+            "SELECT k.*, b.rolle, b.haupt_id FROM begleiter b JOIN knoten k ON k.id = b.begleiter_id "
+            f"WHERE b.haupt_id=%s {lebend}ORDER BY b.rolle",
+            (haupt_id,),
+        )
+
+    async def begleiter_eintrag(self, begleiter_id):
+        """(haupt_id, rolle, app) eines Begleiters oder None."""
+        return await self._eine("SELECT haupt_id, rolle, app FROM begleiter WHERE begleiter_id=%s", (begleiter_id,))
+
+    async def begleiter_fuer_rolle(self, haupt_id, rolle):
+        """Der eingetragene Begleiter einer Rolle (auch im Papierkorb) oder None."""
+        return await self._eine(
+            "SELECT k.*, b.rolle, b.haupt_id FROM begleiter b JOIN knoten k ON k.id = b.begleiter_id "
+            "WHERE b.haupt_id=%s AND b.rolle=%s",
+            (haupt_id, rolle),
+        )
+
+    async def begleiter_eintragen(self, haupt_id, begleiter_id, rolle, app):
+        await self.conn.execute(
+            "INSERT INTO begleiter (begleiter_id, haupt_id, rolle, app) VALUES (%s,%s,%s,%s) "
+            "ON CONFLICT (begleiter_id) DO UPDATE SET haupt_id=EXCLUDED.haupt_id, rolle=EXCLUDED.rolle, app=EXCLUDED.app",
+            (begleiter_id, haupt_id, rolle, app),
+        )
+
+    async def knoten_umziehen(self, besitzer_id, knoten_id, parent_id, name):
+        """Ort und Name in einer Anweisung (die Eindeutigkeit gilt für das Ergebnis, nicht für einen Zwischenstand)."""
+        await self.conn.execute(
+            "UPDATE knoten SET parent_id=%s, name=%s, geaendert_am=now() WHERE id=%s AND besitzer_id=%s",
+            (parent_id, name, knoten_id, besitzer_id),
+        )
+
+    async def begleiter_loesen(self, begleiter_id) -> bool:
+        cur = await self.conn.execute("DELETE FROM begleiter WHERE begleiter_id=%s", (begleiter_id,))
+        return cur.rowcount == 1
+
+    async def als_begleiter_loeschen(self, ids, wurzel):
+        """Begleiter wandern mit ihrer Hauptdatei in den Papierkorb: gleiche Wurzel, damit Wiederherstellen und
+        endgültiges Löschen sie mitnehmen."""
+        if ids:
+            await self.conn.execute(
+                "UPDATE knoten SET geloescht=true, geloescht_wurzel=%s WHERE id = ANY(%s) AND NOT geloescht",
+                (wurzel, list(ids)),
+            )
+
+    async def begleiter_im_papierkorb(self, wurzeln):
+        """Begleiter, die mit diesen Papierkorb-Wurzeln gelöscht wurden (liegen neben, nicht unter der Wurzel)."""
+        if not wurzeln:
+            return []
+        return await self._alle(
+            "SELECT k.* FROM knoten k JOIN begleiter b ON b.begleiter_id = k.id "
+            "WHERE k.geloescht AND k.geloescht_wurzel = ANY(%s) AND b.haupt_id = k.geloescht_wurzel",
+            (list(wurzeln),),
+        )

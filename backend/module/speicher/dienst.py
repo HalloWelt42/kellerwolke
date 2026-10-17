@@ -23,6 +23,8 @@ from app.inhaltstyp import inhaltstyp_aus_name
 from app.io_pool import im_thread
 from app.ports import SpeicherNichtVerfuegbar
 from module.medien.arten import such_muster
+from module.speicher import begleiter
+from module.speicher.begleiter import GruppeKonflikt
 
 
 class _ZipStrom:
@@ -551,6 +553,8 @@ class SpeicherDienst:
                 wurzeln = await repo.papierkorb_wurzeln(besitzer_id)
                 if not wurzeln:
                     return 0
+                anzahl = len(wurzeln)
+                wurzeln += [b["id"] for b in await repo.begleiter_im_papierkorb(wurzeln)]
                 for ref in await repo.blobrefs_im_teilbaum(wurzeln):
                     neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
                     if neu is not None and neu <= 0:
@@ -560,7 +564,6 @@ class SpeicherDienst:
                     await repo.blob_zeile_loeschen(besitzer_id, h)
                 for w in wurzeln:
                     await repo.journal_anhaengen(besitzer_id, w, "entfernt")
-                anzahl = len(wurzeln)
         # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
         for h in verwaiste:
             await self.blob_delete(str(besitzer_id), h)
@@ -579,7 +582,7 @@ class SpeicherDienst:
                 knoten = await repo.knoten_holen(knoten_id)
                 if not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]:
                     return False
-                wurzeln = [knoten_id]
+                wurzeln = [knoten_id, *[b["id"] for b in await repo.begleiter_im_papierkorb([knoten_id])]]
                 for ref in await repo.blobrefs_im_teilbaum(wurzeln):
                     neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
                     if neu is not None and neu <= 0:
@@ -587,7 +590,8 @@ class SpeicherDienst:
                 await repo.knoten_hart_loeschen(wurzeln)
                 for h in verwaiste:
                     await repo.blob_zeile_loeschen(besitzer_id, h)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "entfernt")
+                for w in wurzeln:
+                    await repo.journal_anhaengen(besitzer_id, w, "entfernt")
         # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
         for h in verwaiste:
             await self.blob_delete(str(besitzer_id), h)
@@ -1002,6 +1006,64 @@ class SpeicherDienst:
         knoten = await self.knoten_des_nutzers(besitzer_id, knoten_id)
         return knoten if knoten and not knoten["geloescht"] else None
 
+    # --- Umbenennen, Verschieben, Papierkorb: Begleitdateien ziehen mit (Regeln in begleiter.py) ---------------
+
+    async def _gruppe(self, repo, knoten) -> tuple[dict, list[dict]]:
+        """Hauptdatei und lebende Begleiter der Gruppe, zu der der Knoten gehört; ohne Gruppe (knoten, [])."""
+        if knoten["typ"] != "datei":
+            return knoten, []
+        eintrag = await repo.begleiter_eintrag(knoten["id"])
+        if eintrag:
+            haupt = await repo.knoten_holen(eintrag["haupt_id"])
+            if haupt and not haupt["geloescht"]:
+                return haupt, await repo.begleiter_der_haupt(haupt["id"])
+            return knoten, []
+        return knoten, await repo.begleiter_der_haupt(knoten["id"])
+
+    @staticmethod
+    async def _frei_fuer_gruppe(repo, besitzer_id, parent_id, name, gruppe_ids, haupt_name) -> None:
+        vorhanden = await repo.knoten_finden(besitzer_id, parent_id, name)
+        if vorhanden and vorhanden["id"] not in gruppe_ids:
+            raise GruppeKonflikt(f"{vorhanden['name']} gibt es dort schon, ein Begleiter von {haupt_name} braucht "
+                                 f"diesen Namen; nichts wurde geändert")
+
+    @staticmethod
+    async def _freier_name(repo, besitzer_id, parent_id, name, ist_datei: bool) -> str:
+        frei, n = name, 1
+        while await repo.knoten_finden(besitzer_id, parent_id, frei):
+            frei = name_mit_zusatz(name, "wiederhergestellt" if n == 1 else f"wiederhergestellt {n}", ist_datei)
+            n += 1
+        return frei
+
+    async def _umbenennen_in(self, repo, besitzer_id, knoten, neuer_name) -> None:
+        """Benennt um; ist der Knoten eine Hauptdatei, folgen ihre Begleiter (vorher geprüft, sonst gar nichts)."""
+        plan = []
+        if knoten["typ"] == "datei" and neuer_name != knoten["name"]:
+            for b in await repo.begleiter_der_haupt(knoten["id"]):
+                neu = begleiter.nachgezogen(knoten["name"], neuer_name, b["name"])
+                if neu and neu != b["name"]:
+                    await self._frei_fuer_gruppe(repo, besitzer_id, b["parent_id"], neu, {b["id"], knoten["id"]},
+                                                 neuer_name)
+                    plan.append((b, neu))
+        await repo.knoten_umbenennen(besitzer_id, knoten["id"], neuer_name)
+        await repo.journal_anhaengen(besitzer_id, knoten["id"], "verschoben")
+        for b, neu in plan:
+            await repo.knoten_umbenennen(besitzer_id, b["id"], neu)
+            await repo.journal_anhaengen(besitzer_id, b["id"], "verschoben")
+
+    async def _verschieben_in(self, repo, besitzer_id, knoten, neuer_parent) -> None:
+        """Verschiebt; gehört der Knoten zu einer Gruppe, zieht die ganze Gruppe um (vorher geprüft)."""
+        await self._ziel_pruefen(repo, besitzer_id, knoten["id"], neuer_parent)
+        haupt, mit = await self._gruppe(repo, knoten)
+        mitglieder = [haupt, *mit]
+        andere = [m for m in mitglieder if m["id"] != knoten["id"] and m["parent_id"] != neuer_parent]
+        ids = {m["id"] for m in mitglieder}
+        for m in andere:
+            await self._frei_fuer_gruppe(repo, besitzer_id, neuer_parent, m["name"], ids, haupt["name"])
+        for m in [knoten, *andere]:
+            await repo.knoten_verschieben(besitzer_id, m["id"], neuer_parent)
+            await repo.journal_anhaengen(besitzer_id, m["id"], "verschoben", von_parent_id=m["parent_id"])
+
     async def umbenennen(self, besitzer_id, knoten_id, neuer_name):
         async with self.pool.connection() as conn:
             async with conn.transaction():
@@ -1009,8 +1071,7 @@ class SpeicherDienst:
                 knoten = await repo.knoten_holen(knoten_id)
                 if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
                     raise ZielUngueltig("Nicht gefunden")
-                await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben")
+                await self._umbenennen_in(repo, besitzer_id, knoten, neuer_name)
                 return await repo.knoten_holen(knoten_id)
 
     async def _ziel_pruefen(self, repo, besitzer_id, knoten_id, neuer_parent) -> None:
@@ -1027,9 +1088,7 @@ class SpeicherDienst:
                 alt = await repo.knoten_holen(knoten_id)
                 if not alt or alt["besitzer_id"] != besitzer_id or alt["geloescht"]:
                     raise ZielUngueltig("Nicht gefunden")
-                await self._ziel_pruefen(repo, besitzer_id, knoten_id, neuer_parent)
-                await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben", von_parent_id=alt["parent_id"])
+                await self._verschieben_in(repo, besitzer_id, alt, neuer_parent)
                 return await repo.knoten_holen(knoten_id)
 
     async def umziehen(self, besitzer_id, knoten_id, neuer_parent, neuer_name):
@@ -1042,27 +1101,35 @@ class SpeicherDienst:
                 if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
                     return None
                 await self._ziel_pruefen(repo, besitzer_id, knoten_id, neuer_parent)
-                if neuer_name and neuer_name != knoten["name"]:
-                    await repo.knoten_umbenennen(besitzer_id, knoten_id, neuer_name)
+                umbenannt = bool(neuer_name and neuer_name != knoten["name"])
+                if umbenannt:
+                    await self._umbenennen_in(repo, besitzer_id, knoten, neuer_name)
+                    knoten = await repo.knoten_holen(knoten_id)
                 if neuer_parent != knoten["parent_id"]:
-                    await repo.knoten_verschieben(besitzer_id, knoten_id, neuer_parent)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben", von_parent_id=knoten["parent_id"])
+                    await self._verschieben_in(repo, besitzer_id, knoten, neuer_parent)
+                elif not umbenannt:
+                    await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben", von_parent_id=knoten["parent_id"])
                 return await repo.knoten_holen(knoten_id)
 
     async def loeschen(self, besitzer_id, knoten_id):
-        """Legt einen lebenden Knoten samt Teilbaum in den Papierkorb; schon Gelöschtes bleibt unberührt."""
+        """Legt einen lebenden Knoten samt Teilbaum in den Papierkorb, eine Hauptdatei samt Begleitern; schon
+        Gelöschtes bleibt unberührt."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
                 knoten = await repo.knoten_holen(knoten_id)
                 if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
                     return
+                mit = await repo.begleiter_der_haupt(knoten_id) if knoten["typ"] == "datei" else []
                 await repo.knoten_loeschen(besitzer_id, knoten_id)
-                await repo.journal_anhaengen(besitzer_id, knoten_id, "geloescht")
+                await repo.als_begleiter_loeschen([b["id"] for b in mit], knoten_id)
+                for k in [knoten, *mit]:
+                    await repo.journal_anhaengen(besitzer_id, k["id"], "geloescht")
 
     async def wiederherstellen(self, besitzer_id, knoten_id):
         """Holt eine Papierkorb-Wurzel samt Teilbaum zurück. Liegt der Elternordner selbst noch im Papierkorb (oder
-        gibt es ihn nicht mehr), kommt sie nach "Meine Dateien"; ist der Name dort vergeben, mit Zusatz."""
+        gibt es ihn nicht mehr), kommt sie nach "Meine Dateien"; ist der Name dort vergeben, mit Zusatz. Begleiter
+        kommen neben ihre Hauptdatei: mit ihr gelöschte folgen ihr, ein allein gelöschter geht zu ihr zurück."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
@@ -1071,19 +1138,84 @@ class SpeicherDienst:
                         or knoten["geloescht_wurzel"] != knoten["id"]):
                     return None
                 ziel = knoten["parent_id"]
+                eintrag = await repo.begleiter_eintrag(knoten_id) if knoten["typ"] == "datei" else None
+                if eintrag:
+                    haupt = await repo.knoten_holen(eintrag["haupt_id"])
+                    if haupt and not haupt["geloescht"]:
+                        ziel = haupt["parent_id"]
+                    else:
+                        await repo.begleiter_loesen(knoten_id)
                 if ziel is not None:
                     eltern = await repo.knoten_holen(ziel)
                     if not eltern or eltern["geloescht"]:
                         ziel = None
-                name = knoten["name"]
-                n = 1
-                while await repo.knoten_finden(besitzer_id, ziel, name):
-                    name = name_mit_zusatz(knoten["name"], "wiederhergestellt" if n == 1 else f"wiederhergestellt {n}",
-                                           knoten["typ"] == "datei")
-                    n += 1
-                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name, ziel)
+                name = await self._freier_name(repo, besitzer_id, ziel, knoten["name"], knoten["typ"] == "datei")
+                mit = await repo.begleiter_im_papierkorb([knoten_id])
+                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name, ziel, ausser=[b["id"] for b in mit])
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "erstellt")
+                for b in mit:
+                    b_name = begleiter.nachgezogen(knoten["name"], name, b["name"]) or b["name"]
+                    b_name = await self._freier_name(repo, besitzer_id, ziel, b_name, True)
+                    await repo.knoten_wiederherstellen(besitzer_id, b["id"], b_name, ziel)
+                    await repo.journal_anhaengen(besitzer_id, b["id"], "erstellt")
                 return await repo.knoten_holen(knoten_id)
+
+    async def begleiter_anhaengen(self, besitzer_id, haupt_id, knoten_id, rolle: str, zusatz: str,
+                                  app: str | None = None) -> dict:
+        """Trägt eine Datei als Begleiter der Rolle zu einer Hauptdatei ein und bringt sie neben sie, unter dem Namen
+        der Kellerwolke, wenn sie noch anders heißt oder woanders liegt. Ein Begleiter im Papierkorb, der die Rolle
+        noch hält, verliert sie; ein lebender anderer wird nicht verdrängt. Rechte prüft der Aufrufer."""
+        rolle = begleiter.rolle_pruefen(rolle)
+        zusatz = begleiter.zusatz_pruefen(zusatz)
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                haupt = await repo.knoten_holen(haupt_id)
+                datei = await repo.knoten_holen(knoten_id)
+                for k in (haupt, datei):
+                    if not k or k["besitzer_id"] != besitzer_id or k["geloescht"] or k["typ"] != "datei":
+                        raise ZielUngueltig("Datei nicht gefunden")
+                if haupt["id"] == datei["id"]:
+                    raise ValueError("Eine Datei begleitet sich nicht selbst")
+                if await repo.begleiter_eintrag(haupt_id):
+                    raise ValueError(f"{haupt['name']} ist selbst ein Begleiter; Begleiter gehören an die Hauptdatei")
+                if await repo.begleiter_der_haupt(knoten_id, nur_lebende=False):
+                    raise ValueError(f"{datei['name']} hat selbst Begleiter")
+                vorhanden = await repo.begleiter_fuer_rolle(haupt_id, rolle)
+                if vorhanden and vorhanden["id"] != datei["id"]:
+                    if not vorhanden["geloescht"]:
+                        raise FileExistsError(f"{haupt['name']} hat schon einen Begleiter {rolle}: {vorhanden['name']}")
+                    await repo.begleiter_loesen(vorhanden["id"])
+                eintrag = await repo.begleiter_eintrag(knoten_id)
+                if eintrag and eintrag["haupt_id"] != haupt["id"]:
+                    await repo.begleiter_loesen(knoten_id)
+                namen = begleiter.namen(haupt["name"], zusatz)
+                if not (datei["parent_id"] == haupt["parent_id"] and datei["name"] in namen):
+                    ziel_name = None
+                    for name in namen:
+                        belegt = await repo.knoten_finden(besitzer_id, haupt["parent_id"], name)
+                        if not belegt or belegt["id"] == datei["id"]:
+                            ziel_name = name
+                            break
+                    if ziel_name is None:
+                        raise GruppeKonflikt(f"Neben {haupt['name']} sind {' und '.join(namen)} schon vergeben")
+                    await repo.knoten_umziehen(besitzer_id, knoten_id, haupt["parent_id"], ziel_name)
+                    await repo.journal_anhaengen(besitzer_id, knoten_id, "verschoben", von_parent_id=datei["parent_id"])
+                await repo.begleiter_eintragen(haupt_id, knoten_id, rolle, app)
+                return await repo.knoten_holen(knoten_id)
+
+    async def aus_gruppe_loesen(self, besitzer_id, knoten_id) -> dict | None:
+        """Ein Begleiter wird eine gewöhnliche Datei (die Herkunft bleibt); None, wenn er keiner ist."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                knoten = await repo.knoten_holen(knoten_id)
+                if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
+                    return None
+                if not await repo.begleiter_loesen(knoten_id):
+                    return None
+                await repo.journal_anhaengen(besitzer_id, knoten_id, "geaendert")
+                return knoten
 
     async def journal_stand(self, besitzer_id) -> int:
         async with self.pool.connection() as conn:

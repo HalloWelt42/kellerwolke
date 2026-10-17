@@ -13,6 +13,7 @@ from module.ablage import metadaten
 from module.appzugang.dienst import AppAkteur, AppZugangDienst
 from psycopg.rows import dict_row
 
+from module.speicher import begleiter as begleiter_regeln
 from module.speicher.dienst import Bedingung, Gesperrt
 
 MAX_SEITE = 500
@@ -90,7 +91,10 @@ class AblageDienst:
                 groesse = version["groesse"] if version else None
             meta = (await metadaten.meta_holen(conn, [knoten["id"]])).get(knoten["id"])
             sperre = await _sperre_holen(conn, knoten["id"])
-        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse, "sperre": sperre, **_meta_felder(knoten, meta)}
+            gruppe = await repo.begleiter_eintrag(knoten["id"])
+        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse, "sperre": sperre,
+                "haupt_id": gruppe["haupt_id"] if gruppe else None, "rolle": gruppe["rolle"] if gruppe else None,
+                **_meta_felder(knoten, meta)}
 
     async def knoten(self, akteur: AppAkteur, knoten_id) -> dict:
         return await self._ansicht(*await self.mit_recht(akteur, knoten_id))
@@ -172,6 +176,75 @@ class AblageDienst:
             async with conn.transaction():
                 await metadaten.meta_schreiben(conn, knoten["id"], inhaltstyp_aus_kopf(inhaltstyp, teile[-1]), akteur.app)
         return await self._ansicht(knoten, "schreiben"), blob_hash, groesse
+
+    # --- Begleitdateien (Regeln in module/speicher/begleiter.py) ---------------------------------------------
+
+    async def begleiter(self, akteur: AppAkteur, haupt_id) -> list[dict]:
+        """Begleiter einer lesbaren Hauptdatei, soweit die App sie sehen darf."""
+        haupt, _ = await self.mit_recht(akteur, haupt_id)
+        if haupt["typ"] != "datei":
+            raise Unsichtbar("Keine Datei")
+        async with self.pool.connection() as conn:
+            liste = await PostgresMetadataRepository(conn).begleiter_der_haupt(haupt_id)
+        aus = []
+        for b in liste:
+            knoten, recht = await self.zugang.recht(akteur, b["id"])
+            if recht:
+                aus.append(await self._ansicht(knoten, recht))
+        return aus
+
+    async def begleiter_schreiben(self, akteur: AppAkteur, haupt_id, rolle: str, zusatz: str, quelle, max_bytes: int,
+                                  etag: str | None = None, nur_neu: bool = False,
+                                  inhaltstyp: str | None = None) -> tuple[dict, str, int]:
+        """Schreibt den Begleiter einer Rolle neben die Hauptdatei: eine neue Version, wenn es ihn gibt (dann mit
+        If-Match wie jedes Überschreiben), sonst neu unter dem Namen, den die Kellerwolke vergibt. Braucht Leserecht
+        auf die Hauptdatei und Schreibrecht in ihrem Ordner. Liefert (Knoten, Blob-Hash, Größe)."""
+        rolle = begleiter_regeln.rolle_pruefen(rolle)
+        zusatz = begleiter_regeln.zusatz_pruefen(zusatz)
+        haupt, _ = await self.mit_recht(akteur, haupt_id)
+        if haupt["typ"] != "datei":
+            raise ValueError("Begleiter gibt es nur zu Dateien")
+        if haupt["parent_id"] is None:
+            raise Unsichtbar("Dateien legen Apps nur in Ordnern an")
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if await repo.begleiter_eintrag(haupt_id):
+                raise ValueError(f"{haupt['name']} ist selbst ein Begleiter; Begleiter gehören an die Hauptdatei")
+            vorhanden = await repo.begleiter_fuer_rolle(haupt_id, rolle)
+            ordner = "/".join(await repo.pfad_namen(haupt["parent_id"]))
+            frei = [n for n in begleiter_regeln.namen(haupt["name"], zusatz)
+                    if not await repo.knoten_finden(akteur.benutzer_id, haupt["parent_id"], n)]
+        if vorhanden and not vorhanden["geloescht"]:
+            return await self.datei_schreiben(akteur, f"{ordner}/{vorhanden['name']}", quelle, max_bytes, etag, nur_neu,
+                                              inhaltstyp)
+        if not frei:
+            raise begleiter_regeln.GruppeKonflikt(f"Neben {haupt['name']} ist kein Name für {rolle} frei")
+        knoten, blob_hash, groesse = await self.datei_schreiben(akteur, f"{ordner}/{frei[0]}", quelle, max_bytes, etag,
+                                                                nur_neu or etag is None, inhaltstyp)
+        await self.speicher.begleiter_anhaengen(akteur.benutzer_id, haupt_id, knoten["id"], rolle, zusatz, akteur.app)
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await metadaten.herkunft_setzen(conn, haupt_id, knoten["id"], rolle, akteur.app)
+        return await self._ansicht(await self.speicher.knoten_des_nutzers(akteur.benutzer_id, knoten["id"]), "schreiben"), \
+            blob_hash, groesse
+
+    async def begleiter_anhaengen(self, akteur: AppAkteur, haupt_id, rolle: str, knoten_id, zusatz: str) -> dict:
+        """Macht eine vorhandene Datei der App zum Begleiter; sie kommt neben die Hauptdatei (etwa beim Umzug einer App
+        von getrennten Ordnern auf einen Baum). Braucht Schreibrecht auf die Datei und im Ordner der Hauptdatei."""
+        haupt, _ = await self.mit_recht(akteur, haupt_id)
+        await self.mit_recht(akteur, knoten_id, "schreiben")
+        if haupt["parent_id"] is None:
+            raise Unsichtbar("Dateien legen Apps nur in Ordnern an")
+        await self.mit_recht(akteur, haupt["parent_id"], "schreiben")
+        async with self.pool.connection() as conn:
+            fremd = await PostgresMetadataRepository(conn).fremde_sperre(knoten_id, akteur.zugang_id)
+        if fremd:
+            raise Gesperrt(fremd)
+        knoten = await self.speicher.begleiter_anhaengen(akteur.benutzer_id, haupt_id, knoten_id, rolle, zusatz, akteur.app)
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await metadaten.herkunft_setzen(conn, haupt_id, knoten_id, rolle, akteur.app)
+        return await self._ansicht(knoten, "schreiben")
 
     # --- Metadaten und Herkunft -------------------------------------------------------------------------------
 

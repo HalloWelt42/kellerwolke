@@ -16,6 +16,7 @@ from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
 from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
+from module.speicher.begleiter import GruppeKonflikt
 from module.speicher.dienst import Gesperrt, NameBelegt, VorbedingungVerletzt, ZielUngueltig
 from module.suche.dienst import indizierung_starten
 from module.appzugang.modelle import RechtAus
@@ -49,8 +50,15 @@ class AblageKnotenAus(BaseModel):
     app: str | None = None                   # App, die zuletzt geschrieben hat
     felder: dict[str, Any] = Field(default_factory=dict)
     sperre: SperreAus | None = None          # gültige Bearbeitungssperre einer App
+    haupt_id: UUID | None = None             # ein Begleiter: seine Hauptdatei
+    rolle: str | None = None                 # ein Begleiter: seine Rolle (transkript, untertitel, sprache ...)
     erstellt_am: datetime
     geaendert_am: datetime
+
+
+class AnhaengenEingabe(BaseModel):
+    knoten_id: UUID = Field(description="eine Datei der App, die Begleiter werden soll")
+    zusatz: str = Field(min_length=2, max_length=40, description="Teil des Namens hinter dem Stamm der Hauptdatei")
 
 
 class FelderEingabe(BaseModel):
@@ -116,7 +124,7 @@ def _fehler(f: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(f))
     if isinstance(f, KeinSchreibrecht):
         return HTTPException(status_code=403, detail=str(f))
-    if isinstance(f, (FileExistsError, NameBelegt)):
+    if isinstance(f, (FileExistsError, NameBelegt, GruppeKonflikt)):
         return HTTPException(status_code=409, detail=str(f))
     if isinstance(f, ZielUngueltig):
         return HTTPException(status_code=404, detail=str(f))
@@ -241,6 +249,45 @@ async def inhalt_schreiben(knoten_id: UUID, request: Request, akteur=Depends(akt
             raise VorbedingungFehlt("Überschreiben nur mit If-Match (zuletzt gelesener ETag)")
         pfad = await ablage.pfad_von(akteur, knoten_id)
         return await _schreiben(request, pfad, akteur, ablage, suche, vorgaenge)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/knoten/{knoten_id}/begleiter", response_model=list[AblageKnotenAus])
+async def begleiter(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Begleitdateien einer Hauptdatei (Transkript, Untertitel, Sprachausgabe ...), nach Rolle."""
+    try:
+        return await ablage.begleiter(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.put("/knoten/{knoten_id}/begleiter/{rolle}", response_model=AblageKnotenAus)
+async def begleiter_schreiben(knoten_id: UUID, rolle: str, request: Request,
+                              zusatz: str = Query(min_length=2, max_length=40,
+                                                  description="Teil des Namens hinter dem Stamm der Hauptdatei, "
+                                                              "etwa .transkript.json, .srt, .sprache.mp3"),
+                              akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage), suche=Depends(hole_suche),
+                              vorgaenge=Depends(hole_vorgaenge)):
+    """Begleiter einer Rolle schreiben; den Namen neben der Hauptdatei vergibt die Kellerwolke. Gibt es ihn schon,
+    entsteht eine neue Version (nur mit If-Match); If-None-Match: * legt nur neu an."""
+    try:
+        etag, nur_neu = _bedingung(request)
+        quelle = StromLeser(request.stream(), asyncio.get_running_loop())
+        knoten, _, _ = await ablage.begleiter_schreiben(akteur, knoten_id, rolle, zusatz, quelle, EINSTELLUNGEN.max_upload,
+                                                        etag, nur_neu, request.headers.get("content-type"))
+        indizierung_starten(vorgaenge, suche, ablage.speicher, akteur.benutzer_id, knoten)
+        return knoten
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.post("/knoten/{knoten_id}/begleiter/{rolle}", response_model=AblageKnotenAus)
+async def begleiter_anhaengen(knoten_id: UUID, rolle: str, eingabe: AnhaengenEingabe, akteur=Depends(aktuelle_app),
+                              ablage=Depends(hole_ablage)):
+    """Eine vorhandene Datei der App wird Begleiter dieser Rolle und kommt neben die Hauptdatei."""
+    try:
+        return await ablage.begleiter_anhaengen(akteur, knoten_id, rolle, eingabe.knoten_id, eingabe.zusatz)
     except _FEHLER as f:
         raise _fehler(f) from None
 

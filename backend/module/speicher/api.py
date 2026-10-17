@@ -20,6 +20,7 @@ from app.auslieferung import dateiname_kopf, inhalt_antwort
 from app.config import EINSTELLUNGEN
 from app.inhaltstyp import inhaltstyp_aus_name
 from app.ports import DateiZuGross
+from module.speicher.begleiter import GruppeKonflikt
 from module.speicher.dienst import ArchivZuGross, NameBelegt, ZielUngueltig
 from module.suche.dienst import indizierung_starten
 from module.speicher.modelle import (
@@ -256,8 +257,19 @@ async def umbenennen(knoten_id: UUID, eingabe: UmbenennenEingabe,
         knoten = await speicher.umbenennen(benutzer["id"], knoten_id, eingabe.name)
     except ZielUngueltig:
         raise HTTPException(status_code=404, detail="Nicht gefunden")
+    except GruppeKonflikt as f:
+        raise HTTPException(status_code=409, detail=str(f))
     except UniqueViolation:
         raise HTTPException(status_code=409, detail="Name bereits vergeben")
+    return KnotenAus.model_validate(knoten)
+
+
+@router.post("/{knoten_id}/loesen", response_model=KnotenAus)
+async def aus_gruppe_loesen(knoten_id: UUID, benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    """Ein Begleiter wird eine gewöhnliche Datei: er zieht nicht mehr mit seiner Hauptdatei um."""
+    knoten = await speicher.aus_gruppe_loesen(benutzer["id"], knoten_id)
+    if not knoten:
+        raise HTTPException(status_code=404, detail="Kein Begleiter")
     return KnotenAus.model_validate(knoten)
 
 
