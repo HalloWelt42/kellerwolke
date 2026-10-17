@@ -103,7 +103,7 @@ class PostgresMetadataRepository:
             "WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit, "
             "EXISTS(SELECT 1 FROM freigabe fr "
             "WHERE fr.knoten_id = k.id) AS geteilt, "
-            "bg.haupt_id, bg.rolle, "
+            "bg.haupt_id, bg.rolle, bg.app AS begleiter_app, "
             "(SELECT count(*) FROM begleiter b JOIN knoten c ON c.id = b.begleiter_id AND NOT c.geloescht "
             "WHERE b.haupt_id = k.id) AS begleiter_anzahl"
         )
@@ -328,9 +328,16 @@ class PostgresMetadataRepository:
 
     async def papierkorb(self, besitzer_id):
         """Nur die Wurzeln: was mit einem Ordner gelöscht wurde, steckt in ihm."""
+        # Eine Gruppe ist eine Zeile: die Hauptdatei zählt die mit ihr gelöschten Begleiter; ein allein gelöschter
+        # Begleiter nennt Rolle und Hauptdatei (dorthin kommt er beim Wiederherstellen zurück).
         return await self._alle(
-            "SELECT k.*, v.groesse FROM knoten k "
+            "SELECT k.*, v.groesse, bg.haupt_id, bg.rolle, hk.name AS haupt_name, "
+            "(SELECT count(*) FROM begleiter b JOIN knoten c ON c.id = b.begleiter_id "
+            " WHERE b.haupt_id = k.id AND c.geloescht AND c.geloescht_wurzel = k.id) AS begleiter_anzahl "
+            "FROM knoten k "
             "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
+            "LEFT JOIN knoten hk ON hk.id = bg.haupt_id AND NOT hk.geloescht "
             "WHERE k.besitzer_id=%s AND k.geloescht AND k.geloescht_wurzel = k.id "
             "ORDER BY k.geaendert_am DESC",
             (besitzer_id,),

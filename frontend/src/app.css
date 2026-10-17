@@ -896,6 +896,188 @@ textarea {
   background: var(--rand);
   margin: var(--a1) var(--a2);
 }
+.kontextmenue .kgruppe {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  padding: var(--a2) var(--a3) var(--a1);
+}
+.kontextmenue button .k-unter {
+  margin-left: auto;
+  padding-left: var(--a4);
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+
+/* ===== Begleitdateien und Anfragen an Apps (Entwurf mockups/begleiter.html) ===== */
+.begleit-knopf {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: var(--flaeche-3);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.begleit-knopf:hover {
+  background: var(--rand);
+  color: var(--text);
+}
+.begleit-knopf.offen {
+  background: var(--akzent-weich);
+  color: var(--akzent-stark);
+}
+.begleit-knopf .fa-chevron-right {
+  font-size: 0.62rem;
+  transition: transform var(--schnell);
+}
+.begleit-knopf.offen .fa-chevron-right {
+  transform: rotate(90deg);
+}
+.begleit-marke {
+  flex: none;
+  font-size: 0.76rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.zeile.begleiter .z-name {
+  padding-left: 30px;
+}
+.zeile.begleiter .z-name .sym {
+  font-size: 1.2rem;
+  width: 24px;
+}
+.zeile.begleiter .titel {
+  color: var(--text-2);
+}
+.rolle-chip {
+  flex: none;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--flaeche-3);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+/* Laufende Anfrage an der Zeile: feste Breite, damit nichts springt */
+.anfrage-pille {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 168px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: var(--akzent-weich);
+  color: var(--akzent-stark);
+}
+.anfrage-pille.wartet {
+  background: var(--flaeche-3);
+  color: var(--text-2);
+}
+/* Neue Marken schieben sich nie über die Nachbarspalten; bei schmaler Liste bleiben nur Zähler und Prozent */
+.zeile .z-name {
+  overflow: hidden;
+}
+.zeile .z-name .sym {
+  flex: none;
+}
+@container (max-width: 620px) {
+  .rolle-chip,
+  .begleit-marke,
+  .anfrage-pille .ap-text,
+  .begleit-knopf .fa-paperclip {
+    display: none;
+  }
+  .anfrage-pille {
+    min-width: 0;
+  }
+  .zeile.begleiter .z-name {
+    padding-left: 14px;
+  }
+}
+/* Sehr schmale Liste (Detail offen bei kleinem Fenster): Knöpfe der Zeile weg, der Name bekommt den Platz; dieselben
+   Handlungen bleiben über das Menü (Rechtsklick) und die Auswahlleiste. */
+@container (max-width: 440px) {
+  .liste .listenkopf,
+  .liste .zeile {
+    grid-template-columns: 34px minmax(0, 1fr) 76px;
+  }
+  .liste .zeile .z-akt,
+  .liste .listenkopf > span:last-child {
+    display: none;
+  }
+}
+/* Detail: Begleiter und Apps */
+.begleit-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.begleit-liste .begleit-eintrag {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--a2);
+  width: 100%;
+  padding: 6px var(--a2);
+  border: none;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+.begleit-liste .begleit-eintrag:hover {
+  background: var(--flaeche-2);
+}
+.begleit-liste .begleit-eintrag i {
+  color: var(--text-2);
+  text-align: center;
+}
+.begleit-liste .b-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.begleit-liste .b-meta {
+  grid-column: 2 / 4;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  margin-top: -2px;
+}
+.app-knoepfe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--a2);
+}
+.app-knoepfe .knopf {
+  justify-content: flex-start;
+}
+.app-knoepfe .knopf .k-app {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
 
 /* ===== Detail-Pane ===== */
 .detail {
@@ -1691,6 +1873,10 @@ select.feld {
   color: var(--text-2);
   margin-top: var(--a2);
   font-variant-numeric: tabular-nums;
+}
+.vorgang-meta span + span {
+  flex: none;
+  white-space: nowrap;
 }
 .vorgang-aktionen {
   display: flex;

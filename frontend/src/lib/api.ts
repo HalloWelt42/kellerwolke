@@ -1,4 +1,6 @@
 import type {
+  Anfrage,
+  AppAktion,
   AppZugang,
   AppZugangNeu,
   AuthStatus,
@@ -503,4 +505,33 @@ export function geraetUmbenennen(id: string, name: string): Promise<Geraet> {
 
 export function geraetTrennen(id: string): Promise<void> {
   return hole<void>(`/v1/geraete/${id}`, { method: "DELETE" });
+}
+
+// --- Begleitdateien und Anfragen an Apps --------------------------------------
+
+export function ausGruppeLoesen(id: string): Promise<Knoten> {
+  return hole<Knoten>(`/v1/dateien/${id}/loesen`, { method: "POST" });
+}
+
+export function aktionen(id: string): Promise<AppAktion[]> {
+  return hole<AppAktion[]>(`/v1/dateien/${id}/aktionen`);
+}
+
+export function anfrageStellen(a: AppAktion): Promise<{ anfrage: Anfrage; ziel: string | null }> {
+  return hole(`/v1/anfragen`, {
+    method: "POST",
+    body: JSON.stringify({ zugang_id: a.zugang_id, aktion: a.kennung, knoten_id: a.knoten_id }),
+  });
+}
+
+export function anfragen(): Promise<Anfrage[]> {
+  return hole<Anfrage[]>("/v1/anfragen");
+}
+
+export function anfrageAbbrechen(id: string): Promise<void> {
+  return hole<void>(`/v1/anfragen/${id}`, { method: "DELETE" });
+}
+
+export function anfragenAufraeumen(): Promise<void> {
+  return hole<void>("/v1/anfragen/aufraeumen", { method: "POST" });
 }

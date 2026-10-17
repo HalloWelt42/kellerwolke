@@ -33,6 +33,50 @@ export interface Knoten {
   // Nur in Suchergebnissen: Ordnerkette über dem Treffer und ob der Name traf (sonst der Inhalt).
   ort?: string[] | null;
   im_namen?: boolean | null;
+  // Begleitdateien: ein Begleiter nennt Hauptdatei und Rolle, eine Hauptdatei die Zahl ihrer Begleiter. Im Papierkorb
+  // zählt begleiter_anzahl die mitgelöschten, haupt_name nennt bei einem allein gelöschten Begleiter seine Hauptdatei.
+  haupt_id?: string | null;
+  rolle?: string | null;
+  begleiter_app?: string | null; // App, die den Begleiter angelegt hat
+  begleiter_anzahl?: number;
+  haupt_name?: string | null;
+}
+
+// Was eine App mit einer Datei kann (Dateimenü, Abschnitt "Mit Apps").
+export interface AppAktion {
+  zugang_id: string;
+  app: string;
+  kennung: string;
+  titel: string;
+  symbol: string;
+  art: "hintergrund" | "oeffnen";
+  erreichbar: boolean;
+  knoten_id: string; // die Datei, für die die Anfrage gilt (bei einem Begleiter seine Hauptdatei)
+  erneut: boolean;
+}
+
+export type AnfrageZustand = "wartet" | "laeuft" | "fertig" | "fehler" | "abgebrochen";
+
+// Eine Anfrage an eine App: App X, Aktion A, Datei D.
+export interface Anfrage {
+  id: string;
+  app: string;
+  zugang_id: string;
+  aktion: string;
+  titel: string;
+  symbol: string;
+  art: "hintergrund" | "oeffnen";
+  knoten_id: string;
+  knoten_name: string;
+  von: string;
+  zustand: AnfrageZustand;
+  fortschritt: number | null;
+  meldung: string | null;
+  ergebnis_id: string | null;
+  ergebnis_name: string | null;
+  erstellt_am: string;
+  geaendert_am: string;
+  erreichbar: boolean;
 }
 
 export type Medienart = "bild" | "audio" | "video";

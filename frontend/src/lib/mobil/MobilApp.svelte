@@ -10,7 +10,7 @@
   import { thema, themaWaehlen, type ThemaWahl } from "../thema.svelte";
   import type { SortKey } from "../browser.svelte";
   import type { Knoten } from "../types";
-  import { mobil, zeigeReiter, zurueck, sucheBeenden, blattOeffnen, blattSchliessen, type MobilReiter } from "./mobil.svelte";
+  import { mobil, zeigeReiter, zurueck, sucheBeenden, blattOeffnen, blattSchliessen, aktionenOeffnen, type MobilReiter } from "./mobil.svelte";
   import Blatt from "./Blatt.svelte";
   import MobilListe from "./MobilListe.svelte";
   import MobilAktionen from "./MobilAktionen.svelte";
@@ -89,7 +89,7 @@
   // --- Öffnen: Ordner hinein, Medien zeigen oder spielen, sonst die Datei holen ---
   function oeffnen(k: Knoten) {
     if (haupt.bereich === "papierkorb") {
-      blattOeffnen({ art: "aktionen", knoten: k });
+      aktionenOeffnen(k);
       return;
     }
     if (k.typ !== "datei") {
@@ -214,7 +214,7 @@
       {:else if haupt.sichtbar.length === 0}
         <div class="m-leer"><i class="fa-regular fa-folder-open"></i><h2>{leerText}</h2>{#if mitPlus}<p>Mit dem Plus lädst du Fotos und Dateien hoch.</p>{/if}</div>
       {:else}
-        <MobilListe browser={haupt} {oeffnen} aktionen={(k) => blattOeffnen({ art: "aktionen", knoten: k })} mitOrt={haupt.bereich === "suche"} />
+        <MobilListe browser={haupt} {oeffnen} aktionen={aktionenOeffnen} mitOrt={haupt.bereich === "suche"} />
       {/if}
     </div>
     {#if mitPlus}
@@ -257,7 +257,7 @@
     {@const b = mobil.blatt}
     <Blatt schliessen={blattSchliessen}>
       {#if b.art === "aktionen"}
-        <MobilAktionen knoten={b.knoten} {oeffnen} />
+        <MobilAktionen knoten={b.knoten} apps={b.apps} {oeffnen} />
       {:else if b.art === "halten"}
         <MobilHalten knoten={b.knoten} was={b.was} fertig={b.fertig} />
       {:else if b.art === "hochladen"}

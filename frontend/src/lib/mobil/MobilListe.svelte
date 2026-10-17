@@ -4,6 +4,9 @@
   import type { Knoten } from "../types";
   import { vorschauUrl } from "../medien/adressen";
   import { mSymbol, zeilenMeta } from "./anzeige";
+  import { offeneAnfrageZu } from "../zustand.svelte";
+  import { anfrageStand } from "../anfragestand";
+  import { begleiterText, groesseText } from "../format";
 
   // Ordner und Dateien einer Fläche, wie am Rechner gefiltert und sortiert, am
   // Telefon gruppiert. Antippen öffnet, ⋮ zeigt die Aktionen.
@@ -45,6 +48,8 @@
 
 {#snippet zeile(k: Knoten)}
   {@const s = mSymbol(k)}
+  {@const anfrage = mitOrt || imPapierkorb ? null : offeneAnfrageZu(k.id)}
+  {@const stand = anfrage ? anfrageStand(anfrage) : null}
   <div class="m-zeile-huelle">
     <button class="m-zeile" onclick={() => oeffnen(k)}>
       {#if k.typ === "datei" && (k.medienart === "bild" || k.medienart === "video") && !kaputt.has(k.id)}
@@ -54,7 +59,18 @@
       {/if}
       <span class="m-text">
         <span class="m-name">{k.name}</span>
-        <span class="m-meta">{#if k.favorit}<i class="fa-solid fa-star"></i> {/if}{meta(k)}</span>
+        <span class="m-meta">
+          {#if k.favorit}<i class="fa-solid fa-star"></i>{" "}{/if}
+          {#if stand}
+            {k.groesse != null ? `${groesseText(k.groesse).replace(".", ",")} · ` : ""}<span class="m-anfrage" class:wartet={stand.wartet}
+              ><i class={stand.wartet ? "fa-regular fa-clock" : "fa-solid fa-circle-notch fa-spin"}></i> {stand.text}{stand.zahl ? ` ${stand.zahl}` : ""}</span
+            >
+          {:else}
+            {meta(k)}{#if k.begleiter_anzahl && !imPapierkorb && !mitOrt}{" · "}<span class="m-begleit"
+                ><i class="fa-solid fa-paperclip"></i> {begleiterText(k.begleiter_anzahl)}</span
+              >{/if}
+          {/if}
+        </span>
       </span>
     </button>
     {#if k.typ === "ordner" && !imPapierkorb && browser.bereich !== "geteilt" && !mitOrt}

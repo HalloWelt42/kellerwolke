@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { Browser } from "./browser.svelte";
-  import { symbol, groesseText, datum, typLabel } from "./format";
-  import type { Knoten } from "./types";
+  import * as api from "./api";
+  import { symbol, groesseText, datum, typLabel, rolleText } from "./format";
+  import type { AppAktion, Knoten } from "./types";
+  import { aktionAusfuehren } from "./zustand.svelte";
   import BildVorschau from "./medien/BildVorschau.svelte";
   import VideoVorschau from "./medien/VideoVorschau.svelte";
   import AudioVorschau from "./medien/AudioVorschau.svelte";
@@ -29,6 +31,32 @@
   const groesse = $derived(
     k.groesse ?? (browser.detailVersionen.length ? browser.detailVersionen[0].groesse : null),
   );
+
+  // Begleitdateien und was die Apps mit der Datei können (nur in den eigenen Dateien).
+  const eigen = $derived(browser.bereich !== "papierkorb" && browser.bereich !== "geteilt");
+  const begleiter = $derived(eigen ? browser.begleiterVon(k.id) : []);
+  const hauptdatei = $derived(k.haupt_id ? (browser.eintraege.find((e) => e.id === k.haupt_id) ?? null) : null);
+  let apps = $state<AppAktion[]>([]);
+  let lauf = 0;
+  $effect(() => {
+    const id = k.id;
+    const datei = k.typ === "datei" && eigen;
+    const meiner = ++lauf;
+    apps = [];
+    if (!datei) return;
+    api.aktionen(id).then(
+      (liste) => {
+        if (meiner === lauf) apps = liste;
+      },
+      () => {},
+    );
+  });
+
+  function appHinweis(a: AppAktion): string {
+    if (!a.erreichbar) return `${a.app} gerade aus`;
+    if (a.art === "oeffnen") return "";
+    return a.erneut ? "neue Version" : a.app;
+  }
 </script>
 
 <aside class="detail">
@@ -70,7 +98,48 @@
     <div class="infozeile"><span>Geändert</span><span>{datum(k.geaendert_am)}</span></div>
     <div class="infozeile"><span>Erstellt</span><span>{datum(k.erstellt_am)}</span></div>
     <div class="infozeile"><span>Pfad</span><span>{pfadText}</span></div>
+    {#if k.rolle}
+      <div class="infozeile">
+        <span>{rolleText(k.rolle)} zu</span><span>{hauptdatei?.name ?? "einer Datei daneben"}</span>
+      </div>
+    {/if}
   </div>
+
+  {#if begleiter.length}
+    <div class="detail-block">
+      <h3>Begleiter</h3>
+      <ul class="begleit-liste">
+        {#each begleiter as b (b.id)}
+          {@const bs = symbol(b)}
+          <li>
+            <button class="begleit-eintrag" onclick={() => browser.zeigeDetail(b)}>
+              <i class="fa-solid {bs.icon}"></i><span class="b-name">{b.name}</span>
+              <span class="rolle-chip">{rolleText(b.rolle ?? "")}</span>
+              <span class="b-meta">
+                {[b.groesse != null ? groesseText(b.groesse) : "", b.begleiter_app ? `von ${b.begleiter_app}` : "", datum(b.geaendert_am)]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+
+  {#if apps.length}
+    <div class="detail-block">
+      <h3>Mit Apps</h3>
+      <div class="app-knoepfe">
+        {#each apps as a (a.zugang_id + a.kennung)}
+          <button class="knopf" onclick={() => aktionAusfuehren(a)}>
+            <i class="fa-solid {a.symbol}"></i> {a.titel}
+            {#if appHinweis(a)}<span class="k-app">{appHinweis(a)}</span>{/if}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   {#if k.typ === "datei"}
     <div class="detail-block">

@@ -1,7 +1,7 @@
 import * as api from "./api";
 import { Browser, erzeugeBrowser } from "./browser.svelte";
 import { eindeutigeId } from "./id";
-import type { Knoten, SpeicherStatus, Vorgang } from "./types";
+import type { Anfrage, AnfrageZustand, AppAktion, Knoten, SpeicherStatus, Vorgang } from "./types";
 
 // App-globaler Zustand: alles, was NICHT zu einer einzelnen Browsing-Fläche
 // gehört (Hintergrund-Vorgänge, Upload-Warteschlange, Speicheranzeige,
@@ -41,6 +41,7 @@ export const zustand = $state<{
   version: string;
   vorgaenge: Vorgang[];
   vorgaengeOffen: boolean;
+  anfragen: Anfrage[]; // Anfragen an Apps: offene und die der letzten 24 Stunden
 }>({
   split: false,
   navAus: false,
@@ -49,6 +50,7 @@ export const zustand = $state<{
   version: "",
   vorgaenge: [],
   vorgaengeOffen: false,
+  anfragen: [],
 });
 
 // --- Flächen ----------------------------------------------------------------
@@ -97,6 +99,7 @@ export function kontoVerlassen(): void {
   zustand.split = false;
   zustand.vorgaenge = [];
   zustand.vorgaengeOffen = false;
+  zustand.anfragen = [];
   zustand.speicher = null;
 }
 
@@ -122,7 +125,10 @@ export async function ladeVorgaenge(): Promise<void> {
 
 export function vorgaengeUmschalten(): void {
   zustand.vorgaengeOffen = !zustand.vorgaengeOffen;
-  if (zustand.vorgaengeOffen) ladeVorgaenge();
+  if (zustand.vorgaengeOffen) {
+    ladeVorgaenge();
+    ladeAnfragen();
+  }
 }
 
 export async function vorgangAbbrechen(id: string): Promise<void> {
@@ -137,7 +143,53 @@ export async function vorgangAbbrechen(id: string): Promise<void> {
 export async function vorgaengeAufraeumen(): Promise<void> {
   try {
     await api.vorgaengeAufraeumen();
-    await ladeVorgaenge();
+    await api.anfragenAufraeumen();
+    await Promise.all([ladeVorgaenge(), ladeAnfragen()]);
+  } catch (f) {
+    haupt.fehler = (f as Error).message;
+  }
+}
+
+// --- Anfragen an Apps --------------------------------------------------------
+// Laufen sie, fragt der Live-Abgleich alle paar Sekunden nach dem Stand; das Ergebnis (ein Begleiter) kommt
+// ohnehin über das Journal in die Liste.
+
+export const ANFRAGE_OFFEN: AnfrageZustand[] = ["wartet", "laeuft"];
+
+export async function ladeAnfragen(): Promise<void> {
+  try {
+    zustand.anfragen = await api.anfragen();
+  } catch {
+    // Nebeninfo wie die Vorgänge
+  }
+}
+
+// Die neueste offene Anfrage zu einer Datei (Stand an der Zeile), sonst null.
+export function offeneAnfrageZu(knotenId: string): Anfrage | null {
+  return zustand.anfragen.find((a) => a.knoten_id === knotenId && ANFRAGE_OFFEN.includes(a.zustand)) ?? null;
+}
+
+// Aktion einer App ausführen. Öffnen führt in die App: das Fenster entsteht noch im Klick (sonst hält der Browser
+// es auf) und bekommt die Adresse, sobald die Anfrage steht.
+export async function aktionAusfuehren(a: AppAktion, neuesFenster = true): Promise<void> {
+  const fenster = a.art === "oeffnen" && neuesFenster ? window.open("", "_blank") : null;
+  try {
+    const neu = await api.anfrageStellen(a);
+    if (neu.ziel) {
+      if (fenster) fenster.location.href = neu.ziel;
+      else window.location.assign(neu.ziel);
+    }
+    await ladeAnfragen();
+  } catch (f) {
+    fenster?.close();
+    haupt.fehler = (f as Error).message;
+  }
+}
+
+export async function anfrageAbbrechen(id: string): Promise<void> {
+  try {
+    await api.anfrageAbbrechen(id);
+    await ladeAnfragen();
   } catch (f) {
     haupt.fehler = (f as Error).message;
   }
@@ -174,6 +226,11 @@ async function liveTick(): Promise<void> {
   if (zustand.vorgaengeOffen || zustand.vorgaenge.some((v) => v.status === "laeuft")) {
     await ladeVorgaenge();
   }
+  // Anfragen an Apps: laufen welche oder ist die Schublade offen, jeden Tick; sonst mit dem Speicher (~20 s),
+  // damit auch Anfragen von anderen Geräten oder Apps erscheinen.
+  if (zustand.vorgaengeOffen || zustand.anfragen.some((a) => ANFRAGE_OFFEN.includes(a.zustand)) || speicherTick % 5 === 4) {
+    await ladeAnfragen();
+  }
   // Speicher-Verfügbarkeit: abgehängt jeden Tick neu fragen, sonst alle ~20 s.
   speicherTick += 1;
   if (zustand.speicher?.verfuegbar === false || speicherTick % 5 === 0) {
@@ -185,6 +242,7 @@ export function starteLiveAbgleich(): void {
   if (liveTimer) return;
   letzteSeq = null;
   ladeSpeicher();
+  ladeAnfragen();
   liveTick();
   liveTimer = setInterval(liveTick, 4000);
 }

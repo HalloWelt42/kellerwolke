@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { Knoten } from "./types";
-  import { symbol, groesseText, datum, ordnerInhalt } from "./format";
+  import type { Anfrage, Knoten } from "./types";
+  import { symbol, groesseText, datum, ordnerInhalt, rolleText, mitBegleitern } from "./format";
+  import { anfrageStand } from "./anfragestand";
 
   export type RowAktion =
     | "herunterladen"
@@ -18,6 +19,10 @@
     imPapierkorb: boolean;
     umbenennenAktiv: boolean;
     zielordner: boolean;
+    gruppe?: "zu" | "offen" | null; // Hauptdatei mit Begleitern in dieser Liste
+    begleiter?: boolean; // steht eingerückt unter seiner Hauptdatei
+    anfrage?: Anfrage | null; // offene Anfrage an eine App zu dieser Datei
+    onGruppe?: () => void;
     onClick: (e: MouseEvent) => void;
     onDblClick: () => void;
     onBox: (e: MouseEvent) => void;
@@ -39,6 +44,10 @@
     imPapierkorb,
     umbenennenAktiv,
     zielordner,
+    gruppe = null,
+    begleiter = false,
+    anfrage = null,
+    onGruppe,
     onClick,
     onDblClick,
     onBox,
@@ -62,6 +71,8 @@
         ? groesseText(k.groesse)
         : "-",
   );
+
+  const stand = $derived(anfrage ? anfrageStand(anfrage) : null);
 
   let entwurf = $state(k.name);
   $effect(() => {
@@ -88,6 +99,7 @@
 
 <div
   class="zeile"
+  class:begleiter
   class:gewaehlt
   class:gezogen
   class:zielordner
@@ -136,6 +148,36 @@
       <span class="titel">{k.name}</span>
       {#if k.geteilt}
         <i class="geteilt-marke fa-solid fa-share-nodes" title="Mit anderen geteilt" aria-label="Geteilt"></i>
+      {/if}
+      {#if gruppe}
+        <button
+          class="begleit-knopf"
+          class:offen={gruppe === "offen"}
+          title={gruppe === "offen" ? "Begleiter ausblenden" : "Begleiter zeigen"}
+          aria-expanded={gruppe === "offen"}
+          onclick={(e) => {
+            e.stopPropagation();
+            onGruppe?.();
+          }}
+          ondblclick={(e) => e.stopPropagation()}
+        >
+          <i class="fa-solid fa-chevron-right"></i><i class="fa-solid fa-paperclip"></i>
+          {k.begleiter_anzahl}
+        </button>
+      {:else if imPapierkorb && k.begleiter_anzahl}
+        <span class="begleit-marke"><i class="fa-solid fa-paperclip"></i> {mitBegleitern(k.begleiter_anzahl)}</span>
+      {:else if imPapierkorb && k.haupt_name && k.rolle}
+        <span class="begleit-marke" title="Kommt beim Wiederherstellen zurück neben {k.haupt_name}">{rolleText(k.rolle)} zu {k.haupt_name}</span>
+      {/if}
+      {#if k.rolle && begleiter}
+        <span class="rolle-chip">{rolleText(k.rolle)}</span>
+      {/if}
+      {#if stand}
+        <span class="anfrage-pille" class:wartet={stand.wartet} title={stand.titel}>
+          <i class={stand.wartet ? "fa-regular fa-clock" : "fa-solid fa-circle-notch fa-spin"}></i>
+          <span class="ap-text">{stand.text}</span>
+          {stand.zahl}
+        </span>
       {/if}
     {/if}
   </span>

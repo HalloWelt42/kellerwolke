@@ -77,12 +77,17 @@ export class Browser {
   // Was die Fläche zeigt, in der Reihenfolge, in der sie es zeigt (Filter und
   // Sortierung); Ordner und Externe immer vor Dateien. Eine Stelle für Liste,
   // Auswahl, Blättern in der Vollansicht und die Titelliste des Players.
+  // Hauptdateien, deren Begleiter gerade unter ihnen stehen (je Fläche, bleibt beim Ortswechsel).
+  offeneGruppen = $state<Record<string, boolean>>({});
+
+  // In der Liste stehen Begleitdateien direkt unter ihrer Hauptdatei, wenn deren Gruppe offen ist, sonst gar nicht;
+  // liegt die Hauptdatei nicht in der Liste (Suche, Filter), stehen sie für sich.
   sichtbar = $derived.by(() => {
     const quelle = filterAktiv(this.filter) ? this.eintraege.filter((k) => passt(k.name, this.filter)) : this.eintraege;
     const rang = (k: Knoten) => (k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2);
     const key = this.sortKey;
     const dir = this.sortRichtung === "auf" ? 1 : -1;
-    return [...quelle].sort((a, b) => {
+    const sortiert = [...quelle].sort((a, b) => {
       if (rang(a) !== rang(b)) return rang(a) - rang(b);
       let v: number;
       if (key === "groesse") v = (a.groesse ?? 0) - (b.groesse ?? 0);
@@ -90,7 +95,30 @@ export class Browser {
       else v = a.name.localeCompare(b.name, "de", { sensitivity: "base", numeric: true });
       return v * dir;
     });
+    // Kacheln: Begleiter stehen ohnehin neben ihrer Hauptdatei (gleicher Stamm); im Papierkorb ist jede Zeile für sich.
+    if (this.ansicht !== "liste" || this.bereich === "papierkorb") return sortiert;
+    const da = new Set(sortiert.map((k) => k.id));
+    const begleiter = new Map<string, Knoten[]>();
+    for (const k of sortiert) {
+      if (k.haupt_id && da.has(k.haupt_id)) begleiter.set(k.haupt_id, [...(begleiter.get(k.haupt_id) ?? []), k]);
+    }
+    const aus: Knoten[] = [];
+    for (const k of sortiert) {
+      if (k.haupt_id && da.has(k.haupt_id)) continue;
+      aus.push(k);
+      if (this.offeneGruppen[k.id]) aus.push(...(begleiter.get(k.id) ?? []));
+    }
+    return aus;
   });
+
+  gruppeUmschalten(id: string): void {
+    this.offeneGruppen = { ...this.offeneGruppen, [id]: !this.offeneGruppen[id] };
+  }
+
+  // Die Begleiter einer Hauptdatei in dieser Fläche (Detail, Blatt am Telefon).
+  begleiterVon(id: string): Knoten[] {
+    return this.eintraege.filter((k) => k.haupt_id === id).sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }
 
   // Nur das jeweils neueste Laden darf das Ergebnis schreiben (verhindert, dass
   // eine ältere, langsamere Antwort eine neuere überschreibt). Pro Instanz.

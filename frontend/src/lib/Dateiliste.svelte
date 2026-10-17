@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
-  import { ablegen, hatDateien } from "./zustand.svelte";
+  import { ablegen, aktionAusfuehren, hatDateien, offeneAnfrageZu } from "./zustand.svelte";
+  import * as api from "./api";
   import type { Browser } from "./browser.svelte";
   import { filterAktiv } from "./filter";
-  import { groesseText, datum, symbolFuerName, symbol, ordnerInhalt } from "./format";
-  import type { Knoten } from "./types";
+  import { groesseText, datum, symbolFuerName, symbol, ordnerInhalt, mitBegleitern } from "./format";
+  import type { AppAktion, Knoten } from "./types";
   import Dateizeile from "./Dateizeile.svelte";
   import type { RowAktion } from "./Dateizeile.svelte";
   import Kachel from "./Kachel.svelte";
@@ -66,6 +67,8 @@
 
   // Auswahl/Marquee arbeiten auf der sortierten Reihenfolge.
   const geordnet = $derived(sortiert.map((k) => k.id));
+  // Hauptdateien dieser Liste: ihre Begleiter stehen eingerückt darunter.
+  const hauptDa = $derived(new Set(browser.eintraege.filter((k) => k.begleiter_anzahl).map((k) => k.id)));
   // Was der Filter versteckt, ist auch nicht gewählt: keine Aktion trifft Unsichtbares.
   $effect(() => {
     const sichtbare = geordnet;
@@ -333,11 +336,41 @@
 
   // --- Kontextmenü -----------------------------------------------------------
 
-  function kontextOeffnen(e: MouseEvent, k: Knoten) {
+  // Aktionen der Apps zu einer Datei; erst holen, dann das Menü zeigen (es wächst nie nach dem Öffnen).
+  async function appAktionen(k: Knoten): Promise<AppAktion[]> {
+    if (k.typ !== "datei" || browser.bereich === "papierkorb" || browser.bereich === "geteilt") return [];
+    try {
+      return await api.aktionen(k.id);
+    } catch {
+      return [];
+    }
+  }
+
+  function zurHauptdatei(k: Knoten) {
+    if (!k.haupt_id) return;
+    auswahl.waehleEinzeln(k.haupt_id);
+    const haupt = browser.eintraege.find((e) => e.id === k.haupt_id);
+    if (haupt && mitDetail) browser.zeigeDetail(haupt);
+  }
+
+  async function ausGruppeLoesen(k: Knoten) {
+    try {
+      await api.ausGruppeLoesen(k.id);
+      await browser.aktualisiere();
+    } catch (f) {
+      browser.fehler = (f as Error).message;
+    }
+  }
+
+  async function kontextOeffnen(e: MouseEvent, k: Knoten) {
     e.preventDefault();
     onAktiv?.();
     if (!auswahl.istGewaehlt(k.id)) auswahl.waehleEinzeln(k.id);
     const mehrere = auswahl.anzahl > 1;
+    const x = e.clientX;
+    const y = e.clientY;
+    const apps = mehrere ? [] : await appAktionen(k);
+    const gruppe = k.begleiter_anzahl ? mitBegleitern(k.begleiter_anzahl) : k.haupt_id ? "mit der Gruppe" : undefined;
     const eintraege: MenuEintrag[] = [];
     if (imPapierkorb) {
       eintraege.push({
@@ -383,8 +416,28 @@
         eintraege.push({
           label: "Verschieben",
           icon: "fa-arrow-right-arrow-left",
+          unter: mehrere ? undefined : gruppe,
           fn: () => browser.verschiebenBeginnen([...auswahl.ids]),
         });
+      }
+      if (!mehrere && k.haupt_id) {
+        eintraege.push({ trenner: true });
+        const haupt = browser.eintraege.find((x) => x.id === k.haupt_id);
+        eintraege.push({ label: "Zur Hauptdatei", icon: haupt ? symbol(haupt).icon : "fa-file", fn: () => zurHauptdatei(k) });
+        if (rechte.verschieben) {
+          eintraege.push({ label: "Aus der Gruppe lösen", icon: "fa-link-slash", fn: () => ausGruppeLoesen(k) });
+        }
+      }
+      if (apps.length) {
+        eintraege.push({ trenner: true }, { gruppe: "Mit Apps" });
+        for (const a of apps) {
+          eintraege.push({
+            label: a.titel,
+            icon: a.symbol,
+            unter: !a.erreichbar ? `${a.app} gerade aus` : a.art === "oeffnen" ? undefined : a.app,
+            fn: () => aktionAusfuehren(a),
+          });
+        }
       }
       if (rechte.loeschen) {
         eintraege.push({ trenner: true });
@@ -392,11 +445,12 @@
           label: "In den Papierkorb",
           icon: "fa-trash",
           gefahr: true,
+          unter: mehrere ? undefined : k.begleiter_anzahl ? mitBegleitern(k.begleiter_anzahl) : k.haupt_id ? "nur dieser" : undefined,
           fn: () => browser.loeschen([...auswahl.ids]),
         });
       }
     }
-    kontext = { x: e.clientX, y: e.clientY, eintraege };
+    kontext = { x, y, eintraege };
   }
 
   // --- Stapel-Aktionen --------------------------------------------------------
@@ -730,6 +784,10 @@
           {imPapierkorb}
           umbenennenAktiv={umbenennenId === k.id}
           zielordner={ziehZielId === k.id}
+          gruppe={k.begleiter_anzahl && !imPapierkorb ? (browser.offeneGruppen[k.id] ? "offen" : "zu") : null}
+          begleiter={!imPapierkorb && !!k.haupt_id && hauptDa.has(k.haupt_id)}
+          anfrage={offeneAnfrageZu(k.id)}
+          onGruppe={() => browser.gruppeUmschalten(k.id)}
           onClick={(e) => rowClick(e, k)}
           onDblClick={() => rowDblClick(k)}
           onBox={() => boxClick(k)}

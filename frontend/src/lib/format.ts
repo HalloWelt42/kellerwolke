@@ -67,11 +67,36 @@ export function symbolFuerName(name: string): string {
   return "fa-file";
 }
 
+// Medienart bestimmt der Server (eine Stelle für alle Endungen, auch m4a, ogg, opus); die Rolle eines Begleiters
+// geht vor (ein Transkript ist eine JSON-Datei, zeigt sich aber als Untertitelsymbol).
+const NACH_MEDIENART: Record<string, string> = { bild: "fa-file-image", audio: "fa-file-audio", video: "fa-file-video" };
+const NACH_ROLLE: Record<string, string> = { transkript: "fa-closed-captioning" };
+
+// Symbol der Rolle eines Begleiters, wenn sie eins hat (Rechner und Telefon).
+export function rollenSymbol(rolle: string | null | undefined): string | null {
+  return (rolle && NACH_ROLLE[rolle]) || null;
+}
+
 // Liefert das Font-Awesome-Symbol und ob es die Sonderfarbe (Ordner/Extern) trägt.
 export function symbol(k: Knoten): { icon: string; klasse: string } {
   if (k.typ === "ordner") return { icon: "fa-folder", klasse: "ordner" };
   if (k.typ === "extern") return { icon: "fa-folder-tree", klasse: "extern" };
-  return { icon: symbolFuerName(k.name), klasse: "" };
+  const icon = rollenSymbol(k.rolle) || (k.medienart && NACH_MEDIENART[k.medienart]) || symbolFuerName(k.name);
+  return { icon, klasse: "" };
+}
+
+// Anzeigename der Rolle eines Begleiters.
+const ROLLEN: Record<string, string> = { transkript: "Transkript", untertitel: "Untertitel", sprache: "Sprachausgabe" };
+export function rolleText(rolle: string): string {
+  return ROLLEN[rolle] ?? rolle.charAt(0).toUpperCase() + rolle.slice(1).replaceAll("_", " ");
+}
+
+export function begleiterText(n: number): string {
+  return n === 1 ? "1 Begleiter" : `${n} Begleiter`;
+}
+
+export function mitBegleitern(n: number): string {
+  return n === 1 ? "mit 1 Begleiter" : `mit ${n} Begleitern`;
 }
 
 const TYP_NACH_ENDUNG: Record<string, string> = {

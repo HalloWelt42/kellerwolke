@@ -1,10 +1,12 @@
-import { groesseText, ordnerInhalt, symbolFuerName } from "../format";
+import { groesseText, ordnerInhalt, rollenSymbol, symbolFuerName } from "../format";
 import type { Knoten } from "../types";
 
 // Symbol und Farbe einer Zeile am Telefon.
-export function mSymbol(k: Pick<Knoten, "typ" | "name" | "medienart">): { icon: string; klasse: string } {
+export function mSymbol(k: Pick<Knoten, "typ" | "name" | "medienart" | "rolle">): { icon: string; klasse: string } {
   if (k.typ === "ordner") return { icon: "fa-folder", klasse: "ordner" };
   if (k.typ === "extern") return { icon: "fa-folder-tree", klasse: "ordner" };
+  const rolle = rollenSymbol(k.rolle);
+  if (rolle) return { icon: rolle, klasse: "" };
   const art = k.medienart;
   if (art === "bild") return { icon: "fa-file-image", klasse: "bild" };
   if (art === "audio") return { icon: "fa-file-audio", klasse: "ton" };

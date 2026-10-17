@@ -46,7 +46,9 @@ class KnotenAus(BaseModel):
     # Begleitdateien (Liste): ein Begleiter nennt seine Hauptdatei und Rolle, eine Hauptdatei die Zahl ihrer Begleiter.
     haupt_id: UUID | None = None
     rolle: str | None = None
+    begleiter_app: str | None = None       # App, die den Begleiter angelegt hat
     begleiter_anzahl: int = 0
+    haupt_name: str | None = None          # Papierkorb: Hauptdatei eines allein gelöschten Begleiters
 
     @computed_field
     @property

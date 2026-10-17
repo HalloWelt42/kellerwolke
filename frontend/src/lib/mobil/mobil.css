@@ -160,6 +160,18 @@
 .m-aktion.gefahr, .m-aktion.gefahr i { color: var(--m-gefahr); }
 .m-aktion.an i { color: var(--m-akzent); }
 .m-aktion .m-hinweis { margin-left: auto; font-size: var(--m-marke); color: var(--m-text-3); }
+
+/* Begleitdateien und Anfragen an Apps (Entwurf mockups/begleiter-mobil.html) */
+.m-meta .m-begleit { color: var(--m-text-2); white-space: nowrap; }
+.m-meta .m-anfrage { color: var(--m-akzent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.m-meta .m-anfrage.wartet { color: var(--m-text-2); }
+.m-blatt .m-gruppe { padding-top: 10px; }
+.m-aktion { white-space: nowrap; }
+.m-aktion .m-hinweis { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-left: 12px; }
+.m-aktion .m-rolle { margin-left: auto; font-size: var(--m-marke); color: var(--m-text-3); flex: none; }
+.m-aktion .m-zweizeilig { min-width: 0; display: flex; flex-direction: column; text-align: left; }
+.m-aktion .m-zweizeilig span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-aktion .m-zweizeilig span:last-child { font-size: var(--m-marke); color: var(--m-text-3); }
 .m-feld {
   display: block; width: calc(100% - 2 * var(--m-a)); margin: 4px var(--m-a) 12px; height: 50px; border-radius: 12px;
   border: 1px solid var(--m-rand); background: var(--m-flaeche-2); color: var(--m-text); font: inherit; font-size: 17px; padding: 0 14px;

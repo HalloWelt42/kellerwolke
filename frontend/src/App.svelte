@@ -91,7 +91,10 @@
   const istSplit = $derived(zustand.split && haupt.bereich === "dateien" && !istMedien);
   const mitDetail = $derived(!istMedien && haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit);
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
-  const laufendeVorgaenge = $derived(zustand.vorgaenge.filter((v) => v.status === "laeuft").length);
+  const laufendeVorgaenge = $derived(
+    zustand.vorgaenge.filter((v) => v.status === "laeuft").length +
+      zustand.anfragen.filter((a) => a.zustand === "wartet" || a.zustand === "laeuft").length,
+  );
 
   function suchen(e: Event) {
     e.preventDefault();

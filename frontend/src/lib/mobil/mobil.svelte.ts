@@ -1,8 +1,9 @@
 // Navigation der Telefon-Oberfläche: vier Reiter, Unterseiten (Suche, Geteilt,
 // Papierkorb) und das eine Blatt von unten. Die Daten zeigt dieselbe Fläche wie
 // am Rechner (haupt); hier steht nur, was das Telefon anders zeigt.
+import * as api from "../api";
 import { haupt } from "../zustand.svelte";
-import type { Knoten, Pfadteil } from "../types";
+import type { AppAktion, Knoten, Pfadteil } from "../types";
 
 export type MobilReiter = "dateien" | "medien" | "favoriten" | "mehr";
 export type MobilSeite = "suche" | "geteilt" | "papierkorb";
@@ -12,7 +13,7 @@ export type EintragKurz = Pick<Knoten, "id" | "name" | "typ" | "medienart">;
 
 // Was das Blatt von unten gerade zeigt.
 export type Blatt =
-  | { art: "aktionen"; knoten: Knoten }
+  | { art: "aktionen"; knoten: Knoten; apps: AppAktion[] }
   | { art: "halten"; knoten: EintragKurz; was: "loeschen" | "endgueltig"; fertig?: () => void }
   | { art: "hochladen" }
   | { art: "umbenennen"; knoten: Knoten }
@@ -71,6 +72,19 @@ export function zurueck(): void {
 
 export function blattOeffnen(b: Blatt): void {
   mobil.blatt = b;
+}
+
+// Aktionen zu einem Eintrag: erst holen, was die Apps damit können, dann das Blatt öffnen.
+export async function aktionenOeffnen(k: Knoten): Promise<void> {
+  let apps: AppAktion[] = [];
+  if (k.typ === "datei" && haupt.bereich !== "papierkorb" && haupt.bereich !== "geteilt") {
+    try {
+      apps = await api.aktionen(k.id);
+    } catch {
+      // ohne Apps
+    }
+  }
+  blattOeffnen({ art: "aktionen", knoten: k, apps });
 }
 
 export function blattSchliessen(): void {

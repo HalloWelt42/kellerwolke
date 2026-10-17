@@ -4,6 +4,8 @@
     icon?: string;
     gefahr?: boolean;
     trenner?: boolean;
+    gruppe?: string; // Überschrift eines Abschnitts (etwa "Mit Apps")
+    unter?: string; // leiser Hinweis rechts (etwa "mit 2 Begleitern")
     fn?: () => void;
   }
 
@@ -49,9 +51,12 @@
   {#each eintraege as e, i (i)}
     {#if e.trenner}
       <div class="ktrenner"></div>
+    {:else if e.gruppe}
+      <div class="kgruppe">{e.gruppe}</div>
     {:else}
       <button class:gefahr={e.gefahr} role="menuitem" onclick={() => waehle(e)}>
         <i class="fa-solid {e.icon}"></i> {e.label}
+        {#if e.unter}<span class="k-unter">{e.unter}</span>{/if}
       </button>
     {/if}
   {/each}
