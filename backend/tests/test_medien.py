@@ -174,3 +174,13 @@ async def test_download_und_zip_ueber_den_lesezugang(umgebung):
     assert "Auswahl.zip" in r.headers["content-disposition"]
     client.cookies.set("kw_inhalt", "falsch")
     assert (await client.post("/api/v1/inhalt/zip", data={"ids": [k["id"]]})).status_code == 401
+
+
+async def test_zip_plan_vorab(umgebung):
+    client, app, _ = umgebung
+    h = await _anmelden(client)
+    k = await _hoch(client, h, "a.txt", b"a")
+    r = await client.post("/api/v1/dateien/zip/plan", json={"ids": [k["id"]]}, headers=h)
+    assert r.status_code == 200 and r.json() == {"eintraege": 1}
+    r = await client.post("/api/v1/dateien/zip/plan", json={"ids": []}, headers=h)
+    assert r.status_code == 404

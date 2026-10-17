@@ -28,6 +28,26 @@ export interface Knoten {
   geteilt?: boolean;
   // Name des Eigentuemers (nur in der Geteilt-Liste gesetzt).
   besitzer_name?: string | null;
+  // Bild, Audio oder Video (vom Server bestimmt), sonst null.
+  medienart?: Medienart | null;
+}
+
+export type Medienart = "bild" | "audio" | "video";
+
+export interface Pfadteil {
+  id: string | null;
+  name: string;
+}
+
+// Ein Eintrag der baumweiten Medienliste.
+export interface Medium {
+  id: string;
+  name: string;
+  art: Medienart;
+  etag: string | null;
+  groesse: number | null;
+  geaendert_am: string;
+  pfad: Pfadteil[];
 }
 
 export interface Konto {
@@ -79,28 +99,6 @@ export interface PoolAufraeumen {
   bytes: number;
 }
 
-// Aktive Ansichts-App (Plugin) fuer die App-Leiste.
-export interface App {
-  id: string;
-  name: string;
-  icon: string;
-  kategorie: string;
-}
-
-// Vollbild eines Plugins fuer das Admin-Panel.
-export interface PluginInfo {
-  id: string;
-  name: string;
-  version: string;
-  kategorie: string;
-  icon: string;
-  aktiv: boolean;
-  defekt: string | null;
-  quelle: string;
-  behandelt: string[];
-  konflikt: string[];
-}
-
 export interface Version {
   id: string;
   groesse: number;
@@ -117,6 +115,7 @@ export interface ExternEintrag {
   name: string;
   ist_ordner: boolean;
   groesse: number;
+  geaendert_am: string | null;
 }
 
 export interface Vorgang {

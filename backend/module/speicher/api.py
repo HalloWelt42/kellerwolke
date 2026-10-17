@@ -34,6 +34,7 @@ from module.speicher.modelle import (
     VerschiebenEingabe,
     VersionAus,
     ZipEingabe,
+    ZipPlanAus,
 )
 
 router = APIRouter(prefix="/api/v1/dateien", tags=["dateien"])
@@ -192,6 +193,19 @@ async def hochladen(datei: UploadFile, parent_id: UUID | None = Form(default=Non
 @router.post("/zip")
 async def als_zip(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
     return await zip_antwort(speicher, benutzer["id"], eingabe.ids)
+
+
+@router.post("/zip/plan", response_model=ZipPlanAus)
+async def zip_plan(eingabe: ZipEingabe, benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    """Prüft eine Auswahl vor dem Herunterladen: Anzahl der Einträge oder 404 (nichts) bzw. 413 (zu groß). So kann
+    die Oberfläche den Fehler zeigen, bevor der Browser den Strom übernimmt."""
+    try:
+        plan = await speicher.zip_plan(benutzer["id"], [str(i) for i in eingabe.ids])
+    except ArchivZuGross:
+        raise HTTPException(status_code=413, detail="Auswahl zu groß für ein ZIP")
+    if not plan:
+        raise HTTPException(status_code=404, detail="Nichts zum Packen")
+    return ZipPlanAus(eintraege=len(plan))
 
 
 async def zip_antwort(speicher, benutzer_id, ids, name: str = "kellerwolke.zip") -> StreamingResponse:

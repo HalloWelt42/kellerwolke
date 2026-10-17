@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 
 from app.abhaengig import LESEZUGANG_COOKIE, aktueller_benutzer, hole_medien, hole_speicher, lese_benutzer
 from app.auslieferung import inhalt_antwort
+from app.inhaltstyp import inhaltstyp_aus_name
 from module.medien.arten import UMWANDELN, VEKTOR, Medienart, endung, medienart
 from module.medien.vorschau import KeinBild, KeinStandbild, Stufe
 from module.speicher.api import zip_antwort
@@ -121,4 +122,22 @@ async def zip_herunterladen(ids: list[UUID] = Form(), name: str = Form("kellerwo
                             benutzer=Depends(lese_benutzer), speicher=Depends(hole_speicher)):
     """Eigene Dateien und Ordner als ZIP, als Formular abgeschickt (lange Auswahl passt in keine Adresse)."""
     return await zip_antwort(speicher, benutzer["id"], ids, name)
+
+
+@router.get("/extern/{knoten_id}")
+async def extern(knoten_id: UUID, unterpfad: str, request: Request, benutzer=Depends(lese_benutzer),
+                 speicher=Depends(hole_speicher)):
+    """Herunterladen aus einer eigenen externen Quelle (nur lesbar), direkt von der Platte."""
+    try:
+        gefunden = await speicher.externe_datei(benutzer["id"], knoten_id, unterpfad)
+    except (PermissionError, FileNotFoundError, IsADirectoryError, NotADirectoryError):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    if gefunden is None:
+        raise HTTPException(status_code=404, detail="Keine externe Quelle")
+    quelle, eintrag = gefunden
+    return inhalt_antwort(
+        request, gesamt=eintrag.groesse, inhaltstyp=inhaltstyp_aus_name(eintrag.name), dateiname=eintrag.name,
+        strom=lambda start, laenge: speicher.extern_stroemen(quelle, unterpfad, start, laenge, gesamt=eintrag.groesse),
+        zusatz=_ABGESCHOTTET,
+    )
 

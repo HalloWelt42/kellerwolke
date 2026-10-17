@@ -120,3 +120,7 @@ class PfadteilAus(BaseModel):
 
 class ZipEingabe(BaseModel):
     ids: list[UUID]
+
+
+class ZipPlanAus(BaseModel):
+    eintraege: int
