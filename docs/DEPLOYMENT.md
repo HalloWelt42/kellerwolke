@@ -83,6 +83,15 @@ python3 tools/recovery.py --ausgabe /pfad/zur/sicherung
 Das Werkzeug liest die Datenbank read-only und den Objekt-Pool und baut den
 Dateibaum jedes Nutzers wieder auf.
 
+## App-Zugang für eine App neben der Kellerwolke
+
+Eine App, die auf demselben Rechner läuft, bekommt ihren Zugang ohne Umweg über die Oberfläche; der Schlüssel wird nie
+angezeigt, er geht nur in eine Datei (600), aus der die Einrichtung der App ihn liest:
+
+```bash
+backend/.venv/bin/python tools/app_zugang.py --konto admin --app Vertonung --datei /mnt/data/vertonung/.kellerwolke
+```
+
 ## Viele Dateien einspielen (Übernahme aus einer früheren App)
 
 `tools/einspielen.py` spielt Dateien nach einem Plan ein, auf dem Rechner der Kellerwolke neben der laufenden App und
