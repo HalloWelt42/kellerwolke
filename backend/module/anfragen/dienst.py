@@ -15,6 +15,7 @@ import time
 from datetime import timedelta
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
 
@@ -214,8 +215,10 @@ class AnfragenDienst:
                         "titel": (a["titel_erneut"] or a["titel"]) if erneut else a["titel"]})
         return aus
 
-    async def stellen(self, benutzer_id, zugang_id, aktion: str, knoten_id, von: str = "konto") -> tuple[dict, str | None]:
-        """Neue Anfrage; liefert sie und bei Aktionen zum Öffnen die Adresse in der App."""
+    async def stellen(self, benutzer_id, zugang_id, aktion: str, knoten_id, von: str = "konto",
+                      optionen: dict | None = None) -> tuple[dict, str | None]:
+        """Neue Anfrage; liefert sie und bei Aktionen zum Öffnen die Adresse in der App. Optionen reicht die
+        Kellerwolke unverändert an die angefragte App."""
         passend = [a for a in await self.aktionen_fuer(benutzer_id, knoten_id)
                    if str(a["zugang_id"]) == str(zugang_id) and a["kennung"] == aktion]
         if not passend:
@@ -227,9 +230,10 @@ class AnfragenDienst:
             async with conn.transaction():
                 async with conn.cursor() as cur:
                     await cur.execute(
-                        "INSERT INTO anfrage (benutzer_id, zugang_id, aktion, knoten_id, von, art, gueltig_bis) "
-                        "VALUES (%s,%s,%s,%s,%s,%s, now() + %s) RETURNING id",
-                        (benutzer_id, zugang_id, aktion, a["knoten_id"], von, a["art"], GUELTIG[a["art"]]))
+                        "INSERT INTO anfrage (benutzer_id, zugang_id, aktion, knoten_id, von, art, optionen, "
+                        "gueltig_bis) VALUES (%s,%s,%s,%s,%s,%s,%s, now() + %s) RETURNING id",
+                        (benutzer_id, zugang_id, aktion, a["knoten_id"], von, a["art"], Jsonb(optionen or {}),
+                         GUELTIG[a["art"]]))
                     anfrage_id = (await cur.fetchone())[0]
             anfrage = await self._eine(conn, anfrage_id)
         self._wecken(zugang_id)

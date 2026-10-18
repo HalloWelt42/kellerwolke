@@ -134,7 +134,7 @@ async def weitergeben(eingabe: WeitergabeEingabe, akteur=Depends(aktuelle_app), 
         if zugang_id is None:
             raise Unsichtbar(f"Keine App {eingabe.app}")
         anfrage, ziel = await anfragen.stellen(akteur.benutzer_id, zugang_id, eingabe.aktion, eingabe.knoten_id,
-                                               von=akteur.app)
+                                               von=akteur.app, optionen=eingabe.optionen)
     except _FEHLER as f:
         raise _fehler(f) from None
     return {"anfrage": anfrage, "ziel": ziel}

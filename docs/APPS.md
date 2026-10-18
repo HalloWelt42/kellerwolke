@@ -74,7 +74,7 @@ abgelaufen, gibt es 403. Ein zweites Geheimnis gibt es nicht.
 | `POST /api/v1/ablage/anfragen/{id}/annehmen` | ab jetzt läuft sie |
 | `PATCH /api/v1/ablage/anfragen/{id}` | Fortschritt (0 bis 1), Meldung, Ende (`fertig` mit `ergebnis_id` oder `fehler`); 409, wenn abgebrochen: dann aufhören |
 | `GET /api/v1/ablage/anfragen/{id}` | Stand einer Anfrage (etwa nach einem Neustart oder für eine weitergegebene) |
-| `POST /api/v1/ablage/anfragen` mit `{app, aktion, knoten_id}` | an eine andere App weitergeben; wer weitergibt, muss die Datei lesen und neben ihr schreiben dürfen |
+| `POST /api/v1/ablage/anfragen` mit `{app, aktion, knoten_id, optionen}` | an eine andere App weitergeben; wer weitergibt, muss die Datei lesen und neben ihr schreiben dürfen. `optionen` (höchstens 10, Namen als Kennung) bekommt die angefragte App beim Abholen unverändert, etwa `{"sprache": "en"}` |
 | `GET /api/v1/dateien/{id}/aktionen` (Oberfläche) | was die Apps mit dieser Datei können |
 | `POST /api/v1/anfragen` (Oberfläche) | Anfrage stellen; bei Aktionen zum Öffnen kommt die Adresse in der App zurück |
 | `GET /api/v1/anfragen`, `DELETE .../{id}`, `POST .../aufraeumen` (Oberfläche) | ansehen, abbrechen, aufräumen |

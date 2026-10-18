@@ -13,6 +13,8 @@ Zustand = Literal["wartet", "laeuft", "fertig", "fehler", "abgebrochen"]
 Art = Literal["hintergrund", "oeffnen"]
 KENNUNG = r"^[a-z][a-z_]{0,39}$"
 _TYP = re.compile(r"^[a-z]+/([a-z0-9.+-]+|\*)$")
+_OPTION = re.compile(KENNUNG)
+Optionswert = str | int | float | bool
 
 
 class AktionEingabe(BaseModel):
@@ -68,6 +70,18 @@ class WeitergabeEingabe(BaseModel):
     app: str = Field(min_length=1, max_length=60)
     aktion: str = Field(pattern=KENNUNG)
     knoten_id: UUID
+    optionen: dict[str, Optionswert] = Field(default_factory=dict, max_length=10,
+                                             description="kleine Angaben für die App, etwa {\"sprache\": \"en\"}")
+
+    @field_validator("optionen")
+    @classmethod
+    def _optionen(cls, werte: dict[str, Optionswert]) -> dict[str, Optionswert]:
+        for name, wert in werte.items():
+            if not _OPTION.match(name):
+                raise ValueError(f"Ungültiger Name einer Option: {name}")
+            if isinstance(wert, str) and len(wert) > 200:
+                raise ValueError(f"Option {name} ist zu lang")
+        return werte
 
 
 class StandEingabe(BaseModel):
@@ -89,6 +103,7 @@ class AnfrageAus(BaseModel):
     knoten_id: UUID
     knoten_name: str
     von: str
+    optionen: dict[str, Optionswert] = {}
     zustand: Zustand
     fortschritt: float | None = None
     meldung: str | None = None

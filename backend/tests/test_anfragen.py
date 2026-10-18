@@ -177,14 +177,23 @@ async def test_oeffnen_fuehrt_in_die_app(umgebung):
 
 async def test_weitergabe_an_eine_andere_app(umgebung):
     client, sitzung = umgebung
-    _, _, ton, _ = await _aufbau(client, sitzung)
+    kopf, _, ton, _ = await _aufbau(client, sitzung)
     z, vertonung = await zugang(client, sitzung, "Vertonung")
     eigen = next(r["knoten_id"] for r in z["rechte"] if r["pfad"] == "Apps/Vertonung")
     film = await datei(client, sitzung, "Film.wav", b"RIFF-film", eigen)
     r = await client.post("/api/v1/ablage/anfragen", json={"app": "Transkription", "aktion": "transkribieren",
-                                                           "knoten_id": film}, headers=vertonung)
+                                                           "knoten_id": film, "optionen": {"sprache": "en"}},
+                          headers=vertonung)
     assert r.status_code == 200, r.text
     assert (r.json()["anfrage"]["von"], r.json()["anfrage"]["app"]) == ("Vertonung", "Transkription")
+    # die Optionen kommen unverändert bei der angefragten App an
+    offen = (await client.get("/api/v1/ablage/anfragen", headers=kopf)).json()
+    assert [a["optionen"] for a in offen] == [{"sprache": "en"}]
+    # Namen von Optionen sind Kennungen
+    r = await client.post("/api/v1/ablage/anfragen", json={"app": "Transkription", "aktion": "transkribieren",
+                                                           "knoten_id": film, "optionen": {"Sprache!": "en"}},
+                          headers=vertonung)
+    assert r.status_code == 422
     # eine Datei, die Vertonung nicht sehen darf, gibt sie auch nicht weiter
     r = await client.post("/api/v1/ablage/anfragen", json={"app": "Transkription", "aktion": "transkribieren",
                                                            "knoten_id": ton}, headers=vertonung)
