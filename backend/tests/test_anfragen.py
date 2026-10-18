@@ -189,6 +189,11 @@ async def test_weitergabe_an_eine_andere_app(umgebung):
     # die Optionen kommen unverändert bei der angefragten App an
     offen = (await client.get("/api/v1/ablage/anfragen", headers=kopf)).json()
     assert [a["optionen"] for a in offen] == [{"sprache": "en"}]
+    # den Stand liest auch, wer weitergegeben hat; eine dritte App nicht
+    weiter_id = r.json()["anfrage"]["id"]
+    assert (await client.get(f"/api/v1/ablage/anfragen/{weiter_id}", headers=vertonung)).json()["zustand"] == "wartet"
+    _, dritte = await zugang(client, sitzung, "Dritte")
+    assert (await client.get(f"/api/v1/ablage/anfragen/{weiter_id}", headers=dritte)).status_code == 404
     # Namen von Optionen sind Kennungen
     r = await client.post("/api/v1/ablage/anfragen", json={"app": "Transkription", "aktion": "transkribieren",
                                                            "knoten_id": film, "optionen": {"Sprache!": "en"}},

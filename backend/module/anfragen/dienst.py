@@ -122,10 +122,13 @@ class AnfragenDienst:
                 pass
 
     async def anfrage_der_app(self, akteur, anfrage_id) -> dict:
+        """Lesen darf die angefragte App und die App desselben Kontos, die sie weitergegeben hat."""
         async with self.pool.connection() as conn:
             await self._ablauf(conn)
             a = await self._eine(conn, anfrage_id)
-        if not a or str(a["zugang_id"]) != str(akteur.zugang_id):
+        angefragt = a and str(a["zugang_id"]) == str(akteur.zugang_id)
+        weitergegeben = a and str(a["benutzer_id"]) == str(akteur.benutzer_id) and a["von"] == akteur.app
+        if not (angefragt or weitergegeben):
             raise AnfrageUngueltig("Anfrage nicht gefunden")
         return a
 
