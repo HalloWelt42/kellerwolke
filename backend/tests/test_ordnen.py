@@ -1,5 +1,6 @@
 """Ordnen nach Plan: ein Transkript zieht zum Original (die Kopie geht danach in den Papierkorb), die Vorschau ändert
-nichts, ein zweiter Lauf meldet erledigt, ein falscher Inhalt oder hängende Begleiter halten den Papierkorb auf."""
+nichts, ein zweiter Lauf meldet erledigt, ein falscher Inhalt oder hängende Begleiter halten den Papierkorb auf. Eine
+Datei zieht samt Begleitern in einen neuen Ordner um, auf Wunsch umbenannt; ein Begleiter allein zieht nicht."""
 
 import hashlib
 
@@ -65,3 +66,21 @@ async def test_papierkorb_wird_aufgehalten(umgebung):
         {"art": "papierkorb", "ziel": "Apps/Runde.wav", "mit_begleitern": True}]})
     assert [s.befund for s in await dienst.ausfuehren(samt)] == ["ausgefuehrt"]
     assert await speicher.knoten_per_pfad(besitzer, "Apps/Runde.transkript.json") is None      # die Gruppe ging mit
+
+
+async def test_verschieben_samt_begleitern(umgebung, pool):
+    dienst, speicher, besitzer, original, kopie, transkript = umgebung
+    o = Ordnung.model_validate({"konto": "familie", "schritte": [
+        {"art": "verschieben", "datei": "Apps/Runde.wav", "ordner": "Apps/Neu/Privat", "name": "Runde 1.wav"},
+        {"art": "verschieben", "datei": "Apps/Runde.transkript.json", "ordner": "Apps/Neu"}]})
+    stand = await dienst.pruefen(o)
+    assert [s.befund for s in stand] == ["bereit", "konflikt"] and "Begleiter" in stand[1].grund
+    assert [s.befund for s in await dienst.ausfuehren(o)][0] == "ausgefuehrt"
+    neu = await speicher.knoten_per_pfad(besitzer, "Apps/Neu/Privat/Runde 1.wav")
+    mit = await speicher.knoten_per_pfad(besitzer, "Apps/Neu/Privat/Runde 1.transkript.json")
+    assert (neu["id"], mit["id"]) == (kopie["id"], transkript["id"])                          # verschoben, nicht kopiert
+    assert await speicher.knoten_per_pfad(besitzer, "Apps/Runde.wav") is None
+    assert (await dienst.pruefen(o))[0].befund == "erledigt"
+    besetzt = Ordnung.model_validate({"konto": "familie", "schritte": [
+        {"art": "verschieben", "datei": "Arbeit/Runde.wav", "ordner": "Apps/Neu/Privat", "name": "Runde 1.wav"}]})
+    assert (await dienst.pruefen(besetzt))[0].befund == "konflikt"

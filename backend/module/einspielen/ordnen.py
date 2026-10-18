@@ -1,5 +1,6 @@
 """Ordnen nach Plan, vom Rechner der Kellerwolke aus (etwa nach einer Übernahme): eine Begleitdatei an eine andere
-Hauptdatei hängen (sie zieht neben sie) und Dateien in den Papierkorb legen. Gleiche Regeln wie beim Einspielen:
+Hauptdatei hängen (sie zieht neben sie), eine Datei samt Begleitern in einen anderen Ordner verschieben (auf Wunsch mit
+neuem Namen; die Begleiter ziehen ihren Namen nach, nichts wird kopiert) und Dateien in den Papierkorb legen. Gleiche Regeln wie beim Einspielen:
 erst die Vorschau, die nichts ändert; jeder Schritt wird beim Ausführen noch einmal geprüft; endgültig gelöscht wird
 nie, der Papierkorb gibt alles wieder her.
 
@@ -39,7 +40,14 @@ class Weglegen(BaseModel):
     mit_begleitern: bool = Field(False, description="eine Hauptdatei samt ihren Begleitern (sonst nur ohne)")
 
 
-Schritt = Annotated[Umhaengen | Weglegen, Field(discriminator="art")]
+class Verschieben(BaseModel):
+    art: Literal["verschieben"]
+    datei: str = Field(min_length=1, description="Pfad der Hauptdatei jetzt; ihre Begleiter ziehen mit")
+    ordner: str = Field(min_length=1, description="Pfad des Zielordners; fehlt er, wird er angelegt")
+    name: str | None = Field(None, min_length=1, description="neuer Name; die Begleiter ziehen ihren Namen nach")
+
+
+Schritt = Annotated[Umhaengen | Verschieben | Weglegen, Field(discriminator="art")]
 
 
 class Ordnung(BaseModel):
@@ -57,8 +65,12 @@ class Stand(BaseModel):
     grund: str = ""
 
 
-def _text(s: Umhaengen | Weglegen) -> str:
-    return f"{s.datei} -> neben {s.haupt}" if isinstance(s, Umhaengen) else f"{s.ziel} in den Papierkorb"
+def _text(s: Umhaengen | Verschieben | Weglegen) -> str:
+    if isinstance(s, Umhaengen):
+        return f"{s.datei} -> neben {s.haupt}"
+    if isinstance(s, Verschieben):
+        return f"{s.datei} -> {s.ordner}/{s.name or PurePosixPath(s.datei).name}"
+    return f"{s.ziel} in den Papierkorb"
 
 
 class OrdnenDienst:
@@ -90,8 +102,10 @@ class OrdnenDienst:
             melden(stand)
         return aus
 
-    async def _pruefen(self, besitzer, s: Umhaengen | Weglegen, vorher: list) -> Stand:
+    async def _pruefen(self, besitzer, s: Umhaengen | Verschieben | Weglegen, vorher: list) -> Stand:
         text = _text(s)
+        if isinstance(s, Verschieben):
+            return await self._verschieben_pruefen(besitzer, s, text)
         if isinstance(s, Umhaengen):
             haupt = await self.speicher.knoten_per_pfad(besitzer, s.haupt)
             if haupt is None or haupt["typ"] != "datei":
@@ -128,12 +142,40 @@ class OrdnenDienst:
                 return Stand(schritt=text, befund="konflikt", grund=f"Begleiter gingen mit: {', '.join(bleiben)}")
         return Stand(schritt=text, befund="bereit")
 
+    async def _verschieben_pruefen(self, besitzer, s: Verschieben, text: str) -> Stand:
+        """Erledigt, wenn die Datei fehlt und am Ziel eine gleichnamige liegt (ein früherer Lauf); bereit, wenn sie eine
+        Hauptdatei ist und am Ziel jeder Name der Gruppe frei ist."""
+        name = s.name or PurePosixPath(s.datei).name
+        datei = await self.speicher.knoten_per_pfad(besitzer, s.datei)
+        am_ziel = await self.speicher.knoten_per_pfad(besitzer, f"{s.ordner}/{name}")
+        if datei is None:
+            if am_ziel is not None:
+                return Stand(schritt=text, befund="erledigt")
+            return Stand(schritt=text, befund="konflikt", grund="Datei fehlt")
+        if datei["typ"] != "datei":
+            return Stand(schritt=text, befund="konflikt", grund="nur Dateien (samt Begleitern), keine Ordner")
+        async with self.e.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            if await repo.begleiter_eintrag(datei["id"]):
+                return Stand(schritt=text, befund="konflikt", grund="ist Begleiter; die Hauptdatei verschieben")
+            mit = await repo.begleiter_der_haupt(datei["id"])
+        namen = [name, *(begleiter_regeln.nachgezogen(datei["name"], name, b["name"]) or b["name"] for b in mit)]
+        belegt = [n for n in namen if await self.speicher.knoten_per_pfad(besitzer, f"{s.ordner}/{n}") is not None]
+        if belegt:
+            return Stand(schritt=text, befund="konflikt", grund=f"am Ziel schon vorhanden: {', '.join(belegt)}")
+        return Stand(schritt=text, befund="bereit")
+
     async def _begleitet(self, knoten, haupt, rolle: str) -> bool:
         async with self.e.pool.connection() as conn:
             eintrag = await PostgresMetadataRepository(conn).begleiter_eintrag(knoten["id"])
         return bool(eintrag) and eintrag["haupt_id"] == haupt["id"] and eintrag["rolle"] == rolle
 
-    async def _ausfuehren(self, besitzer, s: Umhaengen | Weglegen) -> None:
+    async def _ausfuehren(self, besitzer, s: Umhaengen | Verschieben | Weglegen) -> None:
+        if isinstance(s, Verschieben):
+            datei = await self.speicher.knoten_per_pfad(besitzer, s.datei)
+            ordner = await self.e._ordner(besitzer, [t for t in s.ordner.split("/") if t])
+            await self.speicher.umziehen(besitzer, datei["id"], ordner, s.name)
+            return
         if isinstance(s, Umhaengen):
             haupt = await self.speicher.knoten_per_pfad(besitzer, s.haupt)
             datei = await self.speicher.knoten_per_pfad(besitzer, s.datei)
