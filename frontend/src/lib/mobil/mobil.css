@@ -27,7 +27,7 @@
   --m-r: 14px;
   --m-a: 16px;
   --m-oben: env(safe-area-inset-top, 0px);
-  --m-unten: env(safe-area-inset-bottom, 0px);
+  --m-unten: 0px; /* kein Abstand über dem Home-Balken (Nutzervorgabe 20.10.2026) */
 }
 
 :root[data-theme="dunkel"] .mobil {
