@@ -89,7 +89,7 @@ Eine App, die auf demselben Rechner läuft, bekommt ihren Zugang ohne Umweg übe
 angezeigt, er geht nur in eine Datei (600), aus der die Einrichtung der App ihn liest:
 
 ```bash
-backend/.venv/bin/python tools/app_zugang.py --konto admin --app Vertonung --datei /mnt/data/vertonung/.kellerwolke
+backend/.venv/bin/python tools/app_zugang.py --konto admin --app Vertonung --datei /srv/vertonung/.kellerwolke
 ```
 
 ## Viele Dateien einspielen (Übernahme aus einer früheren App)
@@ -101,8 +101,8 @@ Dateien", die Prüfsumme (SHA-256), frühere Stände (werden Versionen), Inhalts
 Begleitdatei ihre Hauptdatei mit Rolle und Zusatz.
 
 ```bash
-backend/.venv/bin/python tools/einspielen.py /mnt/data/einspielen/<lauf>/plan.json               # Vorschau
-backend/.venv/bin/python tools/einspielen.py /mnt/data/einspielen/<lauf>/plan.json --ausfuehren  # einspielen
+backend/.venv/bin/python tools/einspielen.py /srv/einspielen/<lauf>/plan.json               # Vorschau
+backend/.venv/bin/python tools/einspielen.py /srv/einspielen/<lauf>/plan.json --ausfuehren  # einspielen
 ```
 
 Die Vorschau sagt je Eintrag neu, vorhanden, fortsetzen, Konflikt oder fehlt und ändert nichts. Überschrieben wird

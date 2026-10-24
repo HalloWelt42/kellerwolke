@@ -7,7 +7,7 @@ import time
 from tests.test_ablage import datei, ordner, umgebung, zugang  # noqa: F401 (Fixture)
 
 AKTIONEN = {
-    "adresse": "https://192.168.178.49:8631",
+    "adresse": "https://192.168.1.20:8631",
     "aktionen": [
         {"kennung": "transkribieren", "titel": "Transkribieren", "titel_erneut": "Neu transkribieren",
          "symbol": "fa-closed-captioning", "typen": ["audio/*", "video/*"], "rolle": "transkript"},
@@ -166,7 +166,7 @@ async def test_oeffnen_fuehrt_in_die_app(umgebung):
     client, sitzung = umgebung
     kopf, _, ton, _ = await _aufbau(client, sitzung)
     neu = await _stellen(client, sitzung, ton, "oeffnen")
-    assert neu["ziel"] == f"https://192.168.178.49:8631/anfrage/{neu['anfrage']['id']}"
+    assert neu["ziel"] == f"https://192.168.1.20:8631/anfrage/{neu['anfrage']['id']}"
     assert (await client.get("/api/v1/ablage/anfragen", headers=kopf)).json() == []        # nicht im Hintergrund
     assert (await client.get("/api/v1/anfragen", headers=sitzung)).json() == []             # und nicht in den Vorgängen
     r = await client.post(f"/api/v1/ablage/anfragen/{neu['anfrage']['id']}/annehmen", headers=kopf)

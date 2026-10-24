@@ -4,9 +4,9 @@
 #   ./einrichten.sh                                       im Klon auf dem Zielgerät: .env (nur wenn keine da ist; Ports
 #                                                         aus dem Ordner), Python-Umgebung, Oberfläche bauen, Datenbank;
 #                                                         mit systemd (Pi) dazu die Dienste (tools/systemd-einrichten.sh)
-#   ./einrichten.sh --probe --ziel DIR --port-versatz N   Probelauf des Handbuchs: dieselben Schritte in DIR, Ports aus
-#                                                         deploy/ausrollen.toml plus N, Wegwerfgeheimnisse, Dateipool in
-#                                                         DIR, Backend als Prozess statt Dienst
+#   ./einrichten.sh --probe --ziel DIR --port-versatz N   Probelauf des Handbuchs: dieselben Schritte in DIR, Ports des
+#                                                         Betriebs (handbuch ziel kellerwolke) plus N, Wegwerfgeheimnisse,
+#                                                         Dateipool in DIR, Backend als Prozess statt Dienst
 #   ./einrichten.sh --probe --ziel DIR --abbauen          Backend beenden, Datenbank samt Volume entfernen
 set -euo pipefail
 HIER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,16 +46,16 @@ einrichten() {
   fi
 }
 
-# Port aus deploy/ausrollen.toml, damit er nur dort steht
+# Port des Betriebs aus der privaten Wahrheit (handbuch ziel), damit er nur dort steht; der Probelauf ruft das Skript
+# mit demselben verbund.toml auf, das er selbst liest
 ziel_port() {
-  python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["ports"][sys.argv[2]])' \
-    "$1/deploy/ausrollen.toml" "$2"
+  handbuch ziel kellerwolke "port:$1"
 }
 
 probe_aufbauen() {
   local ziel="$1" versatz="$2" backend db
-  backend=$(( $(ziel_port "$ziel" backend) + versatz ))
-  db=$(( $(ziel_port "$ziel" datenbank) + versatz ))
+  backend=$(( $(ziel_port backend) + versatz ))
+  db=$(( $(ziel_port datenbank) + versatz ))
   cd "$ziel"
   mkdir -p data/objects .run
   (

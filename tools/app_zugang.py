@@ -3,7 +3,7 @@
 Datei mit den Rechten 600 (für die Einrichtung einer App, die neben der Kellerwolke läuft). Gibt es den Zugang schon,
 bekommt er mit `--erneuern` einen neuen Schlüssel (der alte gilt sofort nicht mehr), sonst bleibt alles.
 
-    backend/.venv/bin/python tools/app_zugang.py --konto admin --app Vertonung --datei /mnt/data/vertonung/.kellerwolke
+    backend/.venv/bin/python tools/app_zugang.py --konto admin --app Vertonung --datei /srv/vertonung/.kellerwolke
 """
 
 from __future__ import annotations

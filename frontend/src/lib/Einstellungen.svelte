@@ -380,7 +380,7 @@
             <input
               class="feld"
               type="text"
-              placeholder="Zielpfad auf dem Server (z.B. /mnt/tb26/kellerwolke)"
+              placeholder="Zielpfad auf dem Server (z.B. /mnt/platte/kellerwolke)"
               bind:value={zielPfad}
             />
             <button class="knopf primaer" type="submit" disabled={!zielPfad.trim()}>

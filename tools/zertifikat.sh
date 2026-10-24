@@ -9,7 +9,6 @@
 set -euo pipefail
 . "$(dirname "$0")/ziel.sh"
 ZIEL="$WURZEL/data/zertifikate"
-NAMEN="${KELLERWOLKE_NAMEN:-192.168.178.49 raspberrypi-3.fritz.box raspberrypi-3 kellerwolke.fritz.box kellerwolke.local kellerwolke}"
 SCHWELLE_S=$((60 * 86400))
 
 if [ "${1:-}" = "--pruefen" ]; then

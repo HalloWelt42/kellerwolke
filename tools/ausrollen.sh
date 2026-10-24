@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ausrollen auf den Pi (vom Mac): erst gepusht, dann Sicherung, neuen Stand holen, dort bauen und prüfen. Ziel und
-# Adresse stehen in deploy/ausrollen.toml; am Ende muss die Adresse dort die ausgerollte Fassung melden.
+# Adresse kommen aus der privaten Wahrheit (tools/ziel.sh); am Ende muss die Adresse die ausgerollte Fassung melden.
 set -euo pipefail
 # >>> handbuch: vorher Seite, Einrichtungsskript, Probelauf und Bau des Handbuchs (eingesetzt von "handbuch einbinden")
 handbuch_befehl="$(command -v handbuch || true)"
@@ -25,5 +25,5 @@ ssh -o BatchMode=yes "$PI" "'$WURZEL/tools/pi/ausrollen.sh'"
 SOLL="$(tr -d ' \t\n\r' < VERSION)"
 IST="$(curl -s -m 10 --cacert "$(mkcert -CAROOT)/rootCA.pem" "$ADRESSE/api/health" \
   | python3 -c 'import sys, json; print(json.load(sys.stdin)["version"])' 2>/dev/null || true)"
-[ "$IST" = "$SOLL" ] || { echo "Abbruch: $ADRESSE meldet ${IST:-nichts} statt $SOLL (deploy/ausrollen.toml prüfen)"; exit 1; }
+[ "$IST" = "$SOLL" ] || { echo "Abbruch: $ADRESSE meldet ${IST:-nichts} statt $SOLL (Ziel prüfen: handbuch ziel kellerwolke)"; exit 1; }
 echo "Ausgerollt: $ADRESSE meldet $IST"
