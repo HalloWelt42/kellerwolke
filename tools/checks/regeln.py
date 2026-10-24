@@ -108,12 +108,24 @@ def ist_prosa(pfad):
     return Path(p).suffix in PROSA_ENDUNGEN or "/docs/" in p or p.startswith("docs/")
 
 
+FELDNAME = re.compile(r"^(\s*-?\s*)([A-Za-z_][A-Za-z0-9_]*)(:)")
+
+
 def _prosa_zeilen(text):
     """Markdown-Codebloecke (``` und ~~~) und Inline-Code ausblenden, damit die
-    Prosa-Pruefungen nur echten Fliesstext treffen (Code-Identifier sind erlaubt)."""
+    Prosa-Pruefungen nur echten Fliesstext treffen (Code-Identifier sind erlaubt).
+    Im Kopf einer Seite (YAML zwischen --- am Anfang) sind die Feldnamen Bezeichner
+    und werden ausgeblendet; ihre Werte bleiben Prosa."""
     ergebnis = []
     fence = None  # offenes Fence-Zeichen ('`' oder '~') oder None
-    for zeile in text.split("\n"):
+    kopf = text.startswith("---\n")
+    for nr, zeile in enumerate(text.split("\n")):
+        if kopf:
+            if nr > 0 and zeile.rstrip() == "---":
+                kopf = False
+            zeile = FELDNAME.sub(lambda m: m.group(1) + " " * len(m.group(2)) + m.group(3), zeile)
+            ergebnis.append(re.sub(r"`[^`]*`", " ", zeile))
+            continue
         marke = re.match(r"\s*(```+|~~~+)", zeile)
         if marke:
             zeichen = marke.group(1)[0]

@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # Harte Barriere vor jedem Commit: Identitaet + Inhalt der vorgemerkten Dateien.
 set -euo pipefail
+# >>> handbuch: Seite und Einrichtungsskript prüfen (eingesetzt von "handbuch einbinden", nicht von Hand ändern)
+handbuch_befehl="$(command -v handbuch || true)"
+[ -n "$handbuch_befehl" ] || handbuch_befehl="$HOME/.local/bin/handbuch"
+if [ ! -x "$handbuch_befehl" ]; then
+  echo "Abbruch: das Werkzeug handbuch fehlt (Handbuch, Grundlage Mac)" >&2
+  exit 1
+fi
+"$handbuch_befehl" vor-commit "$(git rev-parse --show-toplevel)" || exit 1
+# <<< handbuch
 WURZEL="$(git rev-parse --show-toplevel)"
 bash "$WURZEL/tools/checks/pruefe_identitaet.sh" --config
 python3 "$WURZEL/tools/checks/pruefe_inhalt.py" --staged

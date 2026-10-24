@@ -7,8 +7,8 @@
 # Nutzung: tools/zertifikat.sh [--pruefen]
 #   --pruefen  nur die Restlaufzeit auf dem Pi prüfen; Status 1, wenn unter 60 Tagen oder kein Zertifikat
 set -euo pipefail
-PI="${KELLERWOLKE_PI:-pi@192.168.178.49}"
-ZIEL="${KELLERWOLKE_PI_WURZEL:-/mnt/data/kellerwolke}/data/zertifikate"
+. "$(dirname "$0")/ziel.sh"
+ZIEL="$WURZEL/data/zertifikate"
 NAMEN="${KELLERWOLKE_NAMEN:-192.168.178.49 raspberrypi-3.fritz.box raspberrypi-3 kellerwolke.fritz.box kellerwolke.local kellerwolke}"
 SCHWELLE_S=$((60 * 86400))
 

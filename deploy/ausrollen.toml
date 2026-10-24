@@ -1,0 +1,15 @@
+# Ziel des Ausrollens auf den Pi, eine Wahrheit für tools/ausrollen.sh, tools/zertifikat.sh und das Handbuch.
+# Die Ports leitet tools/setup-env.sh aus dem Ordner ab (/mnt/data/kellerwolke ergibt 39277 bis 39279, Projekt
+# kellerwolke-679277) und schreibt sie in die .env auf dem Pi; den Port mit TLS trägt die .env dazu
+# (KELLERWOLKE_TLS_PORT). Hier stehen sie zum Lesen; das Ausrollen prüft am Ende, dass die Adresse mit TLS die
+# ausgerollte Fassung meldet.
+kennung = "kellerwolke"
+rechner = "pi@192.168.178.49"
+wurzel = "/mnt/data/kellerwolke"
+adresse = "https://192.168.178.49:39280"
+
+[ports]
+backend = 39277       # KELLERWOLKE_BACKEND_PORT: Schnittstelle und WebDAV direkt
+oberflaeche = 39278   # KELLERWOLKE_FRONTEND_PORT: vorne ohne TLS
+datenbank = 39279     # KELLERWOLKE_DB_PORT
+tls = 39280           # KELLERWOLKE_TLS_PORT: vorne mit TLS (Oberfläche, Schnittstelle, WebDAV)
