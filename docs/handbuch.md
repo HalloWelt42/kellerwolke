@@ -7,14 +7,14 @@ daten:
   - "Pi: Dateipool {{umgebung:KELLERWOLKE_OBJEKT_PFAD}} auf der externen Platte (inhaltsadressierte Blöcke aller Konten)"
   - "Pi: {{wurzel}}/data mit Vorschaubildern, Teilen laufender Uploads und dem Zertifikat (abgeleitet bzw. neu ausstellbar)"
 sicherung:
-  - "Datenbank: jedes Ausrollen legt vorher einen Auszug `kellerwolke_db_backup_<Zeit>.sql.gz` neben den Ordner {{wurzel}} (tools/pi/sichern.sh); das Werkzeug Sicherungen holt diese Auszüge täglich nach ~/Sicherungen/kellerwolke/pi. Eine regelmäßige Sicherung gibt es nicht (Stand 24.10.2026: nur Auszüge vom 18. und 20.10.)"
+  - "Datenbank: tools/pi/sichern.sh legt gepackte Auszüge `kellerwolke_db_backup_<Zeit>.sql.gz` in {{wurzel}}/sicherungen ab, wöchentlich (cron, Zeile unter Sicherung und Rückspielen) und vor jedem Ausrollen, wenn die jüngste älter als 24 Stunden ist; nie ohne Änderung, höchstens drei Stände. Das Werkzeug Sicherungen holt sie täglich nach ~/Sicherungen/kellerwolke/pi. Ältere Auszüge aus der Zeit davor liegen lose neben dem Ordner {{wurzel}} und werden nicht aufgeräumt"
   - "Dateipool: keine Sicherung (Stand 24.10.2026); fällt die externe Platte aus, sind die Dateien weg"
 schluessel_orte:
   - "Pi: {{wurzel}}/.env, Modus 0600: KELLERWOLKE_DB_PASS, KELLERWOLKE_APP_SECRET, KELLERWOLKE_ADMIN_PASSWORT (erstes Konto)"
   - "Pi: `{{wurzel}}/data/zertifikate/kellerwolke-schluessel.pem`, Modus 0600 (Schlüssel des Blattzertifikats)"
   - "Datenbank: Konten, Geräteschlüssel und App-Schlüssel der Apps (angelegt unter Einstellungen, Zugänge; nur einmal sichtbar)"
 einrichten: einrichten.sh
-stand: fda6ca9
+stand: 711d1d1
 ---
 
 # Kellerwolke
@@ -74,10 +74,12 @@ Probe: `tools/zertifikat.sh --pruefen` endet mit 0 (Zertifikat da und noch minde
 
 `./einrichten.sh` im Klon: Python-Umgebung, Oberfläche bauen, Datenbank starten, dann die systemd-Dienste
 `kellerwolke-db`, `kellerwolke-backend` und `kellerwolke-web` unter `kellerwolke.target` einrichten und starten
-(braucht sudo). Danach startet die Kellerwolke mit dem Pi von selbst und wird nach einem Absturz neu gestartet.
+(braucht sudo). Danach startet die Kellerwolke mit dem Pi von selbst und wird nach einem Absturz neu gestartet. Dazu
+die regelmäßige Sicherung der Datenbank: die cron-Zeile aus Sicherung und Rückspielen mit `crontab -e` eintragen.
 
 Probe: `curl -s http://127.0.0.1:{{port:backend}}/api/health` meldet `"version": "{{fassung}}"`, und vom Mac meldet
-`curl -s --cacert "$(mkcert -CAROOT)/rootCA.pem" {{adresse}}/api/health` dasselbe.
+`curl -s --cacert "$(mkcert -CAROOT)/rootCA.pem" {{adresse}}/api/health` dasselbe; auf dem Pi meldet
+`crontab -l | grep -c tools/pi/sichern.sh` 1.
 
 ### 4. Datenbank aus der Sicherung
 
@@ -105,11 +107,31 @@ Probe: Anmeldung im Browser gelingt, unter Einstellungen, Zugänge stehen die Ap
 
 ## Sicherung und Rückspielen
 
-Datenbank: `tools/ausrollen.sh` ruft vor jedem Ausrollen auf dem Pi `tools/pi/sichern.sh`; das legt einen geprüften,
-gepackten Auszug (`pg_dump`) als `kellerwolke_db_backup_<Zeit>.sql.gz` neben den Ordner der App. Aufgeräumt wird
-dort nicht. Das Werkzeug Sicherungen am Mac holt diese Auszüge täglich nach `~/Sicherungen/kellerwolke/pi`; den Stand
-zeigt `~/Sicherungen/LIESMICH.md`. Eine regelmäßige Sicherung unabhängig vom Ausrollen gibt es nicht (Stand
-24.10.2026: die jüngsten Auszüge stammen vom 18. und 20.10.). Zurückspielen wie in Schritt 4.
+Datenbank: `tools/pi/sichern.sh` legt geprüfte, gepackte Auszüge (`pg_dump`) als `kellerwolke_db_backup_<Zeit>.sql.gz`
+in `{{wurzel}}/sicherungen` ab, nach der Regel des Hauses:
+
+- einmal je Woche: cron ruft das Skript täglich, eine neue Sicherung entsteht aber erst, wenn die jüngste 7 Tage alt
+  ist (`SICHERUNG_ABSTAND_TAGE`);
+- vor dem Ausrollen: `tools/ausrollen.sh` ruft `tools/pi/sichern.sh --vor-ausrollen`, eine neue entsteht nur, wenn die
+  jüngste älter als 24 Stunden ist (`SICHERUNG_VOR_AUSROLLEN_AB_STUNDEN`);
+- nie ohne Änderung: gleicht der Auszug inhaltlich der jüngsten Sicherung, wird er verworfen;
+- höchstens 3 Stände (`SICHERUNG_BEHALTEN`): jeder Lauf räumt ältere ab, nur Dateien nach diesem Muster im Ordner.
+
+Die Vorgaben stehen nur in `tools/pi/sichern.sh`; abweichende Werte gehören in die `.env` (etwa
+`SICHERUNG_BEHALTEN=5`). In den Ordner gehört nichts anderes: das Werkzeug Sicherungen am Mac holt von dort täglich die
+neuesten Auszüge nach `~/Sicherungen/kellerwolke/pi`; den Stand zeigt `~/Sicherungen/LIESMICH.md`. Auszüge aus der
+Zeit vor dieser Regel liegen lose neben dem Ordner {{wurzel}} (`kellerwolke_db_backup_*.sql.gz`) und werden nicht
+aufgeräumt. Zurückspielen wie in Schritt 4.
+
+cron-Zeile für den Pi, eingetragen mit `crontab -e` als Benutzer der Dienste (Meldungen im Journal unter
+`kellerwolke-sicherung`):
+
+```
+15 4 * * * {{wurzel}}/tools/pi/sichern.sh 2>&1 | logger -t kellerwolke-sicherung
+```
+
+Probe: nach dem ersten Lauf nennt `ls {{wurzel}}/sicherungen` einen Auszug, und `journalctl -t kellerwolke-sicherung`
+zeigt die Meldung des Laufs.
 
 Dateipool: keine Sicherung (Stand 24.10.2026). Die Blöcke liegen unter {{umgebung:KELLERWOLKE_OBJEKT_PFAD}} nach ihrer Prüfsumme;
 solange Platte und ein Auszug der Datenbank da sind, holt `python3 tools/recovery.py --ausgabe <ordner>` den Dateibaum

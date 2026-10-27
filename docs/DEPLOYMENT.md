@@ -20,7 +20,8 @@ Vom Mac aus:
   Hausstelle bleibt auf dem Mac. Ein Telefon, das der Hausstelle schon vertraut (etwa für die Kiste), vertraut damit
   auch der Kellerwolke; sonst das Hauszertifikat einmal installieren und in den Einstellungen unter Info,
   Zertifikatsvertrauen einschalten.
-- `tools/ausrollen.sh` rollt einen gepushten Stand aus: Sicherung der Datenbank (`tools/pi/sichern.sh`), Stand holen,
+- `tools/ausrollen.sh` rollt einen gepushten Stand aus: Sicherung der Datenbank, wenn fällig
+  (`tools/pi/sichern.sh --vor-ausrollen`, Regel in der Handbuchseite unter Sicherung und Rückspielen), Stand holen,
   auf dem Pi Abhängigkeiten, Oberfläche bauen, Dienste neu starten und prüfen (`tools/pi/ausrollen.sh`).
 
 ## Alles in Containern (Alternative)
@@ -107,7 +108,8 @@ backend/.venv/bin/python tools/einspielen.py /srv/einspielen/<lauf>/plan.json --
 
 Die Vorschau sagt je Eintrag neu, vorhanden, fortsetzen, Konflikt oder fehlt und ändert nichts. Überschrieben wird
 nie: liegt am Ziel etwas anderes, bleibt es, und der Eintrag entfällt. Jeder Stand wird nur mit seiner Prüfsumme
-eingetragen; nach einem Abbruch setzt ein neuer Lauf beim nächsten Stand fort. Vorher sichern (`tools/pi/sichern.sh`).
+eingetragen; nach einem Abbruch setzt ein neuer Lauf beim nächsten Stand fort. Vorher sichern wie vor dem Ausrollen
+(`tools/pi/sichern.sh --vor-ausrollen`).
 
 Danach ordnen, ebenfalls nach Plan und mit Vorschau: `tools/ordnen.py` hängt Begleitdateien an eine andere Hauptdatei
 (sie ziehen neben sie) und legt Dateien in den Papierkorb, auf Wunsch nur bei genau dieser Prüfsumme und nie, solange
