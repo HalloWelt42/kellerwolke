@@ -1,4 +1,5 @@
 import type { Knoten, Medienart, Medium, Pfadteil } from "../types";
+import { heilen, lesezugang } from "./lesezugang.svelte";
 
 // Ein Medium, wie es Vollansicht, Player und Medienansicht kennen - gebaut aus
 // einem Knoten der Dateiliste oder einem Eintrag der Medienliste.
@@ -33,7 +34,8 @@ export function ausMedium(m: Medium): MedienEintrag {
 // Versionsstand in der Adresse erlaubt dauerhaftes Zwischenspeichern; nach einer
 // neuen Version lautet die Adresse anders.
 function stand(etag: string | null): string {
-  return etag ? `v=${encodeURIComponent(etag)}` : "";
+  const teile = [etag ? `v=${encodeURIComponent(etag)}` : "", lesezugang.stand ? `z=${lesezugang.stand}` : ""];
+  return teile.filter(Boolean).join("&");
 }
 
 export type Stufe = "klein" | "gross";
@@ -63,7 +65,7 @@ export function formatKuerzel(name: string): string {
 export async function ursache(url: string): Promise<string> {
   try {
     const r = await fetch(url, { headers: { Range: "bytes=0-0" } });
-    if (r.status === 401) return "Anmeldung abgelaufen - bitte neu anmelden";
+    if (r.status === 401) return (await heilen()) ? "" : "Anmeldung abgelaufen - bitte neu anmelden";
     if (r.status === 404) return "Die Datei gibt es nicht mehr";
     if (r.status === 415) return "Der Inhalt lässt sich nicht darstellen";
     if (r.status === 503) return "Der Speicher ist gerade nicht erreichbar";

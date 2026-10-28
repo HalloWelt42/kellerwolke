@@ -14,7 +14,7 @@ schluessel_orte:
   - "Pi: `{{wurzel}}/data/zertifikate/kellerwolke-schluessel.pem`, Modus 0600 (Schlüssel des Blattzertifikats)"
   - "Datenbank: Konten, Geräteschlüssel und App-Schlüssel der Apps (angelegt unter Einstellungen, Zugänge; nur einmal sichtbar)"
 einrichten: einrichten.sh
-stand: 711d1d1
+stand: eae6dd5
 ---
 
 # Kellerwolke
