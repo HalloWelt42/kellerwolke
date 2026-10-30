@@ -23,6 +23,7 @@ import type {
   Vorgang,
 } from "./types";
 import { verbindung } from "./verbindung.svelte";
+import { geraeteArt } from "./kopplung";
 
 // Sitzungs-Token im localStorage und im Header (kein Cookie). Bewusste Wahl für
 // eine lokale Familien-Cloud: einfache, CSRF-unempfindliche Header-Authentifizierung.
@@ -150,11 +151,14 @@ export async function lesezugangBeenden(): Promise<void> {
 }
 
 // Lädt über einen unsichtbaren Link: der Browser holt direkt aus dem Strom, mit Fortschritt und ohne
-// die Datei im Speicher der Seite zu halten.
+// die Datei im Speicher der Seite zu halten. Als Web-App vom Home-Bildschirm hat das Fenster keine Zurück-Taste:
+// holt der Link die Datei dort im selben Fenster, zeigt das Telefon sie über der ganzen App, ohne Weg zurück.
+// Darum öffnet die Web-App Dateien in einem eigenen Fenster, das sich mit "Fertig" schließt; die App bleibt stehen.
 function ueberLink(url: string, name: string): void {
   const a = document.createElement("a");
   a.href = url;
-  a.download = name;
+  if (geraeteArt() === "webapp") a.target = "_blank";
+  else a.download = name;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
