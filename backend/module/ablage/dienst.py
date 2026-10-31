@@ -490,6 +490,10 @@ class AblageDienst:
             if not await melder.warten(ereignis, takt_s):
                 yield None
 
+    async def apps(self, akteur: AppAkteur) -> list[dict]:
+        """Namen der App-Zugänge des Kontos, für das die App spricht (ohne Rechte und Kennungen)."""
+        return [{"app": z["app"], "aktiv": z["aktiv"]} for z in await self.zugang.liste(akteur.benutzer_id)]
+
     async def ich(self, akteur: AppAkteur) -> dict:
         zugang = await self.zugang.zugang(akteur.benutzer_id, akteur.zugang_id)
         return {"app": akteur.app, "konto": akteur.benutzer["name"], "konto_id": akteur.benutzer_id,

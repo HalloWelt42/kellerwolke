@@ -113,6 +113,13 @@ class IchAus(BaseModel):
     rechte: list[RechtAus]
 
 
+class AppAus(BaseModel):
+    """Ein App-Zugang desselben Kontos, nur Name und ob er aktiv ist (keine Kennung, keine Rechte, kein Schlüssel)."""
+
+    app: str
+    aktiv: bool
+
+
 class VersionAus(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: UUID
@@ -169,6 +176,12 @@ async def _schreiben(request: Request, pfad: str, akteur, ablage, suche, vorgaen
 @router.get("/ich", response_model=IchAus)
 async def ich(akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     return await ablage.ich(akteur)
+
+
+@router.get("/apps", response_model=list[AppAus])
+async def apps(akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Die Apps des Kontos (Namen seiner App-Zugänge), etwa für eine Auswahl in den Einstellungen einer App."""
+    return await ablage.apps(akteur)
 
 
 @router.get("/knoten/{knoten_id}", response_model=AblageKnotenAus)

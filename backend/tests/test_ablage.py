@@ -77,6 +77,16 @@ async def test_zugang_anlegen_mit_vorgaberechten(umgebung):
     assert "schluessel" not in str((await client.get("/api/v1/app-zugaenge", headers=sitzung)).json())
 
 
+async def test_apps_des_kontos_mit_dem_schluessel(umgebung):
+    client, sitzung = umgebung
+    _, kopf = await zugang(client, sitzung, "Vertonung")
+    z, _ = await zugang(client, sitzung, "Pinnwand")
+    await client.patch(f"/api/v1/app-zugaenge/{z['id']}", json={"aktiv": False}, headers=sitzung)
+    apps = (await client.get("/api/v1/ablage/apps", headers=kopf)).json()
+    assert apps == [{"app": "Pinnwand", "aktiv": False}, {"app": "Vertonung", "aktiv": True}]
+    assert (await client.get("/api/v1/ablage/apps", headers=sitzung)).status_code == 401      # nur mit App-Schlüssel
+
+
 async def test_ohne_gueltigen_schluessel_nichts(umgebung):
     client, sitzung = umgebung
     assert (await client.get("/api/v1/ablage/ich")).status_code == 401
