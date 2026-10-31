@@ -26,7 +26,7 @@ services:
       retries: 12
 
   web:
-    image: caddy:2.11.6-alpine
+    image: caddy:2.11.7-alpine
     profiles: ["web"]
     restart: unless-stopped
     # Im Netz des Rechners: Backend und Ports liegen dort, kein eigenes Docker-Netz noetig.
