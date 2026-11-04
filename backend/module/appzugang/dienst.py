@@ -227,23 +227,43 @@ class AppZugangDienst:
             knoten = await repo.knoten_holen(knoten_id)
             if not knoten or knoten["besitzer_id"] != akteur.benutzer_id or knoten["geloescht"]:
                 return None, None
-            async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(
-                    "WITH RECURSIVE kette AS ("
-                    "  SELECT id, parent_id, geloescht FROM knoten WHERE id=%s "
-                    "  UNION ALL "
-                    "  SELECT k.id, k.parent_id, k.geloescht FROM knoten k JOIN kette ON k.id = kette.parent_id"
-                    ") SELECT bool_or(kette.geloescht) AS geloescht, array_agg(r.recht) FILTER (WHERE r.recht IS NOT NULL) AS rechte "
-                    "FROM kette LEFT JOIN app_recht r ON r.knoten_id = kette.id AND r.zugang_id=%s",
-                    (knoten_id, akteur.zugang_id))
-                zeile = await cur.fetchone()
-        if not zeile or zeile["geloescht"]:
+            geloescht, recht = await self._kette(conn, akteur, knoten_id)
+        if geloescht:
             return None, None                     # liegt in einem gelöschten Ordner
-        rechte = zeile["rechte"] or []
-        recht = "schreiben" if "schreiben" in rechte else "lesen" if "lesen" in rechte else None
         if recht != "schreiben" and akteur.anfrage is not None:
             recht = _staerker(recht, await self._recht_aus_anfrage(akteur.anfrage, knoten))
         return knoten, recht
+
+    async def recht_im_papierkorb(self, akteur: AppAkteur, knoten_id) -> tuple[dict | None, str | None]:
+        """(Knoten, Recht) für einen Knoten im Papierkorb, der in einem lebenden Ordner liegt: eine Papierkorb-Wurzel
+        oder ein Begleiter, der mit seiner Hauptdatei gelöscht wurde. Das Recht ist das, das die App dort vor dem
+        Löschen hatte; was in einem gelöschten Ordner steckt, Lebendes, Fremdes oder Unbekanntes: (None, None).
+        Offene Anfragen geben hier kein Recht."""
+        async with self.pool.connection() as conn:
+            knoten = await PostgresMetadataRepository(conn).knoten_holen(knoten_id)
+            if not knoten or knoten["besitzer_id"] != akteur.benutzer_id or not knoten["geloescht"] or not knoten["parent_id"]:
+                return None, None
+            geloescht, recht = await self._kette(conn, akteur, knoten["parent_id"])
+        return (None, None) if geloescht else (knoten, recht)
+
+    @staticmethod
+    async def _kette(conn, akteur: AppAkteur, knoten_id) -> tuple[bool, str | None]:
+        """(liegt in Gelöschtem, Recht der App) entlang der Kette vom Knoten bis zur Wurzel; das Recht kommt vom Knoten
+        selbst oder dem nächsten Ordner darüber, der in den Rechten steht; schreiben schließt lesen ein."""
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                "WITH RECURSIVE kette AS ("
+                "  SELECT id, parent_id, geloescht FROM knoten WHERE id=%s "
+                "  UNION ALL "
+                "  SELECT k.id, k.parent_id, k.geloescht FROM knoten k JOIN kette ON k.id = kette.parent_id"
+                ") SELECT bool_or(kette.geloescht) AS geloescht, array_agg(r.recht) FILTER (WHERE r.recht IS NOT NULL) AS rechte "
+                "FROM kette LEFT JOIN app_recht r ON r.knoten_id = kette.id AND r.zugang_id=%s",
+                (knoten_id, akteur.zugang_id))
+            zeile = await cur.fetchone()
+        if not zeile or zeile["geloescht"] is None:
+            return True, None
+        rechte = zeile["rechte"] or []
+        return bool(zeile["geloescht"]), "schreiben" if "schreiben" in rechte else "lesen" if "lesen" in rechte else None
 
     async def _recht_aus_anfrage(self, anfrage: dict, knoten: dict) -> str | None:
         """Eine offene Anfrage gibt der App die angefragte Datei zum Lesen und deren Begleiter zum Schreiben."""

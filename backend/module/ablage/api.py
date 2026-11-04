@@ -57,6 +57,12 @@ class AblageKnotenAus(BaseModel):
     geaendert_am: datetime
 
 
+class PapierkorbAus(AblageKnotenAus):
+    """Eine Papierkorb-Wurzel mit den Begleitern, die mit ihr gelöscht wurden."""
+    geloescht_am: datetime
+    begleiter: list[AblageKnotenAus] = Field(default_factory=list)
+
+
 class UmziehenEingabe(BaseModel):
     ordner_id: UUID
     name: str | None = Field(None, min_length=1, max_length=255, description="neuer Name; leer: bleibt")
@@ -341,6 +347,36 @@ async def loeschen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends
     """In den Papierkorb (wiederherstellbar); endgültig löscht nur das Konto."""
     try:
         await ablage.loeschen(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/papierkorb", response_model=list[PapierkorbAus])
+async def papierkorb(ordner: UUID, ab: int = Query(0, ge=0), anzahl: int = Query(200, ge=1, le=500),
+                     akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Was unter einem lesbaren Ordner im Papierkorb liegt, zuletzt gelöschtes zuerst (IMG-13)."""
+    try:
+        return await ablage.papierkorb(akteur, ordner, ab, anzahl)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/papierkorb/{knoten_id}/inhalt")
+async def papierkorb_inhalt(knoten_id: UUID, request: Request, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Inhalt einer Datei im Papierkorb (Wurzel oder mitgelöschter Begleiter), nur lesen."""
+    try:
+        knoten, stand = await ablage.papierkorb_kopf(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+    return inhalt_antwort(request, gesamt=stand.groesse, inhaltstyp=knoten["inhaltstyp"], dateiname=knoten["name"],
+                          etag=stand.etag, strom=lambda start, laenge: ablage.stand_stroemen(stand, start, laenge))
+
+
+@router.post("/knoten/{knoten_id}/wiederherstellen", response_model=AblageKnotenAus)
+async def wiederherstellen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Aus dem Papierkorb an den alten Ort zurück, Begleiter mit; ein vergebener Name bekommt einen Zusatz."""
+    try:
+        return await ablage.wiederherstellen(akteur, knoten_id)
     except _FEHLER as f:
         raise _fehler(f) from None
 

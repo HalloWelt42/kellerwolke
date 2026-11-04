@@ -10,7 +10,11 @@ sprechen die Ablage-Schnittstelle unter `/api/v1/ablage`.
   lesen in `Apps`. Weitere Ordner gibt das Konto frei (gemeinsame Arbeitsordner).
 - Was außerhalb der Rechte liegt, gibt es für die App nicht (404). Lesen ja, schreiben nein: 403.
 - Überschreiben nur mit dem zuletzt gelesenen Stand (`If-Match`), sonst 428; `If-None-Match: *` legt nur neu an.
-- Löschen legt in den Papierkorb; endgültig löscht nur das Konto.
+- Löschen legt in den Papierkorb; endgültig löscht nur das Konto. Was die App unter einem lesbaren Ordner gelöscht
+  hat, sieht sie dort (`GET /api/v1/ablage/papierkorb?ordner={id}`, zuletzt gelöschtes zuerst, je Eintrag die
+  mitgelöschten Begleiter), liest es (`GET /api/v1/ablage/papierkorb/{id}/inhalt`) und holt es mit Schreibrecht an
+  den alten Ort zurück (`POST /api/v1/ablage/knoten/{id}/wiederherstellen`, Begleiter mit, ein vergebener Name
+  bekommt einen Zusatz). Was in einem gelöschten Ordner steckt, zählt mit ihm.
 - Verschieben und Umbenennen (`POST /api/v1/ablage/knoten/{id}/ort` mit `{ordner_id, name}`) gehen innerhalb der
   Schreibrechte; Begleitdateien ziehen mit, ein freigegebener Ordner selbst bleibt stehen.
 

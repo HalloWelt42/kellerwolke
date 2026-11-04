@@ -717,6 +717,18 @@ class SpeicherDienst:
                 return None
             return await self._stand(repo, knoten)
 
+    async def stand_im_papierkorb(self, besitzer_id, knoten_id) -> DateiStand | None:
+        """Stand einer Datei des Kontos im Papierkorb, nur zum Lesen (etwa ihre Angaben vor dem Zurückholen) - sonst
+        None. ETag ist die Kennung der Version wie bei `version_stand`."""
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.knoten_holen(knoten_id)
+            if (not knoten or knoten["besitzer_id"] != besitzer_id or knoten["typ"] != "datei" or not knoten["geloescht"]
+                    or not knoten["aktuelle_version_id"]):
+                return None
+            teile = await repo.chunks(knoten["aktuelle_version_id"])
+            return DateiStand(knoten={**knoten, "etag": str(knoten["aktuelle_version_id"])}, teile=tuple(teile))
+
     async def version_stand(self, besitzer_id, knoten_id, version_id) -> DateiStand | None:
         """Stand einer früheren (oder der aktuellen) Version einer lebenden Datei des Kontos - sonst None. Eine
         Version ändert sich nie; ihr ETag ist ihre Kennung."""

@@ -311,6 +311,66 @@ class AblageDienst:
             raise Gesperrt(fremd)
         await self.speicher.loeschen(akteur.benutzer_id, knoten_id)
 
+    # --- Papierkorb: was die App unter einem Ordner gelöscht hat, ansehen und zurückholen (IMG-13) ---------------
+
+    async def papierkorb(self, akteur: AppAkteur, ordner_id, ab: int = 0, anzahl: int = 200) -> list[dict]:
+        """Papierkorb-Wurzeln unter einem lesbaren Ordner (in lebenden Ordnern darunter), zuletzt gelöschte zuerst; je
+        Wurzel die Begleiter, die mit ihr gelöscht wurden. Was in einem gelöschten Ordner steckt, zählt mit ihm."""
+        ordner, _ = await self.mit_recht(akteur, ordner_id)
+        if ordner["typ"] != "ordner":
+            raise ValueError("Kein Ordner")
+        async with self.pool.connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute(
+                    "WITH RECURSIVE baum AS ("
+                    "  SELECT id FROM knoten WHERE id=%s "
+                    "  UNION ALL SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id WHERE NOT k.geloescht"
+                    ") SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id "
+                    "WHERE k.geloescht AND k.geloescht_wurzel = k.id AND k.besitzer_id=%s "
+                    "ORDER BY k.geaendert_am DESC, k.id LIMIT %s OFFSET %s",
+                    (ordner_id, akteur.benutzer_id, max(1, min(anzahl, MAX_SEITE)), max(0, ab)))
+                wurzeln = [z["id"] for z in await cur.fetchall()]
+        aus = []
+        for w in wurzeln:
+            knoten, recht = await self.zugang.recht_im_papierkorb(akteur, w)
+            if not recht:
+                continue
+            async with self.pool.connection() as conn:
+                mit = await PostgresMetadataRepository(conn).begleiter_im_papierkorb([w])
+            aus.append({**await self._ansicht(knoten, recht), "geloescht_am": knoten["geaendert_am"],
+                        "begleiter": [await self._ansicht(b, recht) for b in mit]})
+        return aus
+
+    async def mit_recht_im_papierkorb(self, akteur: AppAkteur, knoten_id, noetig: str = "lesen") -> tuple[dict, str]:
+        knoten, recht = await self.zugang.recht_im_papierkorb(akteur, knoten_id)
+        if knoten is None or recht is None:
+            raise Unsichtbar("Nicht im Papierkorb")
+        if noetig == "schreiben" and recht != "schreiben":
+            raise KeinSchreibrecht("Kein Schreibrecht in diesem Ordner")
+        return knoten, recht
+
+    async def papierkorb_kopf(self, akteur: AppAkteur, knoten_id):
+        """Knoten und Stand einer Datei im Papierkorb (Wurzel oder mitgelöschter Begleiter), etwa um ihre Angaben
+        zu lesen, bevor jemand sie zurückholt."""
+        knoten, _ = await self.mit_recht_im_papierkorb(akteur, knoten_id)
+        stand = await self.speicher.stand_im_papierkorb(akteur.benutzer_id, knoten_id)
+        if stand is None:
+            raise Unsichtbar("Keine Datei")
+        async with self.pool.connection() as conn:
+            meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
+        return {**knoten, **_meta_felder(knoten, meta)}, stand
+
+    async def wiederherstellen(self, akteur: AppAkteur, knoten_id) -> dict:
+        """Eine Papierkorb-Wurzel samt mitgelöschten Begleitern an ihren alten Ort zurück, mit Schreibrecht dort; ist
+        der Name inzwischen vergeben, mit Zusatz (Regel des Speichers)."""
+        knoten, recht = await self.mit_recht_im_papierkorb(akteur, knoten_id, "schreiben")
+        if knoten["geloescht_wurzel"] != knoten["id"]:
+            raise Unsichtbar("Nur ganze Einträge des Papierkorbs lassen sich zurückholen")
+        zurueck = await self.speicher.wiederherstellen(akteur.benutzer_id, knoten_id)
+        if zurueck is None:
+            raise Unsichtbar("Nicht im Papierkorb")
+        return await self._ansicht(zurueck, recht)
+
     async def umziehen(self, akteur: AppAkteur, knoten_id, ordner_id, name: str | None = None) -> dict:
         """Verschiebt (und benennt auf Wunsch um) innerhalb der Schreibrechte der App; eine Gruppe zieht gemeinsam um.
         Ein freigegebener Ordner selbst und was eine andere App gesperrt hat, bleiben."""

@@ -535,6 +535,57 @@ async def test_app_loescht_in_den_papierkorb(umgebung):
     assert (await client.get(f"/api/v1/ablage/knoten/{o['id']}", headers=t)).status_code == 404
 
 
+async def test_app_sieht_liest_und_holt_ihren_papierkorb_zurueck(umgebung):
+    """IMG-13: Papierkorb unter einem Ordner der App, mit mitgelöschten Begleitern; lesen und zurückholen, fremdes nie."""
+    client, sitzung = umgebung
+    _, t = await zugang(client, sitzung, "Transkription")
+    _, v = await zugang(client, sitzung, "Vertonung")
+    wurzel = (await client.post("/api/v1/ablage/ordner", json={"pfad": "Apps/Transkription/Bilder/2026"}, headers=t)).json()
+    bilder = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Transkription/Bilder"}, headers=t)).json()
+    d = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/Bilder/2026/a.png"}, content=b"bild", headers=t)).json()
+    b = (await client.put(f"/api/v1/ablage/knoten/{d['id']}/begleiter/bild", params={"zusatz": ".bild.json"},
+                          content=b'{"titel": "a"}', headers=t)).json()
+    leer = await client.get("/api/v1/ablage/papierkorb", params={"ordner": bilder["id"]}, headers=t)
+    assert leer.status_code == 200 and leer.json() == []
+    assert (await client.delete(f"/api/v1/ablage/knoten/{d['id']}", headers=t)).status_code == 204
+    korb = (await client.get("/api/v1/ablage/papierkorb", params={"ordner": bilder["id"]}, headers=t)).json()
+    assert [k["name"] for k in korb] == ["a.png"] and korb[0]["recht"] == "schreiben" and korb[0]["geloescht_am"]
+    assert [(x["name"], x["rolle"]) for x in korb[0]["begleiter"]] == [("a.bild.json", "bild")]
+    assert korb[0]["pfad"].endswith("Bilder/2026/a.png")
+    r = await client.get(f"/api/v1/ablage/papierkorb/{b['id']}/inhalt", headers=t)
+    assert r.status_code == 200 and r.content == b'{"titel": "a"}'
+    assert (await client.get(f"/api/v1/ablage/papierkorb/{d['id']}/inhalt", headers=t)).content == b"bild"
+    # andere Apps lesen wie vor dem Löschen, holen aber nur mit Schreibrecht zurück; Lebendes ist nicht im Papierkorb
+    assert (await client.post(f"/api/v1/ablage/knoten/{d['id']}/wiederherstellen", headers=v)).status_code == 403
+    assert (await client.get(f"/api/v1/ablage/papierkorb/{wurzel['id']}/inhalt", headers=t)).status_code == 404
+    # nur ganze Einträge: der mitgelöschte Begleiter allein nicht
+    assert (await client.post(f"/api/v1/ablage/knoten/{b['id']}/wiederherstellen", headers=t)).status_code == 404
+    # ist der Name inzwischen vergeben, kommt es mit Zusatz zurück, samt Begleiter
+    await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Transkription/Bilder/2026/a.png"}, content=b"neu", headers=t)
+    zurueck = await client.post(f"/api/v1/ablage/knoten/{d['id']}/wiederherstellen", headers=t)
+    assert zurueck.status_code == 200 and zurueck.json()["name"] != "a.png" and zurueck.json()["parent_id"] == wurzel["id"]
+    mit = (await client.get(f"/api/v1/ablage/knoten/{d['id']}/begleiter", headers=t)).json()
+    assert [x["rolle"] for x in mit] == ["bild"]
+    assert (await client.get("/api/v1/ablage/papierkorb", params={"ordner": bilder["id"]}, headers=t)).json() == []
+    # was mit einem Ordner gelöscht wurde, zählt mit ihm (nur der Ordner steht im Papierkorb)
+    assert (await client.delete(f"/api/v1/ablage/knoten/{wurzel['id']}", headers=t)).status_code == 204
+    korb = (await client.get("/api/v1/ablage/papierkorb", params={"ordner": bilder["id"]}, headers=t)).json()
+    assert [k["name"] for k in korb] == ["2026"]
+    assert (await client.get(f"/api/v1/ablage/papierkorb/{d['id']}/inhalt", headers=t)).status_code == 404
+
+
+async def test_papierkorb_wiederherstellen_braucht_schreibrecht(umgebung):
+    client, sitzung = umgebung
+    t, v, _ = await _gemeinsam(client, sitzung)
+    w = (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/Vertonung/w.txt"}, content=b"x", headers=v)).json()
+    assert (await client.delete(f"/api/v1/ablage/knoten/{w['id']}", headers=v)).status_code == 204
+    vertonung = (await client.get("/api/v1/ablage/pfad", params={"pfad": "Apps/Vertonung"}, headers=t)).json()
+    korb = (await client.get("/api/v1/ablage/papierkorb", params={"ordner": vertonung["id"]}, headers=t)).json()
+    assert [(k["name"], k["recht"]) for k in korb] == [("w.txt", "lesen")]
+    assert (await client.post(f"/api/v1/ablage/knoten/{w['id']}/wiederherstellen", headers=t)).status_code == 403
+    assert (await client.post(f"/api/v1/ablage/knoten/{w['id']}/wiederherstellen", headers=v)).status_code == 200
+
+
 async def test_app_loescht_weder_anker_noch_fremd_gesperrtes_noch_nur_lesbares(umgebung):
     client, sitzung = umgebung
     t, v, d = await _gemeinsam(client, sitzung)
