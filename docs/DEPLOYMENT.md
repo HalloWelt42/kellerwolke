@@ -9,9 +9,9 @@ TLS mit einem Zertifikat aus der Hausstelle. Die Dienste richtet `tools/systemd-
 
 | Adresse | Zweck |
 |---|---|
-| `http://<pi>:KELLERWOLKE_FRONTEND_PORT` | Oberfläche ohne TLS (bisherige Adresse) |
-| `https://<pi>:KELLERWOLKE_TLS_PORT` | Oberfläche mit TLS; nötig für das iPhone (App auf dem Home-Bildschirm, Teilen-Menü) |
-| `http://<pi>:KELLERWOLKE_BACKEND_PORT` | Backend direkt (Schnittstelle, WebDAV) |
+| `https://<pi>:KELLERWOLKE_TLS_PORT` | die einzige Adresse: Oberfläche, Schnittstelle der Apps, WebDAV |
+| `http://<pi>:KELLERWOLKE_FRONTEND_PORT` | nur Umleitung (308) auf die Adresse mit TLS; frühere Adresse ohne TLS |
+| `http://127.0.0.1:KELLERWOLKE_BACKEND_PORT` | Backend, nur auf dem Pi selbst (`KELLERWOLKE_BIND=127.0.0.1`); von außen nur über den Caddy vorne |
 
 Vom Mac aus:
 

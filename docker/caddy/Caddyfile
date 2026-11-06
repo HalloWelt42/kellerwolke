@@ -1,5 +1,6 @@
-# Vorne auf dem Pi: liefert die gebaute Oberfläche aus und reicht Schnittstelle und WebDAV an das Backend weiter.
-# Einmal ohne TLS (bisherige Adresse) und einmal mit TLS aus der Hausstelle (Zertifikat: tools/zertifikat.sh).
+# Vorne auf dem Pi: liefert die gebaute Oberfläche aus und reicht Schnittstelle und WebDAV an das Backend weiter,
+# nur mit TLS aus der Hausstelle (Zertifikat: tools/zertifikat.sh). Die frühere Adresse ohne TLS leitet nur noch auf
+# dieselbe Stelle mit TLS um (308 behält Methode und Inhalt); über sie läuft nichts mehr (KW-4).
 # Beim Zugriff per IP steht kein Servername im Handschlag, darum default_sni. Kein HSTS: unter einem Rechnernamen
 # würde es alle Ports des Pi auf HTTPS zwingen.
 {
@@ -37,7 +38,7 @@
 }
 
 http://:{$KELLERWOLKE_FRONTEND_PORT} {
-	import kellerwolke
+	redir https://{host}:{$KELLERWOLKE_TLS_PORT}{uri} 308
 }
 
 :{$KELLERWOLKE_TLS_PORT} {

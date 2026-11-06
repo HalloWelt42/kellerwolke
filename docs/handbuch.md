@@ -14,7 +14,7 @@ schluessel_orte:
   - "Pi: `{{wurzel}}/data/zertifikate/kellerwolke-schluessel.pem`, Modus 0600 (Schlüssel des Blattzertifikats)"
   - "Datenbank: Konten, Geräteschlüssel und App-Schlüssel der Apps (angelegt unter Einstellungen, Zugänge; nur einmal sichtbar)"
 einrichten: einrichten.sh
-stand: 1610fe5
+stand: 45d9399
 ---
 
 # Kellerwolke
@@ -31,7 +31,10 @@ Ohne Kellerwolke kann sich niemand bei den Apps anmelden, und die Apps finden ih
 
 Auf dem Pi laufen drei Teile: die Datenbank in Docker, das Backend als Dienst (uvicorn) und vorne ein Caddy in Docker,
 der die gebaute Oberfläche ausliefert, `/api` und `/webdav` ans Backend reicht und TLS mit dem Zertifikat der
-Hausstelle spricht. Adresse für alle: {{adresse}}.
+Hausstelle spricht. Adresse für alle: {{adresse}}. Ohne TLS gibt es nichts mehr: Der frühere Port
+ohne TLS leitet nur auf diese Adresse um, und das Backend lauscht nur auf dem Pi selbst
+(`KELLERWOLKE_BIND=127.0.0.1`). Apps brauchen deshalb die Hausstelle als Zertifikatsstelle (bei Apps mit Appkern
+`<KENNUNG>_CA_DATEI`).
 
 ## Was sie braucht
 

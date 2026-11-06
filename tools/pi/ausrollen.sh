@@ -21,11 +21,13 @@ done
 [ "$IST" = "$SOLL" ] || { echo "Backend meldet ${IST:-nichts} statt $SOLL"; exit 1; }
 echo "Backend: $IST"
 pruefe() { curl -s -f -o /dev/null "$@" || { echo "Fehlgeschlagen: ${*: -1}"; exit 1; }; }
-for _ in $(seq 1 20); do curl -s -f -o /dev/null "http://127.0.0.1:${FPORT}/" && break; sleep 1; done
-pruefe "http://127.0.0.1:${FPORT}/" && echo "Oberfläche ohne TLS: ok"
-pruefe "http://127.0.0.1:${FPORT}/api/health" && echo "Schnittstelle über vorne: ok"
-if [ -n "$TPORT" ] && [ -f data/zertifikate/rootCA.pem ]; then
-  pruefe --cacert data/zertifikate/rootCA.pem "https://$(wert KELLERWOLKE_HAUPTADRESSE):${TPORT}/api/health" && echo "Mit TLS: ok"
-fi
+VORNE="https://$(wert KELLERWOLKE_HAUPTADRESSE):${TPORT}"
+for _ in $(seq 1 20); do curl -s -f -o /dev/null --cacert data/zertifikate/rootCA.pem "$VORNE/" && break; sleep 1; done
+pruefe --cacert data/zertifikate/rootCA.pem "$VORNE/" && echo "Oberfläche mit TLS: ok"
+pruefe --cacert data/zertifikate/rootCA.pem "$VORNE/api/health" && echo "Schnittstelle über vorne: ok"
+# Ohne TLS gibt es nur noch die Umleitung (KW-4): 308 auf dieselbe Stelle mit TLS, nie die Oberfläche selbst
+UMLEITUNG="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://127.0.0.1:${FPORT}/medien?x=1")"
+[ "$UMLEITUNG" = "308 https://127.0.0.1:${TPORT}/medien?x=1" ] || { echo "Ohne TLS: $UMLEITUNG statt Umleitung"; exit 1; }
+echo "Ohne TLS nur Umleitung: ok"
 PROJEKT="$(wert COMPOSE_PROJECT_NAME)"
 docker exec "${PROJEKT:-kellerwolke}-db-1" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "select count(*) from knoten"' | sed 's/^/Knoten: /'
