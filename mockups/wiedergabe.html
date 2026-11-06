@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="de" data-theme="dunkel">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Wiedergabe (KW-8)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      /* Entwurf KW-8: Wiedergabe mit Vorrang für die Titelliste. Weniger Tempi (0,75x, 1x, 1,5x), Cover kleiner, die
+         Liste bekommt den größeren Teil und folgt dem laufenden Titel (rollt beim Titelwechsel zu ihm, er bleibt
+         markiert in der Mitte). Links der Rechner, rechts das Telefon. */
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: Barlow, sans-serif; }
+      .seite { padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 375px; gap: 28px; align-items: start; }
+      .titel-zeile { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
+      .titel-zeile h1 { font-size: 1.4rem; margin: 0; }
+      .titel-zeile p { margin: 0; color: var(--text-2); font-size: 0.9rem; }
+      .zustand { font-size: 0.8rem; color: var(--text-3); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+      /* gemeinsame Teile der Wiedergabe */
+      .jv { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+      .jv-kopf { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+      .jv-min { border: none; background: var(--flaeche-2); color: var(--text-2); width: 36px; height: 36px; border-radius: 50%; }
+      .jv-kopf span { color: var(--text-3); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+      .jv-luecke { width: 36px; }
+      .cover { aspect-ratio: 1; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #6d5efc, #3b82f6); flex: none; }
+      .t-titel { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .t-ort { color: var(--text-3); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .wg-fortschritt { display: flex; align-items: center; gap: 8px; width: 100%; }
+      .wg-fortschritt .z { font-size: 0.76rem; color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 34px; }
+      .wg-fortschritt .fs-spur { flex: 1; height: 6px; border-radius: 3px; background: var(--flaeche-3); position: relative; }
+      .wg-fortschritt .fs-spur::after { content: ""; position: absolute; inset: 0 70% 0 0; background: var(--akzent); border-radius: 3px; }
+      .transport { display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: 360px; }
+      .transport button { border: none; background: transparent; color: var(--text-2); width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 1.05rem; position: relative; cursor: pointer; }
+      .transport .gross { width: 56px; height: 56px; background: var(--akzent); color: var(--akzent-text); font-size: 1.3rem; }
+      .transport .skip b { position: absolute; top: 52%; left: 50%; transform: translate(-50%, -50%); font-size: 0.48rem; font-weight: 700; }
+      /* nur noch drei Tempi, als Knopfleiste: genau eines ist aktiv */
+      .tempo { display: inline-flex; gap: 2px; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: 10px; padding: 2px; }
+      .tempo button { border: none; background: transparent; color: var(--text-2); font: inherit; font-size: 0.85rem; min-width: 52px; height: 30px; border-radius: 8px; cursor: pointer; font-variant-numeric: tabular-nums; }
+      .tempo button.an { background: var(--akzent-weich); color: var(--akzent-stark); font-weight: 600; }
+
+      /* die Titelliste: der größere Teil, folgt dem laufenden Titel */
+      .liste { display: flex; flex-direction: column; min-height: 0; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: 12px; }
+      .liste-kopf { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; font-weight: 600; }
+      .liste-kopf .stand { margin-left: auto; color: var(--text-3); font-weight: 400; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+      .liste ol { list-style: none; margin: 0; padding: 0 6px 6px; overflow-y: auto; scroll-behavior: smooth; }
+      .liste li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
+      .liste li .nr { width: 26px; text-align: center; color: var(--text-3); font-variant-numeric: tabular-nums; flex: none; }
+      .liste li .t { flex: 1; min-width: 0; }
+      .liste li .t b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .liste li .t small { color: var(--text-3); font-size: 0.75rem; }
+      .liste li .d { color: var(--text-3); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+      .liste li.gespielt { opacity: 0.55; }
+      .liste li.jetzt { background: var(--akzent-weich); box-shadow: inset 3px 0 0 var(--akzent); border-radius: 0 9px 9px 0; }
+      .liste li.jetzt .nr, .liste li.jetzt b { color: var(--akzent-stark); font-weight: 600; }
+
+      /* Rechner: Liste links schmal neben Steuerung? Nein: Steuerung links schmal, Liste rechts breit */
+      .rechner { height: 620px; }
+      .rechner .jv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr); gap: 24px; padding: 0 24px 24px; }
+      .rechner .haupt { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; min-width: 0; }
+      .rechner .cover { width: min(200px, 100%); font-size: 2.6rem; }
+      .rechner .t-titel { font-size: 1.2rem; max-width: 100%; }
+
+      /* Telefon: Cover klein neben dem Titel, darunter Steuerung, der Rest ist Liste */
+      .telefon-rahmen { width: 375px; height: 760px; border-radius: 40px; box-shadow: 0 0 0 10px #1b2735; overflow: hidden; }
+      .telefon-rahmen .jv { height: 100%; border: none; border-radius: 0; padding-top: 40px; }
+      .telefon-rahmen .jv-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; }
+      .telefon-rahmen .kopf-titel { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .telefon-rahmen .cover { width: 64px; font-size: 1.5rem; border-radius: 12px; }
+      .telefon-rahmen .kopf-titel > div { min-width: 0; }
+      .telefon-rahmen .t-titel { font-size: 1.05rem; }
+      .telefon-rahmen .steuer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .telefon-rahmen .liste { flex: 1; }
+
+      .probe { display: flex; gap: 8px; align-items: center; }
+      .probe button { border: 1px solid var(--rand); background: var(--flaeche); color: var(--text); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div class="seite">
+      <div class="titel-zeile">
+        <div>
+          <h1>Wiedergabe: die Titelliste im Vordergrund</h1>
+          <p>Nur noch drei Tempi. Die Liste folgt dem laufenden Titel und hält ihn markiert in der Mitte. Gespielte Titel blasser.</p>
+        </div>
+        <span class="probe" style="margin-left:auto">
+          <button id="zurueck"><i class="fa-solid fa-backward-step"></i> Zurück</button>
+          <button id="weiter">Weiter <i class="fa-solid fa-forward-step"></i></button>
+        </span>
+      </div>
+
+      <div>
+        <p class="zustand">Rechner</p>
+        <div class="jv rechner" data-wiedergabe></div>
+      </div>
+      <div>
+        <p class="zustand">Telefon</p>
+        <div class="telefon-rahmen"><div class="jv" data-wiedergabe data-telefon></div></div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+
+    <script>
+      const TITEL = [
+        ["Morgenstimmung am See.mp3", "4:12"], ["Hafenmusik.mp3", "4:02"], ["Brandung am Morgen.m4a", "3:14"],
+        ["a521f3a7666b8fdd36d478156699e4b2.mp3", "2:48"], ["756a205ae7dccaf2161f213d0e5985c5.mp3", "3:31"],
+        ["992be22ff2eeacc815c4bb720282e0ac.flac", "5:06"], ["Abendlied im Garten.mp3", "3:44"], ["Sprachnotiz Tag 3.m4a", "0:48"],
+        ["Regen auf dem Dach.flac", "6:20"], ["Nachtzug nach Norden.mp3", "4:55"], ["Kaminfeuer.m4a", "8:02"],
+        ["Leuchtturm im Nebel.mp3", "3:27"],
+      ];
+      let jetzt = 6;
+      const ORT = "Audios / ki-musik";
+
+      function wiedergabe(el) {
+        const tel = el.hasAttribute("data-telefon");
+        const [name] = TITEL[jetzt];
+        const steuerung = `
+          <div class="wg-fortschritt"><span class="z">1:12</span><div class="fs-spur"></div><span class="z">${TITEL[jetzt][1]}</span></div>
+          <div class="transport">
+            <button title="Zufall"><i class="fa-solid fa-shuffle"></i></button>
+            <button title="Zurück"><i class="fa-solid fa-backward-step"></i></button>
+            <button class="skip" title="30 Sekunden zurück"><i class="fa-solid fa-rotate-left"></i><b>30</b></button>
+            <button class="gross" title="Pause"><i class="fa-solid fa-pause"></i></button>
+            <button class="skip" title="30 Sekunden vor"><i class="fa-solid fa-rotate-right"></i><b>30</b></button>
+            <button title="Weiter"><i class="fa-solid fa-forward-step"></i></button>
+            <button title="Wiederholen"><i class="fa-solid fa-repeat"></i></button>
+          </div>
+          <div class="tempo" role="radiogroup" aria-label="Tempo"><button>0,75x</button><button class="an">1x</button><button>1,5x</button></div>`;
+        const liste = `
+          <div class="liste">
+            <div class="liste-kopf"><i class="fa-solid fa-list-ol"></i> Titelliste <span class="stand">${jetzt + 1} von ${TITEL.length}</span></div>
+            <ol>${TITEL.map(([t, d], i) => `<li class="${i === jetzt ? "jetzt" : i < jetzt ? "gespielt" : ""}"><span class="nr">${i === jetzt ? '<i class="fa-solid fa-volume-high"></i>' : i + 1}</span><span class="t"><b>${t}</b><small>${ORT}</small></span><span class="d">${d}</span></li>`).join("")}</ol>
+          </div>`;
+        el.innerHTML = `
+          <div class="jv-kopf"><button class="jv-min"><i class="fa-solid fa-chevron-down"></i></button><span>Aktuelle Wiedergabe</span><span class="jv-luecke"></span></div>
+          <div class="jv-body">${tel
+            ? `<div class="kopf-titel"><div class="cover"><i class="fa-solid fa-music"></i></div><div><div class="t-titel">${name}</div><div class="t-ort">${ORT}</div></div></div>
+               <div class="steuer">${steuerung}</div>${liste}`
+            : `<div class="haupt"><div class="cover"><i class="fa-solid fa-music"></i></div><div class="t-titel">${name}</div><div class="t-ort">${ORT}</div>${steuerung}</div>${liste}`}
+          </div>`;
+        // Die Liste folgt dem Titel: der laufende steht in der Mitte (erst nach dem Aufbau, sonst stimmt die Lage nicht)
+        requestAnimationFrame(() => {
+          const li = el.querySelector("li.jetzt"), ol = el.querySelector("ol");
+          ol.scrollTo({ top: li.offsetTop - ol.offsetTop - ol.clientHeight / 2 + li.clientHeight / 2 });
+        });
+      }
+      const alle = () => document.querySelectorAll("[data-wiedergabe]").forEach(wiedergabe);
+      document.getElementById("weiter").onclick = () => { jetzt = (jetzt + 1) % TITEL.length; alle(); };
+      document.getElementById("zurueck").onclick = () => { jetzt = (jetzt - 1 + TITEL.length) % TITEL.length; alle(); };
+      document.fonts.ready.then(alle);
+
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => setzeThema(b.dataset.themeBtn)));
+      setzeThema(new URLSearchParams(location.search).get("thema") === "hell" ? "hell" : "dunkel");
+    </script>
+  </body>
+</html>
