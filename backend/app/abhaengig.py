@@ -12,8 +12,13 @@ from fastapi import HTTPException, Request
 
 from module.geraete.dienst import ist_geraeteschluessel
 
-# Cookie des Lesezugangs für Inhaltsadressen (gesetzt von module/inhalt/api.py, nur für deren Pfad).
+# Cookie des Lesezugangs für Inhaltsadressen (gesetzt von module/inhalt/api.py, nur für deren Pfad), je Schema ein
+# eigener Name. Die Kellerwolke ist über http und https auf demselben Rechner erreichbar, und Cookies unterscheiden
+# weder Port noch Schema: Ein Secure-Cookie aus der https-Adresse schickt der Browser über http nicht mit und lässt
+# eine http-Seite auch kein gleichnamiges Cookie setzen. Mit einem Namen für beide fehlte über http der Lesezugang
+# für immer, sobald man einmal über https angemeldet war (KW-1).
 LESEZUGANG_COOKIE = "kw_inhalt"
+LESEZUGANG_COOKIE_HTTP = "kw_inhalt_http"
 
 
 def hole_auth(request: Request):
@@ -56,6 +61,16 @@ def hole_geraete(request: Request):
     return request.app.state.geraete
 
 
+def ist_https(request: Request) -> bool:
+    """Kam die Anfrage über https (direkt oder über den Caddy vorne, der das Schema im Kopf weitergibt)?"""
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "") == "https"
+
+
+def lesezugang_cookie(request: Request) -> str:
+    """Name des Lesezugang-Cookies für das Schema dieser Anfrage (siehe LESEZUGANG_COOKIE)."""
+    return LESEZUGANG_COOKIE if ist_https(request) else LESEZUGANG_COOKIE_HTTP
+
+
 def absender(request: Request) -> str | None:
     """Die Adresse des Absenders (hinter dem Caddy vorne die echte, uvicorn liest dessen Weiterleitungskopf)."""
     return request.client.host if request.client else None
@@ -94,7 +109,7 @@ async def aktueller_benutzer(request: Request) -> dict:
 
 async def lese_benutzer(request: Request) -> dict:
     """Für Inhaltsadressen (<img>, <audio>, <video>, Download-Links): der Lesezugang als Cookie oder der Sitzungskopf."""
-    token = request.headers.get("x-kellerwolke-sitzung") or request.cookies.get(LESEZUGANG_COOKIE, "")
+    token = request.headers.get("x-kellerwolke-sitzung") or request.cookies.get(lesezugang_cookie(request), "")
     benutzer = await benutzer_zum_token(request, token)
     if not benutzer:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich")

@@ -62,11 +62,47 @@ async def test_zugang_per_cookie_und_nur_dafuer(umgebung):
     assert "httponly" in keks and "samesite=strict" in keks and "path=/api/v1/inhalt" in keks
     assert (await client.get(url)).status_code == 200
     # Der Cookie gilt nur für Inhalte.
-    client.cookies.set("kw_inhalt", h["X-Kellerwolke-Sitzung"])
+    client.cookies.set("kw_inhalt_http", h["X-Kellerwolke-Sitzung"])
     assert (await client.get("/api/v1/dateien")).status_code == 401
     # Abmelden beendet auch den Lesezugang.
     await client.post("/api/v1/auth/logout", headers=h)
     assert (await client.get(url)).status_code == 401
+
+
+async def test_lesezugang_je_schema_eigenes_cookie(umgebung):
+    """http und https derselben Kellerwolke teilen sich im Browser die Cookies (Cookies kennen weder Port noch Schema).
+    Ein Secure-Cookie aus https darf den Lesezugang über http nicht blockieren (KW-1): jedes Schema hat seinen Namen,
+    und jede Anfrage liest nur das Cookie ihres Schemas."""
+    client, app, _ = umgebung
+    h = await _anmelden(client)
+    k = await _hoch(client, h, "rot.jpg", _jpeg())
+    url = f"/api/v1/inhalt/vorschau/{k['id']}?v={k['etag']}"
+    https = {"X-Forwarded-Proto": "https"}
+
+    r = await client.post("/api/v1/inhalt/zugang", headers=h | https)
+    keks = r.headers["set-cookie"].lower()
+    assert keks.startswith("kw_inhalt=") and "; secure" in keks
+    r = await client.post("/api/v1/inhalt/zugang", headers=h)
+    keks = r.headers["set-cookie"].lower()
+    assert keks.startswith("kw_inhalt_http=") and "secure" not in keks
+
+    # Liegt im Browser ein Secure-Cookie einer alten https-Sitzung, gilt über http trotzdem der eigene Lesezugang.
+    client.cookies.clear()
+    client.cookies.set("kw_inhalt", "abgelaufen")
+    client.cookies.set("kw_inhalt_http", h["X-Kellerwolke-Sitzung"])
+    assert (await client.get(url)).status_code == 200
+    assert (await client.get(url, headers=https)).status_code == 401
+    # Und umgekehrt liest https nur sein eigenes Cookie.
+    client.cookies.clear()
+    client.cookies.set("kw_inhalt", h["X-Kellerwolke-Sitzung"])
+    assert (await client.get(url, headers=https)).status_code == 200
+    assert (await client.get(url)).status_code == 401
+
+    # Beenden löscht das Cookie des eigenen Schemas.
+    r = await client.delete("/api/v1/inhalt/zugang", headers=https)
+    assert r.headers["set-cookie"].lower().startswith("kw_inhalt=")
+    r = await client.delete("/api/v1/inhalt/zugang")
+    assert r.headers["set-cookie"].lower().startswith("kw_inhalt_http=")
 
 
 async def test_vorschau_zwei_stufen_einmal_dekodiert_und_versionsgebunden(umgebung):
@@ -172,7 +208,7 @@ async def test_download_und_zip_ueber_den_lesezugang(umgebung):
     r = await client.post("/api/v1/inhalt/zip", data={"ids": [k["id"], ordner["id"]], "name": "Auswahl.zip"})
     assert r.status_code == 200 and r.content[:2] == b"PK"
     assert "Auswahl.zip" in r.headers["content-disposition"]
-    client.cookies.set("kw_inhalt", "falsch")
+    client.cookies.set("kw_inhalt_http", "falsch")
     assert (await client.post("/api/v1/inhalt/zip", data={"ids": [k["id"]]})).status_code == 401
 
 

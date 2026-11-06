@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 
-from app.abhaengig import LESEZUGANG_COOKIE, aktueller_benutzer, hole_medien, hole_speicher, lese_benutzer
+from app.abhaengig import aktueller_benutzer, hole_medien, hole_speicher, ist_https, lese_benutzer, lesezugang_cookie
 from app.auslieferung import inhalt_antwort
 from app.inhaltstyp import inhaltstyp_aus_name
 from module.medien.arten import UMWANDELN, VEKTOR, Medienart, endung, medienart
@@ -31,20 +31,17 @@ _ABGESCHOTTET = {"Content-Security-Policy": "default-src 'none'; img-src 'self' 
                                            "media-src 'self'; sandbox"}
 
 
-def _https(request: Request) -> bool:
-    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "") == "https"
-
-
 @router.post("/zugang", status_code=204)
 async def zugang(request: Request, response: Response, benutzer=Depends(aktueller_benutzer)):
     """Richtet den Lesezugang dieser Sitzung ein (beim Start der Oberfläche)."""
-    response.set_cookie(LESEZUGANG_COOKIE, request.headers["x-kellerwolke-sitzung"], max_age=_ZUGANG_DAUER, path=_PFAD,
-                        httponly=True, samesite="strict", secure=_https(request))
+    response.set_cookie(lesezugang_cookie(request), request.headers["x-kellerwolke-sitzung"], max_age=_ZUGANG_DAUER,
+                        path=_PFAD, httponly=True, samesite="strict", secure=ist_https(request))
 
 
 @router.delete("/zugang", status_code=204)
 async def zugang_beenden(request: Request, response: Response):
-    response.delete_cookie(LESEZUGANG_COOKIE, path=_PFAD, httponly=True, samesite="strict", secure=_https(request))
+    response.delete_cookie(lesezugang_cookie(request), path=_PFAD, httponly=True, samesite="strict",
+                           secure=ist_https(request))
 
 
 def _cache(v: str | None, stand) -> str:
