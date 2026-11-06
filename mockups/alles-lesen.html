@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Alles lesen für eine App (KW-3)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      /* Entwurf KW-3: Ein App-Zugang darf auf Wunsch die ganze Wolke des Kontos lesen (Schalter in den Zugängen).
+         Der Assistent sucht und liest damit jederzeit und nennt die gelesenen Dateien unter der Antwort. */
+      body { background: var(--bg); color: var(--text); font-family: Barlow, sans-serif; margin: 0; }
+      .seite { max-width: 1180px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+      .zustand { font-size: 0.8rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; }
+      .karte { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 14px; padding: 18px; }
+      .karte h2 { margin: 0 0 4px; font-size: 1.1rem; display: flex; gap: 8px; align-items: center; }
+      .karte .unter { color: var(--text-2); font-size: 0.9rem; margin: 0 0 12px; }
+      .zugang { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--rand); }
+      .zugang .sym { width: 34px; height: 34px; border-radius: 9px; background: var(--flaeche-2); display: grid; place-items: center; color: var(--text-2); }
+      .zugang b { font-weight: 600; }
+      .rchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+      .rchip { font-size: 0.8rem; padding: 3px 9px; border-radius: 999px; background: var(--flaeche-2); border: 1px solid var(--rand); color: var(--text-2); display: inline-flex; gap: 6px; align-items: center; }
+      .rchip.schreiben { background: var(--akzent-weich); border-color: transparent; color: var(--akzent-stark); }
+      .rchip.alles { background: #fff4e0; border-color: #f2c26b; color: #8a5a00; }
+      :root[data-theme="dunkel"] .rchip.alles { background: #3a2a0c; border-color: #8a6420; color: #f2c26b; }
+      /* Schalter "Alles lesen" mit Erklärung */
+      .alles { margin-top: 10px; display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--flaeche-2); }
+      .schalter { width: 40px; height: 24px; border-radius: 12px; background: var(--rand-stark); position: relative; flex: none; border: none; }
+      .schalter::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left 0.15s; }
+      .schalter.an { background: var(--akzent); }
+      .schalter.an::after { left: 19px; }
+      .alles .t { font-size: 0.9rem; }
+      .alles .t small { display: block; color: var(--text-3); font-size: 0.8rem; margin-top: 2px; }
+      .akt { display: flex; gap: 4px; color: var(--text-3); }
+
+      /* Assistent: Antwort mit Quellen aus der Kellerwolke (vorhandene Quellenliste, eigenes Symbol) */
+      .chat .frage { align-self: flex-end; background: var(--akzent); color: var(--akzent-text); padding: 10px 14px; border-radius: 14px 14px 4px 14px; max-width: 80%; margin-left: auto; }
+      .chat .antwort { margin-top: 14px; line-height: 1.5; }
+      .chat .schritte { font-size: 0.85rem; color: var(--text-3); margin: 8px 0; display: flex; flex-direction: column; gap: 3px; }
+      .quellen { margin-top: 14px; border-top: 1px solid var(--rand); padding-top: 10px; }
+      .quellen .kopf { font-size: 0.78rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+      .quelle { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; color: var(--text); text-decoration: none; }
+      .quelle:hover { background: var(--flaeche-2); }
+      .quelle .sym { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--akzent-weich); color: var(--akzent); flex: none; }
+      .quelle .ort { color: var(--text-3); font-size: 0.8rem; }
+      .quelle .pfeil { margin-left: auto; color: var(--text-3); font-size: 0.8rem; }
+    </style>
+  </head>
+  <body>
+    <div class="seite">
+      <div>
+        <p class="zustand">1. Kellerwolke, Einstellungen, Zugänge</p>
+        <div class="karte">
+          <h2><i class="fa-solid fa-plug" style="color:var(--akzent)"></i> Apps</h2>
+          <p class="unter">Ein Schlüssel je App. Rechte gelten für den Ordner und alles darunter; schreiben schließt lesen ein.</p>
+          <div class="zugang">
+            <div class="sym"><i class="fa-solid fa-robot"></i></div>
+            <div>
+              <b>Assistent</b> <span class="rchip" style="font-size:0.72rem">aktiv</span>
+              <div class="rchips">
+                <span class="rchip alles"><i class="fa-solid fa-eye"></i> Alles lesen</span>
+                <span class="rchip schreiben"><i class="fa-solid fa-pen"></i> Apps/Assistent</span>
+              </div>
+              <div class="alles">
+                <button class="schalter an" aria-label="Alles lesen"></button>
+                <div class="t">Darf alle Dateien dieses Kontos lesen
+                  <small>Ändern, anlegen und löschen weiterhin nur in den Ordnern oben. Gut für den Assistenten, der in der ganzen Wolke sucht.</small></div>
+              </div>
+            </div>
+            <div class="akt"><i class="fa-solid fa-folder-tree"></i></div>
+          </div>
+          <div class="zugang">
+            <div class="sym"><i class="fa-solid fa-microphone"></i></div>
+            <div>
+              <b>Transkription</b> <span class="rchip" style="font-size:0.72rem">aktiv</span>
+              <div class="rchips">
+                <span class="rchip"><i class="fa-solid fa-eye"></i> Apps</span>
+                <span class="rchip schreiben"><i class="fa-solid fa-pen"></i> Apps/Transkription</span>
+              </div>
+              <div class="alles">
+                <button class="schalter" aria-label="Alles lesen"></button>
+                <div class="t">Darf alle Dateien dieses Kontos lesen <small>Aus: nur die Ordner oben.</small></div>
+              </div>
+            </div>
+            <div class="akt"><i class="fa-solid fa-folder-tree"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="zustand">2. Assistent: Antwort mit Quellen aus der Kellerwolke</p>
+        <div class="karte chat">
+          <div class="frage">Was steht in meinem Mietvertrag zur Kündigungsfrist?</div>
+          <div class="schritte">
+            <span><i class="fa-solid fa-magnifying-glass"></i> In der Kellerwolke gesucht: "Mietvertrag Kündigung"</span>
+            <span><i class="fa-solid fa-file-lines"></i> Gelesen: Mietvertrag Wohnung.pdf</span>
+          </div>
+          <div class="antwort">Laut Paragraf 4 deines Mietvertrags beträgt die Kündigungsfrist für dich drei Monate zum
+            Monatsende; der Vermieter muss je nach Dauer des Mietverhältnisses länger warten.</div>
+          <div class="quellen">
+            <div class="kopf">Quellen</div>
+            <a class="quelle"><span class="sym"><i class="fa-solid fa-cloud"></i></span><span>Mietvertrag Wohnung.pdf <span class="ort">· Dokumente / Verträge</span></span><span class="pfeil"><i class="fa-solid fa-arrow-up-right-from-square"></i> Kellerwolke</span></a>
+            <a class="quelle"><span class="sym"><i class="fa-solid fa-cloud"></i></span><span>Nebenkosten 2025.md <span class="ort">· Dokumente / Steuer 2026</span></span><span class="pfeil"><i class="fa-solid fa-arrow-up-right-from-square"></i> Kellerwolke</span></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => setzeThema(b.dataset.themeBtn)));
+      document.querySelectorAll(".schalter").forEach((b) => b.addEventListener("click", () => b.classList.toggle("an")));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
