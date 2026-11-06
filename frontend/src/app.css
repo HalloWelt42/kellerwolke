@@ -952,6 +952,11 @@ textarea {
   min-height: calc(var(--vorschau) + 44px);
   border-radius: var(--r2);
 }
+/* Das Foto füllt die Vorschau, ohne mit seinem Seitenverhältnis die Höhe der Reihe mitzubestimmen: alle Reihen gleich */
+.grid.nur-bilder .kachel.art-bild .vorschau img {
+  position: absolute;
+  inset: 0;
+}
 .grid.nur-bilder .kachel.art-bild .k-name-zeile,
 .grid.nur-bilder .kachel.art-bild .k-meta,
 .grid.nur-bilder .kachel.art-bild .umbenennen-feld {
