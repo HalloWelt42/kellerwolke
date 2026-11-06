@@ -85,7 +85,7 @@ body {
 .m-suche.aktiv { background: var(--m-flaeche); box-shadow: 0 0 0 2px var(--m-akzent); color: var(--m-text); }
 .m-inhalt { flex: 1; overflow-y: auto; overflow-x: clip; }
 .m-tabs {
-  flex: none; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 4px 30px;   /* + safe-area-inset-bottom */
+  flex: none; display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px 4px 30px;   /* + safe-area-inset-bottom */
   background: var(--m-flaeche); border-top: 1px solid var(--m-rand);
 }
 .m-tab { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--m-text-3); padding: 6px 0; }
@@ -152,6 +152,20 @@ body {
 .m-leiste { flex: none; display: flex; justify-content: space-around; padding: 10px 0 34px; }
 .m-leiste .m-knopf { color: #fff; }
 .m-punkte { text-align: center; font-size: 13px; color: #aab; padding-bottom: 6px; }
+
+/* ----- Filter nach Art (KW-5): in Dateien, wählt Inhalt und Ansicht; Symbol in der Farbe der Art und Anzahl ----- */
+.m-arten span { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.m-arten .art-bild i { color: #7a5cf0; }
+.m-arten .art-ton i { color: #e0569b; }
+.m-arten .art-video i { color: #e08a2b; }
+.m-arten span.aus { opacity: 0.4; }
+.m-nummer { width: 36px; text-align: center; flex: none; color: var(--m-text-3); font-variant-numeric: tabular-nums; }
+.m-zeile.spielt { background: var(--m-akzent-weich); }
+.m-zeile.spielt .m-nummer, .m-zeile.spielt .m-name { color: #e0569b; font-weight: 600; }
+.m-videos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px var(--m-a); }
+.m-standbild { aspect-ratio: 16 / 10; border-radius: 12px; background: var(--f); position: relative; display: grid; place-items: center; color: #fff; font-size: 22px; margin-bottom: 6px; }
+.m-dauer { position: absolute; right: 6px; bottom: 6px; font-size: 13px; padding: 1px 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); }
+.m-video .m-name { font-size: var(--m-klein); }
 
 /* ----- Medien ----- */
 .m-segment { display: flex; margin: 0 var(--m-a) 10px; background: var(--m-flaeche-2); border-radius: 10px; padding: 3px; flex: none; }
