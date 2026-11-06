@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Logo-Entwürfe (KW-7)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      /* Rückfall, falls stil.css fehlt (eigenständig geöffnet): dieselben Farben wie im Entwurfsstil */
+      :root { --bg: #eef1f5; --flaeche: #fff; --flaeche-2: #f4f6f9; --rand: #dde3ea; --text: #1b2735; --text-2: #5d6b7b; --text-3: #8593a2; --akzent: #2f7ce0; }
+      :root[data-theme="dunkel"] { --bg: #0b0f14; --flaeche: #171d26; --flaeche-2: #1c2430; --rand: #2b3543; --text: #e7edf3; --text-2: #9aa8b8; --text-3: #6b7a8a; --akzent: #4aa8ff; }
+      .mock-leiste { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 6px; background: #fff; padding: 6px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+      .mock-leiste button { width: 36px; height: 36px; border: none; border-radius: 8px; background: none; cursor: pointer; font-size: 1rem; }
+      .mock-leiste button.aktiv { background: #e6f0fd; }
+    </style>
+    <style>
+      /* Entwurf KW-7: neues Logo. Die Wolke bleibt und bleibt blau, aus ihr regnen winzige, bunte Dateien.
+         Jeder Entwurf in allen Größen, in denen das Logo wirklich vorkommt: Tab (16), Kopf (24 und 32), groß (96),
+         Symbol auf dem Home-Bildschirm (180, gerundet), dazu hell und dunkel. */
+      body { background: var(--bg); color: var(--text); font-family: Barlow, -apple-system, 'Helvetica Neue', sans-serif; margin: 0; }
+      .seite { max-width: 1280px; margin: 0 auto; padding: 28px 24px 80px; }
+      h1 { font-size: 1.6rem; margin: 0 0 6px; }
+      .einleitung { color: var(--text-2); margin: 0 0 24px; max-width: 760px; }
+      .entwuerfe { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); gap: 20px; }
+      .entwurf { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 14px; padding: 18px; }
+      .entwurf h2 { font-size: 1.1rem; margin: 0 0 2px; display: flex; align-items: baseline; gap: 8px; }
+      .entwurf h2 .nr { color: var(--akzent); font-weight: 600; }
+      .entwurf p { color: var(--text-2); font-size: 0.9rem; margin: 0 0 14px; min-height: 2.6em; }
+      .buehne { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+      .grund { border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+      .grund.hell { background: #f4f6f9; }
+      .grund.dunkel { background: #10151c; color: #e7edf3; }
+      .gross svg { width: 96px; height: 96px; display: block; }
+      .groessen { display: flex; align-items: flex-end; gap: 10px; }
+      .groessen svg { display: block; }
+      .kopfzeile { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.05rem; }
+      .kopfzeile svg { width: 24px; height: 24px; }
+      .symbole { display: flex; gap: 14px; align-items: center; justify-content: center; margin-top: 12px; }
+      .app-symbol { width: 90px; height: 90px; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
+      .app-symbol svg { width: 100%; height: 100%; display: block; }
+      .tab { display: flex; align-items: center; gap: 6px; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: 8px 8px 0 0; padding: 6px 12px; font-size: 0.82rem; }
+      .tab svg { width: 16px; height: 16px; }
+      .mass { font-size: 0.72rem; color: var(--text-3); text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="seite">
+      <h1>Logo-Entwürfe Kellerwolke</h1>
+      <p class="einleitung">
+        Die Wolke bleibt und bleibt blau, aus ihr regnen winzige, bunte Dateien. Jeder Entwurf steht in den Größen, in
+        denen das Logo vorkommt: Browser-Tab (16), Kopf der App (24, 32), groß (96) und als Symbol auf dem
+        Home-Bildschirm, jeweils auf hellem und dunklem Grund.
+      </p>
+      <div class="entwuerfe" id="entwuerfe"></div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell">☀</button>
+      <button data-theme-btn="dunkel" title="Dunkel">☾</button>
+    </div>
+
+    <script>
+      // Farben: Wolke im Blau der App, Dateien bunt
+      const BLAU = "#2f7ce0", BLAU_HELL = "#5aa2f5", BLAU_TIEF = "#1f5fb8";
+      const BUNT = ["#ef5350", "#ffb300", "#43a047", "#8e5cf0", "#00acc1", "#ff7043"];
+
+      // Eine winzige Datei: Rechteck mit umgeknickter Ecke oben rechts
+      function datei(x, y, b, h, farbe, drehung = 0) {
+        const e = Math.min(b, h) * 0.38; // Eselsohr
+        const mx = x + b / 2, my = y + h / 2;
+        return `<g transform="rotate(${drehung} ${mx} ${my})">
+          <path d="M${x + 0.6} ${y} H${x + b - e} L${x + b} ${y + e} V${y + h - 0.6} Q${x + b} ${y + h} ${x + b - 0.6} ${y + h}
+                   H${x + 0.6} Q${x} ${y + h} ${x} ${y + h - 0.6} V${y + 0.6} Q${x} ${y} ${x + 0.6} ${y} Z" fill="${farbe}"/>
+          <path d="M${x + b - e} ${y} V${y + e} H${x + b} Z" fill="#fff" opacity="0.55"/>
+        </g>`;
+      }
+
+      // Wolke aus Kreisen und einem gerundeten Sockel, Mittelpunkt (cx, cy), Breite w
+      function wolke(cx, cy, w, farbe = BLAU, glanz = true) {
+        const s = w / 48;
+        const t = (x, y) => `${cx + x * s} ${cy + y * s}`;
+        const k = (x, y, r) => `<circle cx="${cx + x * s}" cy="${cy + y * s}" r="${r * s}"/>`;
+        return `<g fill="${farbe}">
+          <rect x="${cx - 22 * s}" y="${cy - 2 * s}" width="${44 * s}" height="${14 * s}" rx="${7 * s}"/>
+          ${k(-12, 0, 9)}${k(1, -6, 12)}${k(13, 2, 8)}
+        </g>${glanz ? `<path d="M${t(-8, -9)} Q${t(-2, -17)} ${t(7, -15)}" stroke="#fff" stroke-width="${2.2 * s}" stroke-linecap="round" fill="none" opacity="0.35"/>` : ""}`;
+      }
+
+      const svg = (inhalt, hintergrund = "") =>
+        `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">${hintergrund}${inhalt}</svg>`;
+
+      // --- die Entwürfe -------------------------------------------------------------------------
+      const ENTWUERFE = [
+        {
+          name: "Leichter Regen",
+          text: "Klassische Wolke, darunter drei Reihen Dateien, versetzt wie Regen; nach unten kleiner und blasser.",
+          bild: () => wolke(32, 20, 50) +
+            datei(14, 36, 6, 8, BUNT[0]) + datei(29, 37, 6, 8, BUNT[1]) + datei(44, 36, 6, 8, BUNT[2]) +
+            `<g opacity="0.8">${datei(21, 48, 5, 6.5, BUNT[3]) + datei(37, 49, 5, 6.5, BUNT[4])}</g>` +
+            `<g opacity="0.55">${datei(29, 58, 4, 5, BUNT[5])}</g>`,
+        },
+        {
+          name: "Schräger Schauer",
+          text: "Die Dateien fallen schräg im Wind, leicht gedreht; wirkt bewegt und lebendig.",
+          bild: () => wolke(30, 20, 50) +
+            datei(13, 37, 6, 8, BUNT[0], -14) + datei(27, 38, 6, 8, BUNT[2], -14) + datei(41, 37, 6, 8, BUNT[1], -14) +
+            datei(9, 50, 5, 6.5, BUNT[4], -14) + datei(23, 51, 5, 6.5, BUNT[3], -14) + datei(37, 50, 5, 6.5, BUNT[5], -14),
+        },
+        {
+          name: "Drei Dateien",
+          text: "Nur drei, dafür größere Dateien; bleibt auch als Tab-Symbol in 16 Pixeln klar lesbar.",
+          bild: () => wolke(32, 22, 54) + datei(13, 41, 9, 12, BUNT[0]) + datei(27.5, 45, 9, 12, BUNT[1]) + datei(42, 41, 9, 12, BUNT[2]),
+        },
+        {
+          name: "Konfetti",
+          text: "Viele winzige Dateien in allen Farben, verschieden gedreht, wie ein bunter Schauer.",
+          bild: () => wolke(32, 19, 50) + [
+            [12, 35, 0, -20], [22, 39, 1, 10], [33, 35, 2, -6], [44, 38, 3, 18], [52, 34, 4, -12],
+            [16, 47, 5, 14], [28, 49, 4, -18], [39, 47, 0, 8], [49, 50, 1, -10], [22, 58, 2, 4], [35, 58, 3, -14],
+          ].map(([x, y, f, d]) => datei(x, y, 4.2, 5.4, BUNT[f], d)).join(""),
+        },
+        {
+          name: "Dateien als Tropfen",
+          text: "Die Wolke liegt höher, die Dateien hängen an feinen Regenstrichen; ruhiger, eher technisch.",
+          bild: () => wolke(32, 16, 50) +
+            [[16, 0], [27, 1], [38, 2], [49, 3]].map(([x, f], i) => {
+              const y = 32 + (i % 2) * 6;
+              return `<line x1="${x + 3}" y1="27" x2="${x + 3}" y2="${y - 1}" stroke="${BUNT[f]}" stroke-width="1.4" stroke-linecap="round" opacity="0.6"/>` + datei(x, y, 6, 8, BUNT[f]);
+            }).join("") +
+            `<g opacity="0.6">${datei(21, 50, 5, 6.5, BUNT[4]) + datei(43, 52, 5, 6.5, BUNT[5])}</g>`,
+        },
+        {
+          name: "Wolke im Verlauf",
+          text: "Wolke mit sanftem Blauverlauf, die Dateien in einem Bogen darunter; wirkt weich und freundlich.",
+          bild: () => `<defs><linearGradient id="vl" gradientUnits="userSpaceOnUse" x1="0" y1="6" x2="0" y2="35"><stop offset="0" stop-color="${BLAU_HELL}"/><stop offset="1" stop-color="${BLAU_TIEF}"/></linearGradient></defs>` +
+            wolke(32, 21, 52, "url(#vl)") +
+            datei(10, 38, 6, 8, BUNT[0], -8) + datei(21, 43, 6, 8, BUNT[1], -4) + datei(32, 45, 6, 8, BUNT[2], 0) +
+            datei(43, 43, 6, 8, BUNT[3], 4) + datei(53, 38, 6, 8, BUNT[4], 8),
+        },
+      ];
+
+      // Für Symbole mit Grund (Home-Bildschirm): weiße Kachel, Logo etwas kleiner in der Mitte
+      const kachel = (bild) => svg(`<g transform="translate(6 5) scale(0.82)">${bild}</g>`, `<rect width="64" height="64" fill="#ffffff"/>`);
+      const kachelDunkel = (bild) => svg(`<g transform="translate(6 5) scale(0.82)">${bild}</g>`, `<rect width="64" height="64" fill="#162131"/>`);
+
+      const ziel = document.getElementById("entwuerfe");
+      ENTWUERFE.forEach((e, i) => {
+        // jede Zeichnung bekommt eigene Kennungen (Verläufe)
+        const bild = () => e.bild().replaceAll('id="vl"', `id="vl${i}"`).replaceAll("url(#vl)", `url(#vl${i})`);
+        const groessen = (grund) => `<div class="groessen">${[16, 24, 32, 48].map((g) => `<div>${svg(bild()).replace("<svg ", `<svg width="${g}" height="${g}" `)}<div class="mass">${g}</div></div>`).join("")}</div>`;
+        const el = document.createElement("section");
+        el.className = "entwurf";
+        el.innerHTML = `
+          <h2><span class="nr">${String.fromCharCode(65 + i)}</span> ${e.name}</h2>
+          <p>${e.text}</p>
+          <div class="buehne">
+            <div class="grund hell"><div class="gross">${svg(bild())}</div>${groessen()}<div class="kopfzeile">${svg(bild())} Kellerwolke</div></div>
+            <div class="grund dunkel"><div class="gross">${svg(bild())}</div>${groessen()}<div class="kopfzeile">${svg(bild())} Kellerwolke</div></div>
+          </div>
+          <div class="symbole">
+            <div class="app-symbol">${kachel(bild())}</div>
+            <div class="app-symbol">${kachelDunkel(bild())}</div>
+            <div class="tab">${svg(bild())} Kellerwolke</div>
+          </div>`;
+        ziel.appendChild(el);
+      });
+
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => setzeThema(b.dataset.themeBtn)));
+      setzeThema(new URLSearchParams(location.search).get("thema") === "dunkel" ? "dunkel" : "hell");
+    </script>
+  </body>
+</html>
