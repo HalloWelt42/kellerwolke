@@ -86,8 +86,16 @@ export function springen(delta: number): void {
   const d = el.duration || 0;
   el.currentTime = Math.max(0, Math.min(d, el.currentTime + delta));
 }
+// Die wählbaren Tempi (KW-8): langsamer, normal, schneller. Ein anderes, früher gespeichertes Tempo wird auf das
+// nächste davon gesetzt, damit nie ein Tempo ohne Knopf läuft.
+export const TEMPI = [0.75, 1, 1.5] as const;
+
+function naechstesTempo(t: number): number {
+  return TEMPI.reduce((best, x) => (Math.abs(x - t) < Math.abs(best - t) ? x : best), 1);
+}
+
 export function setzeTempo(t: number): void {
-  player.tempo = t;
+  player.tempo = naechstesTempo(t);
 }
 export function springeZuIndex(i: number): void {
   if (i >= 0 && i < player.liste.length) player.index = i;
@@ -174,7 +182,7 @@ export function zustandLaden(konto: string): number {
     if (typeof d.stumm === "boolean") player.stumm = d.stumm;
     if (d.wiederholung === "aus" || d.wiederholung === "eine" || d.wiederholung === "alle") player.wiederholung = d.wiederholung;
     if (typeof d.zufall === "boolean") player.zufall = d.zufall;
-    if (typeof d.tempo === "number") player.tempo = d.tempo;
+    if (typeof d.tempo === "number") player.tempo = naechstesTempo(d.tempo);
     return typeof d.zeit === "number" ? d.zeit : 0;
   } catch {
     return 0;
