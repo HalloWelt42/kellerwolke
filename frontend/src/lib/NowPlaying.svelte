@@ -78,11 +78,13 @@
   .jv-min:hover { color: var(--text); }
   .jv-luecke { width: 36px; }
   .jv-titelzeile { color: var(--text-3); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
-  .jv-body { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--a5); align-items: center; padding-bottom: var(--a5); min-height: 0; }
-  .jv-haupt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--a3); }
+  /* minmax(0, ...): eine Spalte "1fr" wird nie schmaler als ihr breitester Inhalt; ein langer Titel ohne Umbruch
+     schob sonst die Ansicht am Telefon über den rechten Rand (KW-6) */
+  .jv-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--a5); align-items: center; padding-bottom: var(--a5); min-height: 0; }
+  .jv-haupt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--a3); min-width: 0; }
   .jv-cover { width: min(300px, 36vh); aspect-ratio: 1; border-radius: var(--r3); display: grid; place-items: center; color: #fff; font-size: 3.4rem; background: linear-gradient(135deg, #6d5efc, #3b82f6); }
   .jv-titel { font-size: 1.35rem; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .jv-sub { border: none; background: transparent; color: var(--text-3); cursor: pointer; font: inherit; margin-top: -6px; }
+  .jv-sub { border: none; background: transparent; color: var(--text-3); cursor: pointer; font: inherit; margin-top: -6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .jv-sub:hover { color: var(--akzent); }
   .jv-fortschritt { display: flex; align-items: center; gap: var(--a2); width: 100%; max-width: 440px; }
   .jv-zeit { font-size: 0.78rem; color: var(--text-3); min-width: 36px; font-variant-numeric: tabular-nums; }
@@ -101,7 +103,7 @@
   .jv-tempo-l { color: var(--text-3); font-size: 0.8rem; margin-right: var(--a1); }
   .jv-tempo button { border: 1px solid var(--rand); background: var(--flaeche-2); color: var(--text-2); border-radius: 999px; padding: 3px 11px; font-size: 0.78rem; cursor: pointer; }
   .jv-tempo button.an { background: var(--akzent-weich); color: var(--akzent-stark); border-color: transparent; font-weight: 600; }
-  .jv-schlange { align-self: stretch; display: flex; flex-direction: column; min-height: 0; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: var(--r3); padding: var(--a3); }
+  .jv-schlange { align-self: stretch; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--flaeche-2); border: 1px solid var(--rand); border-radius: var(--r3); padding: var(--a3); }
   .jv-schlange-kopf { font-weight: 600; margin-bottom: var(--a2); display: flex; align-items: center; gap: var(--a2); }
   .jv-schlange ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
   .jv-schlange li { border-radius: var(--r2); }
@@ -115,6 +117,11 @@
   .js-t small { color: var(--text-3); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .js-t b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   @media (max-width: 720px) {
-    .jv-body { grid-template-columns: 1fr; overflow-y: auto; align-content: start; }
+    .jv-panel { padding: 0 var(--a4); }
+    .jv-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; align-content: start; }
+    /* Sieben Knöpfe passen auch auf 320 Pixel: über die Breite verteilt, etwas kleiner */
+    .jv-transport { width: 100%; max-width: 440px; justify-content: space-between; gap: 0; }
+    .jv-transport button { width: 38px; height: 38px; }
+    .jv-transport .gross { width: 54px; height: 54px; }
   }
 </style>
