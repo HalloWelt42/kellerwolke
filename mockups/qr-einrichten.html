@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Kellerwolke - Einrichten per QR-Code (KW-2)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/mobil.css" />
+    <style>
+      /* Entwurf KW-2: Einrichten per QR-Code statt Tippen.
+         Telefon anmelden: die Web-App scannt den Kopplungs-QR vom Rechner (Einstellungen, Geräte).
+         Apps verbinden: die Kellerwolke zeigt nach dem Ausstellen eines App-Schlüssels einen QR mit Adresse und
+         Schlüssel; jede App mit Kellerwolke-Feldern scannt ihn in ihren Einstellungen (Baustein im Appkern). */
+      .buehne { grid-template-columns: repeat(auto-fill, minmax(375px, 1fr)); }
+      .karte-r { width: 620px; max-width: 100%; background: var(--m-flaeche); border: 1px solid var(--m-rand); border-radius: 14px; padding: 18px 20px; font-size: 15px; color: var(--m-text); }
+      .karte-r h3 { margin: 0 0 6px; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+      .karte-r p { color: var(--m-text-2); margin: 6px 0 12px; font-size: 14px; }
+      .zeile-r { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: start; }
+      .qr { width: 150px; height: 150px; background: #fff; border-radius: 10px; padding: 10px; box-sizing: border-box; border: 1px solid var(--m-rand); }
+      .qr svg { width: 100%; height: 100%; display: block; }
+      code.wert { display: block; font-size: 13px; background: var(--m-flaeche-2); border-radius: 8px; padding: 8px 10px; word-break: break-all; color: var(--m-text); }
+      .knopf-r { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--m-rand); background: var(--m-flaeche); color: var(--m-text); font: inherit; font-size: 14px; }
+      .knopf-r.primaer { background: var(--m-akzent); border-color: var(--m-akzent); color: var(--m-akzent-text); }
+      .hinweis { font-size: 13px; color: var(--m-text-3); }
+
+      /* Telefon: Anmeldung der Web-App */
+      .m-login { padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; }
+      .m-login .marke { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 600; margin: 10px 0 2px; }
+      .m-login .marke img { width: 34px; height: 34px; }
+      .m-feld { height: 50px; border-radius: 12px; background: var(--m-flaeche); border: 1px solid var(--m-rand); padding: 0 14px; display: flex; align-items: center; color: var(--m-text-3); font-size: 17px; }
+      .m-pille { height: 52px; border-radius: 14px; border: none; display: flex; align-items: center; justify-content: center; gap: 10px; font: inherit; font-weight: 600; font-size: 17px; }
+      .m-pille.primaer { background: var(--m-akzent); color: var(--m-akzent-text); }
+      .m-pille.zweit { background: var(--m-akzent-weich); color: var(--m-akzent); }
+      .m-oder { text-align: center; color: var(--m-text-3); font-size: 14px; }
+
+      /* Telefon: Scanner (Kamera mit Rahmen) */
+      .scanner { flex: 1; position: relative; background: #0d1116; display: grid; place-items: center; overflow: hidden; }
+      .scanner .bild { position: absolute; inset: 0; background: radial-gradient(circle at 50% 45%, #3a4350, #12161c 70%); }
+      .scanner .rahmen { position: relative; width: 230px; height: 230px; border-radius: 22px; box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.45); }
+      .scanner .rahmen::before, .scanner .rahmen::after { content: ""; position: absolute; inset: 0; border-radius: 22px; border: 4px solid #fff; clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 0 100%); }
+      .scanner .rahmen .qr { position: absolute; inset: 30px; width: auto; height: auto; opacity: 0.85; }
+      .scanner .text { position: absolute; left: 24px; right: 24px; bottom: 120px; text-align: center; color: #fff; font-size: 16px; }
+      .scanner .unten { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; justify-content: center; gap: 14px; }
+      .scanner .unten button { height: 48px; padding: 0 20px; border-radius: 24px; border: none; background: rgba(255, 255, 255, 0.16); color: #fff; font: inherit; font-size: 16px; display: inline-flex; align-items: center; gap: 8px; }
+      .scanner.ok .rahmen::before { border-color: var(--m-gut); }
+      .treffer { position: absolute; top: 100px; left: 20px; right: 20px; background: var(--m-flaeche); color: var(--m-text); border-radius: 16px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+      .treffer i { color: var(--m-gut); font-size: 24px; }
+
+      /* App-Einstellungen (Appkern): Zeilen Kellerwolke und Schlüssel mit Scan-Knopf */
+      .einst { background: var(--m-flaeche); border-radius: var(--m-r); margin: 8px var(--m-a); overflow: hidden; }
+      .einst-zeile { padding: 12px 14px; border-top: 1px solid var(--m-rand); }
+      .einst-zeile:first-child { border-top: none; }
+      .einst-zeile .name { font-weight: 600; font-size: 16px; }
+      .einst-zeile .erkl { color: var(--m-text-3); font-size: 13px; margin: 2px 0 8px; }
+      .einst-zeile .wert { display: flex; gap: 8px; align-items: center; }
+      .einst-zeile .wert .m-feld { flex: 1; height: 44px; font-size: 15px; color: var(--m-text); min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .einst-zeile .scan { width: 44px; height: 44px; border-radius: 12px; border: none; background: var(--m-akzent-weich); color: var(--m-akzent); font-size: 18px; flex: none; }
+      .einst-zeile.neu .m-feld { border-color: var(--m-gut); }
+    </style>
+  </head>
+  <body>
+    <div class="buehne">
+
+      <!-- 1. Anmeldung der Web-App mit QR -->
+      <div>
+        <p class="zustand-titel">1. Telefon: Anmeldung mit "QR scannen"</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-inhalt">
+            <div class="m-login">
+              <div class="marke"><img src="/frontend/public/favicon.svg" alt="" /> Kellerwolke</div>
+              <div style="color:var(--m-text-2)">Die eigene Wolke im Keller</div>
+              <div class="m-feld">Name oder Kürzel</div>
+              <div class="m-feld">Passwort</div>
+              <button class="m-pille primaer">Anmelden</button>
+              <div class="m-oder">oder ohne Passwort</div>
+              <button class="m-pille zweit"><i class="fa-solid fa-qrcode"></i> QR scannen</button>
+              <button class="m-pille zweit" style="background:none"><i class="fa-solid fa-keyboard"></i> Code eintippen</button>
+              <div class="m-meta" style="text-align:center">Den QR zeigt die Kellerwolke am Rechner unter Einstellungen, Geräte.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Scanner -->
+      <div>
+        <p class="zustand-titel">2. Telefon: Kamera liest den Kopplungs-QR</p>
+        <div class="telefon">
+          <div class="m-status" style="background:#0d1116"></div>
+          <div class="scanner">
+            <div class="bild"></div>
+            <div class="rahmen"><div class="qr" data-qr="k"></div></div>
+            <div class="text">QR-Code vom Rechner in den Rahmen halten</div>
+            <div class="unten">
+              <button><i class="fa-solid fa-xmark"></i> Abbrechen</button>
+              <button><i class="fa-solid fa-keyboard"></i> Code eintippen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Treffer -->
+      <div>
+        <p class="zustand-titel">3. Telefon: erkannt, Gerät wird gekoppelt</p>
+        <div class="telefon">
+          <div class="m-status" style="background:#0d1116"></div>
+          <div class="scanner ok">
+            <div class="bild"></div>
+            <div class="rahmen"><div class="qr" data-qr="k"></div></div>
+            <div class="treffer"><i class="fa-solid fa-circle-check"></i><div><b>Code erkannt</b><div class="m-meta">Dieses iPhone wird mit admin gekoppelt ...</div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Rechner: Geräte -->
+      <div>
+        <p class="zustand-titel">4. Rechner: Einstellungen, Geräte (wie heute, Text angepasst)</p>
+        <div class="karte-r">
+          <h3><i class="fa-solid fa-link" style="color:var(--m-akzent)"></i> Neues Gerät koppeln</h3>
+          <div class="zeile-r">
+            <div class="qr" data-qr="k"></div>
+            <div>
+              <p style="margin-top:0">Am Telefon in der Web-App auf der Anmeldeseite <b>QR scannen</b> wählen und diesen Code in den Rahmen halten. Ohne Kamera: den Code eintippen.</p>
+              <code class="wert" style="font-size:22px;letter-spacing:0.2em;text-align:center">K7F-2QX</code>
+              <p class="hinweis">Gilt zehn Minuten und einmal.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Rechner: Zugänge mit QR -->
+      <div>
+        <p class="zustand-titel">5. Rechner: Einstellungen, Zugänge: Schlüssel mit QR</p>
+        <div class="karte-r">
+          <h3><i class="fa-solid fa-key" style="color:var(--m-akzent)"></i> Schlüssel für Pinnwand ausgestellt</h3>
+          <div class="zeile-r">
+            <div class="qr" data-qr="z"></div>
+            <div>
+              <p style="margin-top:0">In den Einstellungen der App bei <b>Kellerwolke</b> auf <i class="fa-solid fa-qrcode"></i> tippen und diesen Code scannen: Adresse und Schlüssel stehen dann beide drin.</p>
+              <code class="wert">https://192.168.178.49:39280</code>
+              <div style="height:6px"></div>
+              <code class="wert">kw_app_Vh3qR8xL0dJm2ZtYw4bN9cKpF7aE1sGu6iOyQ5rTe0M</code>
+              <div style="display:flex;gap:8px;margin-top:10px"><button class="knopf-r primaer"><i class="fa-solid fa-copy"></i> Schlüssel kopieren</button></div>
+              <p class="hinweis">Nur jetzt sichtbar, auch der QR. Geht er verloren, stellst du einen neuen aus.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. App-Einstellungen mit Scan -->
+      <div>
+        <p class="zustand-titel">6. Jede App (Appkern): Einstellungen, Verbindungen, nach dem Scan</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>Verbindungen<span class="m-unter">Pinnwand, Einstellungen</span></h1></div>
+          <div class="m-inhalt">
+            <div class="m-band" style="background:var(--m-akzent-weich);color:var(--m-text)"><i class="fa-solid fa-circle-check" style="color:var(--m-gut)"></i> Aus dem QR übernommen: Adresse und Schlüssel</div>
+            <div class="einst">
+              <div class="einst-zeile neu">
+                <div class="name">Kellerwolke</div>
+                <div class="erkl">Adresse der Kellerwolke</div>
+                <div class="wert"><div class="m-feld">https://192.168.178.49:39280</div><button class="scan" aria-label="QR scannen"><i class="fa-solid fa-qrcode"></i></button></div>
+              </div>
+              <div class="einst-zeile neu">
+                <div class="name">App-Schlüssel der Kellerwolke</div>
+                <div class="erkl">In der Kellerwolke unter Einstellungen, Zugänge ausgestellt</div>
+                <div class="wert"><div class="m-feld">••••••••••••T0NM</div><button class="scan" aria-label="QR scannen"><i class="fa-solid fa-qrcode"></i></button></div>
+              </div>
+            </div>
+            <div style="padding: 8px var(--m-a)"><button class="m-pille primaer" style="width:100%">Speichern</button></div>
+            <p class="m-meta" style="padding: 0 var(--m-a)">Am Rechner genauso: der Knopf öffnet die Kamera des Rechners. Fest vom Ausrollen gesetzte Felder lassen sich nicht überschreiben.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      // Stellvertretendes QR-Muster (nur Optik im Entwurf; in der App erzeugt es uqr aus dem echten Inhalt)
+      function qr(saat) {
+        let x = saat.charCodeAt(0) * 9301 + 49297;
+        const zufall = () => ((x = (x * 9301 + 49297) % 233280) / 233280);
+        const n = 25, z = [];
+        const marke = (r, c) => [[0, 0], [0, n - 7], [n - 7, 0]].some(([a, b]) => r >= a && r < a + 7 && c >= b && c < b + 7);
+        const markeVoll = (r, c) => [[0, 0], [0, n - 7], [n - 7, 0]].some(([a, b]) => {
+          const i = r - a, j = c - b;
+          return i >= 0 && i < 7 && j >= 0 && j < 7 && (i === 0 || i === 6 || j === 0 || j === 6 || (i > 1 && i < 5 && j > 1 && j < 5));
+        });
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+          if (marke(r, c) ? markeVoll(r, c) : zufall() > 0.52) z.push(`<rect x="${c}" y="${r}" width="1" height="1"/>`);
+        }
+        return `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" fill="#111">${z.join("")}</svg>`;
+      }
+      document.querySelectorAll("[data-qr]").forEach((el) => (el.innerHTML = qr(el.dataset.qr)));
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema("hell");
+    </script>
+  </body>
+</html>
