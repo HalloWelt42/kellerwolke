@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Medien in Dateien (KW-5)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/stil.css" />
+    <style>
+      /* Entwurf KW-5: keine eigene Seite Medien mehr. Die Ansicht Dateien zeigt je Art die passende Darstellung:
+         Filter nach Art (Alle, Bilder, Audio, Video) wählt Inhalt UND Ansicht, Kacheln in drei Größen. */
+
+      /* Knopfleisten: nur Symbol, der Text steht im Hover (title) */
+      .seg {
+        display: inline-flex;
+        gap: 2px;
+        background: var(--flaeche-2);
+        border: 1px solid var(--rand);
+        border-radius: var(--r2);
+        padding: 2px;
+        flex: none;
+      }
+      .seg button {
+        border: none;
+        background: transparent;
+        color: var(--text-2);
+        font: inherit;
+        font-size: 0.86rem;
+        height: 32px;
+        min-width: 34px;
+        padding: 0 var(--a2);
+        border-radius: var(--r1);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .seg button:hover { background: var(--flaeche-3); color: var(--text); }
+      .seg button.aktiv { background: var(--akzent-weich); color: var(--akzent-stark); }
+      .seg button .z { font-size: 0.74rem; color: var(--text-3); }
+      .seg button.aktiv .z { color: inherit; }
+      .seg button[disabled] { opacity: 0.35; cursor: default; background: transparent; }
+      /* Farben der Arten: dieselben wie auf den Kacheln */
+      .seg .f-bild i { color: var(--art-bild); }
+      .seg .f-audio i { color: var(--art-audio); }
+      .seg .f-video i { color: var(--art-video); }
+      .seg .trenner { width: 1px; background: var(--rand); margin: 4px 2px; }
+
+      :root { --art-bild: #1f9d6b; --art-audio: #7a52d6; --art-video: #d9612b; }
+      :root[data-theme="dunkel"] { --art-bild: #44c995; --art-audio: #a688f0; --art-video: #f08a55; }
+
+      .werkzeuge { flex-wrap: wrap; row-gap: var(--a2); }
+      .knopf.diashow { gap: 6px; }
+
+      /* --- Raster in drei Größen --- */
+      .grid { --spalte: 150px; --vorschau: 88px; grid-template-columns: repeat(auto-fill, minmax(min(var(--spalte), 100%), 1fr)); padding-bottom: 110px; }
+      .grid.g-mittel { --spalte: 190px; --vorschau: 128px; }
+      .grid.g-gross { --spalte: 300px; --vorschau: 210px; }
+      .kachel .vorschau { height: var(--vorschau); position: relative; }
+      .grid.g-gross .kachel .k-name { font-size: 0.95rem; }
+
+      /* Bild: Foto füllt die Vorschau (neutrale Platzhalter im Entwurf) */
+      .foto { position: absolute; inset: 0; }
+      .f1 { background: linear-gradient(135deg, #8fb8de, #3c6e9e); }
+      .f2 { background: linear-gradient(160deg, #f2c17d, #c46a3b); }
+      .f3 { background: linear-gradient(120deg, #9fd3a8, #2f7d5a); }
+      .f4 { background: linear-gradient(200deg, #d7c6f2, #6c56b8); }
+      .f5 { background: linear-gradient(90deg, #f1e3b5, #a9884a); }
+      .f6 { background: linear-gradient(145deg, #b8c4cf, #4d5b69); }
+      .art-marke {
+        position: absolute; top: 6px; right: 6px; z-index: 1;
+        font-size: 0.68rem; font-weight: 600; padding: 2px 6px; border-radius: 4px;
+        background: rgba(0, 0, 0, 0.55); color: #fff;
+      }
+      .dauer-marke {
+        position: absolute; bottom: 6px; right: 6px; z-index: 1;
+        font-size: 0.72rem; padding: 1px 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); color: #fff;
+        font-variant-numeric: tabular-nums;
+      }
+      /* Aktion je Art auf der Kachel: Bild Vollbild, Audio Abspielen, Video Abspielen */
+      .k-aktion {
+        position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+        background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 1rem;
+        display: grid; place-items: center; opacity: 0; transition: opacity var(--schnell);
+      }
+      .grid.g-gross .k-aktion { width: 58px; height: 58px; font-size: 1.3rem; }
+      .kachel:hover .k-aktion, .k-aktion.immer { opacity: 1; }
+      .vorschau.audio { background: linear-gradient(140deg, color-mix(in srgb, var(--art-audio) 30%, var(--flaeche-3)), var(--flaeche-3)); color: var(--art-audio); }
+      .vorschau.video { background: #1d232c; }
+      .vorschau.video .foto { opacity: 0.85; }
+      .kachel.spielt { border-color: var(--art-audio); }
+      .kachel.spielt .k-aktion { opacity: 1; background: var(--art-audio); }
+
+      /* Ansicht Bilder: randlos, nur Foto, Name im Hover */
+      .grid.nur-bilder .kachel.art-bild { padding: 0; overflow: hidden; border: none; background: none; }
+      .grid.nur-bilder .kachel.art-bild .vorschau { margin: 0; border-radius: var(--r2); height: 100%; min-height: calc(var(--vorschau) + 44px); }
+      .grid.nur-bilder .kachel.art-bild .k-name,
+      .grid.nur-bilder .kachel.art-bild .k-meta { display: none; }
+      .grid.nur-bilder .kachel.art-bild .art-marke { display: none; }
+      .grid.nur-bilder .kachel.art-bild .unter {
+        position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 18px 8px 6px;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.6)); color: #fff; font-size: 0.8rem;
+        opacity: 0; transition: opacity var(--schnell); border-radius: 0 0 var(--r2) var(--r2);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .grid.nur-bilder .kachel.art-bild:hover .unter { opacity: 1; }
+      .kachel .unter { display: none; }
+      .grid.nur-bilder .kachel.art-bild .unter { display: block; }
+
+      /* --- Liste (alle Arten), Spalte Dauer für Ton und Video --- */
+      .tabelle { flex: 1; overflow-y: auto; padding: 0 var(--a4) 110px; }
+      .t-zeile {
+        display: grid; grid-template-columns: 36px minmax(0, 1fr) 70px 90px 130px; align-items: center;
+        gap: var(--a3); padding: 0 var(--a2); height: 46px; border-bottom: 1px solid var(--rand); font-size: 0.9rem;
+      }
+      .t-zeile.kopf { height: 34px; font-size: 0.78rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.03em; }
+      .t-zeile:not(.kopf):hover { background: var(--flaeche-2); }
+      .t-zeile .rechts { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+      .t-zeile .sym { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; background: var(--flaeche-3); color: var(--text-3); position: relative; overflow: hidden; }
+      .t-zeile .sym .foto { border-radius: 6px; }
+      .t-zeile .sym.ordner { color: var(--ordner); background: none; font-size: 1.15rem; }
+      .t-zeile .n { display: flex; align-items: center; gap: var(--a2); min-width: 0; }
+      .t-zeile .n span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .t-zeile .z-akt { margin-left: auto; display: none; gap: 4px; }
+      .t-zeile:hover .z-akt, .t-zeile.spielt .z-akt { display: inline-flex; }
+      .z-akt button { border: none; background: var(--flaeche-3); color: var(--text-2); width: 30px; height: 30px; border-radius: 6px; cursor: pointer; }
+      .z-akt button:hover { color: var(--akzent-stark); }
+      .t-zeile.spielt { background: color-mix(in srgb, var(--art-audio) 10%, transparent); }
+      .t-zeile.spielt .n span { color: var(--art-audio); font-weight: 500; }
+
+      /* Ansicht Audio: Titelliste wie ein Album, Nummer, Dauer, Abspielen */
+      .tabelle.audio .t-zeile { grid-template-columns: 36px minmax(0, 1fr) 70px 90px 130px; }
+      .alle-spielen { gap: 6px; }
+
+      /* Platz für die Player-Leiste */
+      .player-leiste {
+        position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center; gap: var(--a3);
+        padding: 0 var(--a4); background: var(--flaeche); border-top: 1px solid var(--rand); font-size: 0.86rem;
+        z-index: 5;
+      }
+      .player-leiste .cov { width: 40px; height: 40px; border-radius: 6px; display: grid; place-items: center; color: #fff; background: var(--art-audio); }
+      .player-leiste .t { min-width: 0; }
+      .player-leiste .t div:first-child { font-weight: 500; }
+      .player-leiste .t div:last-child { color: var(--text-3); font-size: 0.78rem; }
+      .player-leiste .spur { flex: 1; height: 4px; border-radius: 2px; background: var(--flaeche-3); position: relative; }
+      .player-leiste .spur::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 37%; background: var(--art-audio); border-radius: 2px; }
+      .inhalt { position: relative; }
+
+      /* Hinweis des Entwurfs */
+      .entwurf-hinweis {
+        margin: 0 var(--a4) var(--a2); padding: var(--a2) var(--a3); border-left: 3px solid var(--akzent);
+        background: var(--akzent-weich); color: var(--text); font-size: 0.84rem; border-radius: 0;
+      }
+      .grid.verborgen, .tabelle.verborgen, .knopf.verborgen { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="kopf">
+        <div class="marke"><i class="fa-solid fa-cloud"></i> Kellerwolke</div>
+        <div class="kopf-suche">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </div>
+        <div class="kopf-rechts">
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip"><span class="avatar">A</span> admin <i class="fa-solid fa-chevron-down pfeil"></i></button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche <button class="nav-einklapp" title="Navigation ausblenden"><i class="fa-solid fa-angles-left"></i></button></div>
+        <a class="nav-eintrag aktiv"><i class="fa-solid fa-folder"></i> Meine Dateien</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</a>
+        <a class="nav-eintrag"><i class="fa-solid fa-trash"></i> Papierkorb</a>
+      </nav>
+
+      <section class="inhalt">
+        <!-- Keine Leiste "Dateien | Medien" mehr: es gibt nur die Ansicht Dateien -->
+        <div class="werkzeuge">
+          <button class="knopf primaer" title="Neuer Ordner"><i class="fa-solid fa-folder-plus"></i></button>
+          <button class="knopf" title="Hochladen"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+
+          <!-- Filter nach Art: wählt Inhalt und die zur Art passende Ansicht -->
+          <div class="seg" id="art">
+            <button data-art="alle" class="aktiv" title="Alles in diesem Ordner"><i class="fa-solid fa-border-all"></i> <span class="z" data-zahl="alle"></span></button>
+            <button data-art="bild" class="f-bild" title="Bilder: randlose Fotos, Vollbild und Diashow"><i class="fa-regular fa-image"></i> <span class="z" data-zahl="bild"></span></button>
+            <button data-art="audio" class="f-audio" title="Audio: Titelliste mit Dauer, alles abspielen"><i class="fa-solid fa-music"></i> <span class="z" data-zahl="audio"></span></button>
+            <button data-art="video" class="f-video" title="Video: Standbilder mit Dauer, Abspielen"><i class="fa-solid fa-film"></i> <span class="z" data-zahl="video"></span></button>
+          </div>
+
+          <!-- Aktion der Art: Diashow bei Bildern, alles abspielen bei Audio -->
+          <button class="knopf diashow" id="diashow" title="Diashow aller Bilder dieses Ordners"><i class="fa-solid fa-images"></i> Diashow</button>
+          <button class="knopf alle-spielen verborgen" id="allespielen" title="Alle Titel dieses Ordners nacheinander abspielen"><i class="fa-solid fa-play"></i> Alle abspielen</button>
+
+          <span class="luecke"></span>
+
+          <!-- Darstellung: Liste, Kacheln klein, mittel, groß, geteilte Ansicht -->
+          <div class="seg" id="darstellung">
+            <button data-d="liste" title="Liste mit Details (Dauer bei Ton und Video)"><i class="fa-solid fa-list"></i></button>
+            <span class="trenner"></span>
+            <button data-d="klein" title="Kacheln klein"><i class="fa-solid fa-table-cells"></i></button>
+            <button data-d="mittel" class="aktiv" title="Kacheln mittel"><i class="fa-solid fa-table-cells-large"></i></button>
+            <button data-d="gross" title="Kacheln groß (doppelt)"><i class="fa-regular fa-square"></i></button>
+            <span class="trenner"></span>
+            <button data-d="split" title="Geteilte Ansicht"><i class="fa-solid fa-table-columns"></i></button>
+          </div>
+        </div>
+
+        <nav class="breadcrumb">
+          <a>Meine Dateien</a>
+          <i class="fa-solid fa-chevron-right"></i>
+          <a>Familie</a>
+          <i class="fa-solid fa-chevron-right"></i>
+          <span class="aktuell">Urlaub Ostsee</span>
+        </nav>
+
+        <div class="entwurf-hinweis">
+          Entwurf KW-5: Die Seite Medien entfällt. Der Filter nach Art wählt den Inhalt und die passende Ansicht
+          (Bilder randlos mit Diashow, Audio als Titelliste mit Dauer, Video mit Standbild und Dauer). Kacheln in drei
+          Größen. Symbole statt Text, der Text steht im Hover.
+        </div>
+
+        <div class="grid g-mittel" id="raster"></div>
+        <div class="tabelle verborgen" id="tabelle"></div>
+
+        <div class="player-leiste">
+          <div class="cov"><i class="fa-solid fa-music"></i></div>
+          <div class="t"><div>Brandung am Morgen.m4a</div><div>Meine Dateien / Familie / Urlaub Ostsee</div></div>
+          <span style="color: var(--text-3); font-variant-numeric: tabular-nums">1:12</span>
+          <div class="spur"></div>
+          <span style="color: var(--text-3); font-variant-numeric: tabular-nums">3:14</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+
+    <script>
+      // Inhalt des Ordners im Entwurf: Ordner, Bilder, Ton, Video, Dokumente
+      const EINTRAEGE = [
+        { typ: "ordner", name: "Strandkorb", meta: "12 Elemente" },
+        { typ: "ordner", name: "Wanderung Darß", meta: "34 Elemente" },
+        { typ: "bild", name: "Steilküste.jpg", meta: "4,1 MB", foto: "f1" },
+        { typ: "bild", name: "Sonnenuntergang.heic", meta: "2,8 MB", foto: "f2" },
+        { typ: "audio", name: "Brandung am Morgen.m4a", meta: "3,1 MB", dauer: "3:14", spielt: true },
+        { typ: "bild", name: "Dünen.jpg", meta: "3,6 MB", foto: "f3" },
+        { typ: "video", name: "Möwen.mov", meta: "48,1 MB", dauer: "0:42", foto: "f6" },
+        { typ: "bild", name: "Leuchtturm.jpg", meta: "5,0 MB", foto: "f4" },
+        { typ: "audio", name: "Hafenkneipe Musik.mp3", meta: "6,4 MB", dauer: "4:02" },
+        { typ: "datei", name: "Packliste.pdf", meta: "84 KB", symbol: "fa-file-pdf" },
+        { typ: "video", name: "Seebrücke.mp4", meta: "112 MB", dauer: "2:18", foto: "f1" },
+        { typ: "bild", name: "Muscheln.jpg", meta: "2,2 MB", foto: "f5" },
+        { typ: "audio", name: "Sprachnotiz Tag 3.m4a", meta: "0,6 MB", dauer: "0:48" },
+        { typ: "bild", name: "Ferienhaus.jpg", meta: "3,3 MB", foto: "f6" },
+        { typ: "datei", name: "Fahrplan.xlsx", meta: "40 KB", symbol: "fa-file-excel" },
+      ];
+      const ENDUNG = (n) => n.split(".").pop().toUpperCase();
+      const AKTION = { bild: ["fa-expand", "Vollbild"], audio: ["fa-play", "Abspielen"], video: ["fa-play", "Abspielen"] };
+      const zustand = { art: "alle", d: "mittel" };
+
+      const passt = (e) => zustand.art === "alle" || e.typ === "ordner" || e.typ === zustand.art;
+
+      function kachel(e) {
+        const k = document.createElement("div");
+        k.className = `kachel art-${e.typ}` + (e.spielt ? " spielt" : "");
+        k.title = e.name;
+        let vor;
+        if (e.typ === "ordner") vor = `<div class="vorschau ordner"><i class="fa-solid fa-folder"></i></div>`;
+        else if (e.typ === "bild") vor = `<div class="vorschau"><span class="foto ${e.foto}"></span><span class="art-marke">${ENDUNG(e.name)}</span><button class="k-aktion" title="Vollbild"><i class="fa-solid fa-expand"></i></button><span class="unter">${e.name}</span></div>`;
+        else if (e.typ === "video") vor = `<div class="vorschau video"><span class="foto ${e.foto}"></span><span class="art-marke">${ENDUNG(e.name)}</span><span class="dauer-marke">${e.dauer}</span><button class="k-aktion immer" title="Abspielen"><i class="fa-solid fa-play"></i></button></div>`;
+        else if (e.typ === "audio") vor = `<div class="vorschau audio"><i class="fa-solid fa-music"></i><span class="dauer-marke">${e.dauer}</span><button class="k-aktion ${e.spielt ? "immer" : ""}" title="${e.spielt ? "Pause" : "Abspielen"}"><i class="fa-solid ${e.spielt ? "fa-pause" : "fa-play"}"></i></button></div>`;
+        else vor = `<div class="vorschau"><i class="fa-solid ${e.symbol}"></i></div>`;
+        k.innerHTML = `<span class="aus-box"><i class="fa-solid fa-check"></i></span>${vor}<div class="k-name">${e.name}</div><div class="k-meta">${e.meta}${e.dauer ? " · " + e.dauer : ""}</div>`;
+        return k;
+      }
+
+      function zeile(e, nr) {
+        const z = document.createElement("div");
+        z.className = "t-zeile" + (e.spielt ? " spielt" : "");
+        let sym;
+        if (e.typ === "ordner") sym = `<span class="sym ordner"><i class="fa-solid fa-folder"></i></span>`;
+        else if (e.typ === "bild" || e.typ === "video") sym = `<span class="sym"><span class="foto ${e.foto}"></span></span>`;
+        else if (e.typ === "audio") sym = `<span class="sym" style="color: var(--art-audio)">${zustand.art === "audio" ? nr : '<i class="fa-solid fa-music"></i>'}</span>`;
+        else sym = `<span class="sym"><i class="fa-solid ${e.symbol}"></i></span>`;
+        const akt = AKTION[e.typ]
+          ? `<span class="z-akt"><button title="${e.spielt ? "Pause" : AKTION[e.typ][1]}"><i class="fa-solid ${e.spielt ? "fa-pause" : AKTION[e.typ][0]}"></i></button><button title="Herunterladen"><i class="fa-solid fa-download"></i></button></span>`
+          : "";
+        z.innerHTML = `${sym}<span class="n"><span>${e.name}</span>${akt}</span><span class="rechts">${e.dauer || ""}</span><span class="rechts">${e.meta}</span><span class="rechts">06.11.2026</span>`;
+        return z;
+      }
+
+      function zeichnen() {
+        const raster = document.getElementById("raster");
+        const tabelle = document.getElementById("tabelle");
+        const sichtbar = EINTRAEGE.filter(passt);
+        // Audio ist keine Kachel-Sache: die Art Audio zeigt die Titelliste
+        const liste = zustand.d === "liste" || zustand.art === "audio";
+        raster.classList.toggle("verborgen", liste);
+        tabelle.classList.toggle("verborgen", !liste);
+        raster.className = `grid g-${zustand.d === "liste" ? "mittel" : zustand.d}` + (zustand.art === "bild" ? " nur-bilder" : "") + (liste ? " verborgen" : "");
+        raster.innerHTML = "";
+        tabelle.innerHTML = `<div class="t-zeile kopf"><span></span><span>Name</span><span class="rechts">Dauer</span><span class="rechts">Größe</span><span class="rechts">Geändert</span></div>`;
+        tabelle.classList.toggle("audio", zustand.art === "audio");
+        let nr = 0;
+        for (const e of sichtbar) {
+          if (e.typ === "audio") nr++;
+          raster.appendChild(kachel(e));
+          tabelle.appendChild(zeile(e, nr));
+        }
+        // Aktionen der Art
+        const bilder = EINTRAEGE.filter((e) => e.typ === "bild").length;
+        document.getElementById("diashow").classList.toggle("verborgen", !(bilder && (zustand.art === "alle" || zustand.art === "bild")));
+        document.getElementById("allespielen").classList.toggle("verborgen", zustand.art !== "audio");
+        // Kachelgrößen gelten nicht für die Titelliste
+        document.querySelectorAll("#darstellung button").forEach((b) => {
+          b.classList.toggle("aktiv", b.dataset.d === (zustand.art === "audio" ? "liste" : zustand.d));
+          b.disabled = zustand.art === "audio" && ["klein", "mittel", "gross"].includes(b.dataset.d);
+        });
+        document.querySelectorAll("#art button").forEach((b) => b.classList.toggle("aktiv", b.dataset.art === zustand.art));
+      }
+
+      for (const a of ["alle", "bild", "audio", "video"]) {
+        const n = a === "alle" ? EINTRAEGE.length : EINTRAEGE.filter((e) => e.typ === a).length;
+        document.querySelector(`[data-zahl="${a}"]`).textContent = n;
+      }
+      document.querySelectorAll("#art button").forEach((b) => b.addEventListener("click", () => { zustand.art = b.dataset.art; zeichnen(); }));
+      document.querySelectorAll("#darstellung button").forEach((b) => b.addEventListener("click", () => {
+        if (b.dataset.d === "split") return;
+        zustand.d = b.dataset.d;
+        zeichnen();
+      }));
+      zeichnen();
+
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => setzeThema(b.dataset.themeBtn)));
+      const p = new URLSearchParams(location.search);
+      setzeThema(p.get("thema") === "dunkel" ? "dunkel" : "hell");
+      if (p.get("art")) zustand.art = p.get("art");
+      if (p.get("d")) zustand.d = p.get("d");
+      zeichnen();
+    </script>
+  </body>
+</html>
