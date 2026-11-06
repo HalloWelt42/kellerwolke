@@ -42,6 +42,14 @@ class SuchDienst:
         text = await self._text(speicher, stand, name) if inhalt_noetig(name, stand.groesse) else ""
         await self.inhalt_speichern(besitzer_id, knoten_id, text)
 
+    async def text_lesen(self, speicher, stand) -> str | None:
+        """Der Text einer Datei, wie ihn auch der Index bekommt (Klartext, Code, PDF, docx); None, wenn die Art keinen
+        Text hat oder die Datei zu groß ist (KW-3: Apps mit "Alles lesen" lesen darüber)."""
+        name = stand.knoten["name"]
+        if not inhalt_noetig(name, stand.groesse):
+            return None
+        return nfc(await self._text(speicher, stand, name))
+
     async def _text(self, speicher, stand, name: str) -> str:
         pfad = await speicher.stand_pfad(stand)
         if pfad:

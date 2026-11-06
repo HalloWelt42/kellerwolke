@@ -89,7 +89,7 @@ async def lebenszyklus(app: FastAPI):
     app.state.suche = SuchDienst(pool)
     app.state.vorgaenge = VorgangRegistry()
     app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
-    app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
+    app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang, app.state.suche)
     app.state.anfragen = AnfragenDienst(pool, app.state.speicher)
     app.state.melder = JournalMelder(EINSTELLUNGEN.dsn)
     app.state.melder.starten()

@@ -15,7 +15,7 @@ from app.abhaengig import aktuelle_app, hole_ablage, hole_melder, hole_suche, ho
 from app.auslieferung import inhalt_antwort
 from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross
-from module.ablage.dienst import KeinSchreibrecht, Unsichtbar, VorbedingungFehlt
+from module.ablage.dienst import TEXT_GRENZE, TEXT_VORGABE, KeinSchreibrecht, KeinVollzugriff, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
 from module.speicher.begleiter import GruppeKonflikt
 from module.speicher.dienst import Gesperrt, NameBelegt, VorbedingungVerletzt, ZielUngueltig
@@ -107,6 +107,24 @@ class AenderungenAus(BaseModel):
     luecke: bool                               # das Journal reicht nicht mehr so weit zurück: Ordner neu lesen
 
 
+class VolltextEingabe(BaseModel):
+    q: str = Field(min_length=1, max_length=200)
+    anzahl: int = Field(30, ge=1, le=100)
+
+
+class VolltextTrefferAus(AblageKnotenAus):
+    im_namen: bool = False                   # der Name traf (sonst der Inhalt)
+
+
+class TextAus(BaseModel):
+    id: UUID
+    name: str
+    lesbar: bool                             # False: die Art hat keinen Text (Bild, Ton) oder die Datei ist zu groß
+    text: str
+    zeichen: int                             # Länge des ganzen Texts
+    gekuerzt: bool
+
+
 class SucheEingabe(BaseModel):
     felder: dict[str, Any] = Field(min_length=1)
     anzahl: int = Field(100, ge=1, le=500)
@@ -141,7 +159,7 @@ class OrdnerPfadEingabe(BaseModel):
 def _fehler(f: Exception) -> HTTPException:
     if isinstance(f, Unsichtbar):
         return HTTPException(status_code=404, detail=str(f))
-    if isinstance(f, KeinSchreibrecht):
+    if isinstance(f, (KeinSchreibrecht, KeinVollzugriff)):
         return HTTPException(status_code=403, detail=str(f))
     if isinstance(f, (FileExistsError, NameBelegt, GruppeKonflikt)):
         return HTTPException(status_code=409, detail=str(f))
@@ -158,7 +176,7 @@ def _fehler(f: Exception) -> HTTPException:
     return HTTPException(status_code=422, detail=str(f))
 
 
-_FEHLER = (Unsichtbar, KeinSchreibrecht, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross,
+_FEHLER = (Unsichtbar, KeinSchreibrecht, KeinVollzugriff, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross,
            Gesperrt, NameBelegt)
 
 
@@ -411,6 +429,37 @@ async def herkunft_entfernen(knoten_id: UUID, von_id: UUID, art: str = Query(pat
                              akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     try:
         await ablage.herkunft_entfernen(akteur, knoten_id, von_id, art)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+# --- Alles lesen (KW-3): nur für Apps mit dieser Freigabe ----------------------------------------------------------
+
+@router.get("/wurzel/kinder", response_model=list[AblageKnotenAus])
+async def wurzel_kinder(ab: int = Query(0, ge=0), anzahl: int = Query(200, ge=1, le=500), akteur=Depends(aktuelle_app),
+                        ablage=Depends(hole_ablage)):
+    """Die oberste Ebene des Kontos."""
+    try:
+        return await ablage.wurzel_kinder(akteur, ab, anzahl)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.post("/volltext", response_model=list[VolltextTrefferAus])
+async def volltext(eingabe: VolltextEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Dateien und Ordner der ganzen Wolke, deren Name oder Inhalt passt (Suche wie in der Oberfläche)."""
+    try:
+        return await ablage.volltext(akteur, eingabe.q, eingabe.anzahl)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/knoten/{knoten_id}/text", response_model=TextAus)
+async def text(knoten_id: UUID, grenze: int = Query(TEXT_VORGABE, ge=1, le=TEXT_GRENZE), akteur=Depends(aktuelle_app),
+               ablage=Depends(hole_ablage)):
+    """Der Text einer lesbaren Datei (Klartext, Code, PDF, docx), gekürzt auf `grenze` Zeichen."""
+    try:
+        return await ablage.text(akteur, knoten_id, grenze)
     except _FEHLER as f:
         raise _fehler(f) from None
 

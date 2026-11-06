@@ -18,6 +18,7 @@ class ZugangAus(BaseModel):
     id: UUID
     app: str
     aktiv: bool
+    alles_lesen: bool = False                # darf jede Datei des Kontos lesen (KW-3)
     erstellt_am: datetime
     zuletzt_genutzt: datetime | None = None
     rechte: list[RechtAus] = Field(default_factory=list)
@@ -35,9 +36,11 @@ class ZugangEingabe(BaseModel):
 
 
 class AktivEingabe(BaseModel):
-    """Sperren oder freigeben (`aktiv`) und umbenennen (`app`: Name des Zugangs und seines Ordners unter Apps)."""
+    """Sperren oder freigeben (`aktiv`), umbenennen (`app`: Name des Zugangs und seines Ordners unter Apps) und
+    "Alles lesen" schalten (`alles_lesen`, KW-3)."""
 
     aktiv: bool | None = None
+    alles_lesen: bool | None = None
     app: str | None = Field(None, min_length=1, max_length=60)
 
 

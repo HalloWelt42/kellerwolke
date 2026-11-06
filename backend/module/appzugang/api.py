@@ -47,6 +47,8 @@ async def aktiv_setzen(zugang_id: UUID, eingabe: AktivEingabe, benutzer=Depends(
     try:
         if eingabe.app is not None:
             await dienst.umbenennen(benutzer["id"], zugang_id, eingabe.app)
+        if eingabe.alles_lesen is not None:
+            await dienst.alles_lesen_setzen(benutzer["id"], zugang_id, eingabe.alles_lesen)
         if eingabe.aktiv is not None:
             return await dienst.aktiv_setzen(benutzer["id"], zugang_id, eingabe.aktiv)
         zugang = await dienst.zugang(benutzer["id"], zugang_id)

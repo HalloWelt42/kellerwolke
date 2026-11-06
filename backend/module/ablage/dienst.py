@@ -23,6 +23,10 @@ class Unsichtbar(Exception):
     """Knoten existiert nicht oder liegt außerhalb der Rechte (404)."""
 
 
+class KeinVollzugriff(Exception):
+    """Der Weg gilt nur für Apps mit "Alles lesen" (KW-3)."""
+
+
 class KeinSchreibrecht(Exception):
     """Lesen ja, schreiben nein (403)."""
 
@@ -67,11 +71,70 @@ async def _sperre_holen(conn, knoten_id) -> dict | None:
         return await cur.fetchone()
 
 
+# Text einer Datei für Apps: so viele Zeichen höchstens, standardmäßig weniger (KW-3)
+TEXT_GRENZE = 400_000
+TEXT_VORGABE = 60_000
+
+
 class AblageDienst:
-    def __init__(self, pool, speicher, zugang: AppZugangDienst) -> None:
+    def __init__(self, pool, speicher, zugang: AppZugangDienst, suche) -> None:
         self.pool = pool
         self.speicher = speicher
         self.zugang = zugang
+        self.suche = suche
+
+    @staticmethod
+    def _vollzugriff(akteur: AppAkteur) -> None:
+        if not akteur.alles_lesen:
+            raise KeinVollzugriff('Nur mit der Freigabe "Alles lesen" (Kellerwolke, Einstellungen, Zugänge)')
+
+    async def _rechte_dazu(self, akteur: AppAkteur, knoten: list[dict], grund: str | None) -> dict:
+        """Eigene Rechte der App auf diesen Knoten, zum Grundrecht dazu (wie in `kinder`)."""
+        if not knoten:
+            return {}
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT knoten_id, recht FROM app_recht WHERE zugang_id=%s AND knoten_id = ANY(%s)",
+                                  (akteur.zugang_id, [k["id"] for k in knoten]))
+                return {k: _hoeher(grund, r) for k, r in await cur.fetchall()}
+
+    async def wurzel_kinder(self, akteur: AppAkteur, ab: int = 0, anzahl: int = 200) -> list[dict]:
+        """Die oberste Ebene des Kontos (KW-3): nur mit "Alles lesen"; jeder Eintrag ist mindestens lesbar."""
+        self._vollzugriff(akteur)
+        anzahl = max(1, min(anzahl, MAX_SEITE))
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            knoten = await repo.wurzel_seite(akteur.benutzer_id, max(0, ab), anzahl)
+            metas = await metadaten.meta_holen(conn, [k["id"] for k in knoten])
+        eigene = await self._rechte_dazu(akteur, knoten, "lesen")
+        return [{**k, "pfad": k["name"], "recht": eigene.get(k["id"], "lesen"), **_meta_felder(k, metas.get(k["id"]))}
+                for k in knoten]
+
+    async def volltext(self, akteur: AppAkteur, anfrage: str, anzahl: int = 30) -> list[dict]:
+        """Treffer im Namen oder Inhalt in der ganzen Wolke des Kontos (KW-3), über dieselbe Suche wie die Oberfläche;
+        nur mit "Alles lesen". `im_namen` sagt, ob der Name traf (sonst der Inhalt)."""
+        self._vollzugriff(akteur)
+        treffer = [t for t in await self.suche.suchen(akteur.benutzer_id, anfrage, grenze=max(1, min(anzahl, 100)))
+                   if t["typ"] in ("datei", "ordner")]
+        async with self.pool.connection() as conn:
+            metas = await metadaten.meta_holen(conn, [t["id"] for t in treffer])
+        eigene = await self._rechte_dazu(akteur, treffer, "lesen")
+        return [{**t, "pfad": "/".join([*t.get("ort", []), t["name"]]), "recht": eigene.get(t["id"], "lesen"),
+                 "im_namen": bool(t.get("im_namen")), **_meta_felder(t, metas.get(t["id"]))} for t in treffer]
+
+    async def text(self, akteur: AppAkteur, knoten_id, grenze: int = TEXT_VORGABE) -> dict:
+        """Der Text einer lesbaren Datei (Klartext, Code, PDF, docx), gekürzt auf `grenze` Zeichen (KW-3). `lesbar`
+        ist False, wenn die Art keinen Text hat (Bild, Ton) oder die Datei zu groß ist."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id)
+        if knoten["typ"] != "datei":
+            raise ValueError("Keine Datei")
+        stand = await self.speicher.eigene_datei(akteur.benutzer_id, knoten_id)
+        if stand is None:
+            raise Unsichtbar("Nicht gefunden")
+        text = await self.suche.text_lesen(self.speicher, stand)
+        grenze = max(1, min(grenze, TEXT_GRENZE))
+        return {"id": knoten["id"], "name": knoten["name"], "lesbar": text is not None, "text": (text or "")[:grenze],
+                "zeichen": len(text or ""), "gekuerzt": len(text or "") > grenze}
 
     async def mit_recht(self, akteur: AppAkteur, knoten_id, noetig: str = "lesen") -> tuple[dict, str]:
         knoten, recht = await self.zugang.recht(akteur, knoten_id)

@@ -9,6 +9,7 @@
   import { dateienAdresse, navigiere } from "./adresse.svelte";
   import OrdnerWahl from "./OrdnerWahl.svelte";
   import QrCode from "./QrCode.svelte";
+  import Schalter from "./Schalter.svelte";
   import { zugangQrText } from "./zugangqr";
   import type { AppRecht, AppZugang, Recht } from "./types";
 
@@ -203,6 +204,9 @@
           </div>
         {:else}
           <div class="rechte">
+            {#if z.alles_lesen}
+              <span class="recht alles" title="Darf jede Datei dieses Kontos lesen"><i class="fa-solid fa-eye"></i> Alles lesen</span>
+            {/if}
             {#each z.rechte as r (r.knoten_id)}
               <a class="recht {r.recht}" href={dateienAdresse(r.pfad)}
                  title="{r.recht === 'schreiben' ? 'lesen und schreiben' : 'nur lesen'}; öffnet den Ordner"
@@ -210,9 +214,21 @@
                 <i class="fa-solid {r.recht === 'schreiben' ? 'fa-pen' : 'fa-eye'}"></i> {r.pfad}
               </a>
             {:else}
-              <span class="zg-zeit">keine Rechte: die App sieht nichts</span>
+              {#if !z.alles_lesen}<span class="zg-zeit">keine Rechte: die App sieht nichts</span>{/if}
             {/each}
           </div>
+          {#if z.aktiv}
+            <div class="alles-lesen">
+              <Schalter an={z.alles_lesen} titel="Darf alle Dateien dieses Kontos lesen"
+                        umschalten={(an) => tun(() => api.zugangAllesLesen(z.id, an))} />
+              <div>
+                Darf alle Dateien dieses Kontos lesen
+                <small>{z.alles_lesen
+                  ? "Ändern, anlegen und löschen weiterhin nur in den Ordnern oben."
+                  : "Aus: nur die Ordner oben. An etwa für den Assistenten, der in der ganzen Wolke sucht."}</small>
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
       {#if bearbeiten?.id !== z.id}

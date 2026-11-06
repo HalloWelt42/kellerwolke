@@ -55,6 +55,7 @@ class AppAkteur:
     app: str
     benutzer: dict = field(compare=False)
     anfrage: dict | None = field(default=None, compare=False)   # offene Anfrage, auf die sich die App beruft
+    alles_lesen: bool = False                                     # darf jede Datei des Kontos lesen (KW-3)
 
     @property
     def benutzer_id(self):
@@ -147,7 +148,7 @@ class AppZugangDienst:
         """Alle Zugänge des Kontos mit ihren Rechten (Ordner mit Pfad)."""
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute("SELECT id, app, aktiv, erstellt_am, zuletzt_genutzt FROM app_zugang "
+                await cur.execute("SELECT id, app, aktiv, alles_lesen, erstellt_am, zuletzt_genutzt FROM app_zugang "
                                   "WHERE benutzer_id=%s ORDER BY lower(app)", (benutzer_id,))
                 zugaenge = await cur.fetchall()
                 await cur.execute("SELECT r.zugang_id, r.knoten_id, r.recht FROM app_recht r "
@@ -192,6 +193,16 @@ class AppZugangDienst:
                     raise FileNotFoundError("Zugang nicht gefunden")
         return await self.zugang(benutzer_id, zugang_id)
 
+    async def alles_lesen_setzen(self, benutzer_id, zugang_id, an: bool) -> dict:
+        """Schalter "Alles lesen" (KW-3): die App darf jede Datei des Kontos lesen; schreiben bleibt je Ordner."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                cur = await conn.execute("UPDATE app_zugang SET alles_lesen=%s WHERE id=%s AND benutzer_id=%s",
+                                         (an, zugang_id, benutzer_id))
+                if cur.rowcount != 1:
+                    raise FileNotFoundError("Zugang nicht gefunden")
+        return await self.zugang(benutzer_id, zugang_id)
+
     async def loeschen(self, benutzer_id, zugang_id) -> None:
         """Entfernt den Zugang samt Rechten; die Dateien der App bleiben im Baum."""
         async with self.pool.connection() as conn:
@@ -211,17 +222,18 @@ class AppZugangDienst:
                     await cur.execute(
                         "UPDATE app_zugang z SET zuletzt_genutzt=now() FROM benutzer b "
                         "WHERE z.schluessel_hash=%s AND z.aktiv AND b.id = z.benutzer_id AND b.aktiv "
-                        "RETURNING z.id AS zugang_id, z.app, z.benutzer_id", (_hash(schluessel),))
+                        "RETURNING z.id AS zugang_id, z.app, z.benutzer_id, z.alles_lesen", (_hash(schluessel),))
                     z = await cur.fetchone()
                     if not z:
                         return None
                     await cur.execute("SELECT * FROM benutzer WHERE id=%s", (z["benutzer_id"],))
                     benutzer = await cur.fetchone()
-        return AppAkteur(zugang_id=str(z["zugang_id"]), app=z["app"], benutzer=benutzer)
+        return AppAkteur(zugang_id=str(z["zugang_id"]), app=z["app"], benutzer=benutzer, alles_lesen=z["alles_lesen"])
 
     async def recht(self, akteur: AppAkteur, knoten_id) -> tuple[dict | None, str | None]:
         """(Knoten, wirksames Recht) für die App. Das Recht kommt vom Knoten selbst oder dem nächsten Ordner darüber,
-        der in den Rechten steht; schreiben schließt lesen ein. Fremde, gelöschte oder unbekannte Knoten: (None, None)."""
+        der in den Rechten steht; schreiben schließt lesen ein. Mit "Alles lesen" ist jeder eigene Knoten mindestens
+        lesbar (KW-3). Fremde, gelöschte oder unbekannte Knoten: (None, None)."""
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             knoten = await repo.knoten_holen(knoten_id)
@@ -232,6 +244,8 @@ class AppZugangDienst:
             return None, None                     # liegt in einem gelöschten Ordner
         if recht != "schreiben" and akteur.anfrage is not None:
             recht = _staerker(recht, await self._recht_aus_anfrage(akteur.anfrage, knoten))
+        if akteur.alles_lesen:
+            recht = _staerker(recht, "lesen")
         return knoten, recht
 
     async def recht_im_papierkorb(self, akteur: AppAkteur, knoten_id) -> tuple[dict | None, str | None]:

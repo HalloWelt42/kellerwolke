@@ -454,6 +454,11 @@ export function zugangAktiv(id: string, aktiv: boolean): Promise<AppZugang> {
   return hole<AppZugang>(`/v1/app-zugaenge/${id}`, { method: "PATCH", body: JSON.stringify({ aktiv }) });
 }
 
+// "Alles lesen" (KW-3): die App liest jede Datei des Kontos; schreiben bleibt je Ordner.
+export function zugangAllesLesen(id: string, alles_lesen: boolean): Promise<AppZugang> {
+  return hole<AppZugang>(`/v1/app-zugaenge/${id}`, { method: "PATCH", body: JSON.stringify({ alles_lesen }) });
+}
+
 export function zugangUmbenennen(id: string, app: string): Promise<AppZugang> {
   return hole<AppZugang>(`/v1/app-zugaenge/${id}`, { method: "PATCH", body: JSON.stringify({ app }) });
 }

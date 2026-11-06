@@ -30,7 +30,7 @@ async def umgebung(pool, tmp_path):
     app.state.suche = SuchDienst(pool)
     app.state.vorgaenge = VorgangRegistry()
     app.state.appzugang = AppZugangDienst(pool, app.state.speicher)
-    app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang)
+    app.state.ablage = AblageDienst(pool, app.state.speicher, app.state.appzugang, app.state.suche)
     app.state.anfragen = AnfragenDienst(pool, app.state.speicher)
     app.state.geraete = GeraeteDienst(pool)
     app.state.melder = JournalMelder(_dsn(TEST_DB))                    # nicht gestartet; Tests, die wecken, starten einen eigenen

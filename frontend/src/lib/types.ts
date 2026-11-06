@@ -177,6 +177,7 @@ export interface AppZugang {
   id: string;
   app: string;
   aktiv: boolean;
+  alles_lesen: boolean; // darf jede Datei des Kontos lesen (KW-3)
   erstellt_am: string;
   zuletzt_genutzt: string | null;
   rechte: AppRecht[];

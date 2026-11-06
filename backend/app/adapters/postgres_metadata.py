@@ -424,6 +424,18 @@ class PostgresMetadataRepository:
             (parent_id, anzahl, ab),
         )
 
+    async def wurzel_seite(self, besitzer_id, ab: int, anzahl: int):
+        """Eine Seite der lebenden Knoten auf der obersten Ebene eines Kontos, in derselben Reihenfolge wie
+        kinder_seite. Nur für Apps mit "Alles lesen" (KW-3); der Zugriff ist vorher geprüft."""
+        return await self._alle(
+            "SELECT k.*, v.groesse, bg.haupt_id, bg.rolle FROM knoten k "
+            "LEFT JOIN version v ON v.id = k.aktuelle_version_id LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
+            "WHERE k.besitzer_id=%s AND k.parent_id IS NULL AND NOT k.geloescht "
+            "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, lower(k.name), k.id "
+            "LIMIT %s OFFSET %s",
+            (besitzer_id, anzahl, ab),
+        )
+
     async def ist_im_teilbaum(self, wurzel_id, kandidat_id) -> bool:
         """True, wenn kandidat_id der Knoten wurzel_id selbst oder ein Nachkomme
         davon ist (zum Erkennen von Verschiebe-Zyklen)."""
