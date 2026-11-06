@@ -30,6 +30,13 @@ export function codeAusLinkNehmen(): string {
   return codeNormal(marke.slice(LINK_MARKE.length));
 }
 
+// Aus einem gescannten QR-Code (KW-2): der Koppel-Link vom Rechner oder nur der Code; "" wenn es keiner ist.
+export function codeAusText(text: string): string {
+  const i = text.indexOf(LINK_MARKE);
+  const code = codeNormal(i >= 0 ? text.slice(i + LINK_MARKE.length) : text);
+  return code.length === CODE_LAENGE ? code : "";
+}
+
 // Als Web-App vom Home-Bildschirm gestartet oder im Browser; auf dem iPhone haben beide getrennte Speicher.
 export function geraeteArt(): GeraeteArt {
   const eigenstaendig =

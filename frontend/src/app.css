@@ -2238,6 +2238,20 @@ a.recht:hover {
 .sb-kopf i {
   color: var(--akzent);
 }
+/* QR-Code mit Adresse und Schlüssel (KW-2): links der Code, rechts die Anleitung */
+.sb-qr-zeile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--a4);
+  align-items: center;
+  margin-bottom: var(--a3);
+}
+.sb-qr {
+  background: #fff;
+  border-radius: var(--r2);
+  padding: 6px;
+  line-height: 0;
+}
 .sb-zeile {
   display: flex;
   gap: var(--a2);

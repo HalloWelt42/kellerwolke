@@ -2,7 +2,7 @@
   // QR-Code als SVG aus der Matrix (ohne eingefügtes Markup).
   import { encode } from "uqr";
 
-  let { text, groesse = 184 }: { text: string; groesse?: number } = $props();
+  let { text, groesse = 184, beschreibung = "QR-Code zum Koppeln" }: { text: string; groesse?: number; beschreibung?: string } = $props();
 
   const qr = $derived(encode(text, { border: 1, ecc: "M" }));
   const pfad = $derived(
@@ -11,7 +11,7 @@
 </script>
 
 <svg viewBox="0 0 {qr.size} {qr.size}" width={groesse} height={groesse} shape-rendering="crispEdges" role="img"
-     aria-label="QR-Code zum Koppeln">
+     aria-label={beschreibung}>
   <rect width={qr.size} height={qr.size} fill="#fff" />
   <path d={pfad} fill="#111" />
 </svg>

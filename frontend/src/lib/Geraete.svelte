@@ -135,7 +135,7 @@
         <div class="kb-code">{codeAnzeige(code)}</div>
         <div class="kb-gueltig">gilt noch {restText(rest)} Minuten und nur für ein Gerät</div>
         <ol class="kb-wege">
-          <li>Web-App auf dem Home-Bildschirm: auf der Anmeldeseite <b>Mit Code koppeln</b> wählen und den Code eintippen.</li>
+          <li>Web-App auf dem Home-Bildschirm: auf der Anmeldeseite <b>QR scannen</b> wählen und diesen QR-Code in den Rahmen halten; ohne Kamera <b>Code eintippen</b>.</li>
           <li>Browser auf dem Telefon: die Kamera auf den QR-Code halten, der Code ist dann schon eingetragen.</li>
         </ol>
         <div class="kb-fuss">

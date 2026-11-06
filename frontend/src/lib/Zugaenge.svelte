@@ -8,6 +8,8 @@
   import { kopieren, markieren } from "./zwischenablage";
   import { dateienAdresse, navigiere } from "./adresse.svelte";
   import OrdnerWahl from "./OrdnerWahl.svelte";
+  import QrCode from "./QrCode.svelte";
+  import { zugangQrText } from "./zugangqr";
   import type { AppRecht, AppZugang, Recht } from "./types";
 
   let zugaenge = $state<AppZugang[]>([]);
@@ -127,6 +129,13 @@
 {#if neuerSchluessel}
   <div class="schluessel-box">
     <div class="sb-kopf"><i class="fa-solid fa-key"></i> Schlüssel für <b>{neuerSchluessel.app}</b> ausgestellt</div>
+    <div class="sb-qr-zeile">
+      <div class="sb-qr"><QrCode text={zugangQrText(neuerSchluessel.schluessel)} groesse={160} beschreibung="QR-Code mit Adresse und Schlüssel für die App" /></div>
+      <p class="sb-hinweis">
+        In den Einstellungen der App bei <b>Kellerwolke</b> auf <i class="fa-solid fa-qrcode"></i> tippen und diesen Code
+        scannen: Adresse und Schlüssel stehen dann beide drin. Oder den Schlüssel kopieren:
+      </p>
+    </div>
     <div class="sb-zeile">
       <code class="sb-wert" bind:this={schluesselFeld}>{neuerSchluessel.schluessel}</code>
       <button class="knopf primaer" onclick={schluesselKopieren}>
@@ -134,8 +143,8 @@
       </button>
     </div>
     <p class="sb-hinweis">
-      Nur jetzt sichtbar. Trag ihn in den Einstellungen der App ein; danach zeigt die Kellerwolke ihn nie wieder. Geht er
-      verloren, stellst du einen neuen aus.
+      Nur jetzt sichtbar, auch der QR-Code. Danach zeigt die Kellerwolke den Schlüssel nie wieder; geht er verloren,
+      stellst du einen neuen aus.
       <button class="knopf still klein" onclick={() => (neuerSchluessel = null)}>Ausblenden</button>
     </p>
   </div>

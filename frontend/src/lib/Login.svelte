@@ -1,8 +1,10 @@
 <script lang="ts">
-  // Anmeldung mit Passwort oder Koppeln mit einem Code vom Rechner (Entwurf: mockups/geraete-mobil.html).
+  // Anmeldung mit Passwort oder Koppeln mit einem Code vom Rechner, eingetippt oder per Kamera gescannt (Entwürfe:
+  // mockups/geraete-mobil.html, mockups/qr-einrichten.html).
   import { anmelden, mitCodeKoppeln } from "./auth.svelte";
-  import { CODE_LAENGE, codeAusLinkNehmen, codeNormal, geraeteArt, namensvorschlag } from "./kopplung";
+  import { CODE_LAENGE, codeAusLinkNehmen, codeAusText, codeNormal, geraeteArt, namensvorschlag } from "./kopplung";
   import Logo from "./Logo.svelte";
+  import QrScanner from "./QrScanner.svelte";
 
   const ausLink = codeAusLinkNehmen();
 
@@ -14,6 +16,7 @@
   let codeFokus = $state(false);
   let fehler = $state("");
   let laeuft = $state(false);
+  let scannen = $state(false);
 
   async function absenden(e: Event) {
     e.preventDefault();
@@ -41,6 +44,19 @@
     }
   }
 
+  // Gescannter Kopplungs-QR vom Rechner: gleich koppeln; ein falscher oder abgelaufener Code lässt weitersuchen.
+  async function gescannt(text: string): Promise<string | null> {
+    const gelesen = codeAusText(text);
+    if (!gelesen) return "Das ist kein Kopplungs-Code der Kellerwolke";
+    try {
+      await mitCodeKoppeln(gelesen, geraetName.trim() || namensvorschlag(), geraeteArt());
+      scannen = false;
+      return null;
+    } catch (f) {
+      return (f as Error).message;
+    }
+  }
+
   function wechseln(ziel: "passwort" | "code") {
     modus = ziel;
     fehler = "";
@@ -64,11 +80,14 @@
       <button class="knopf primaer" type="submit" disabled={laeuft} style="justify-content: center;">
         {laeuft ? "Anmelden ..." : "Anmelden"}
       </button>
-      <div class="oder">oder</div>
-      <button class="knopf zweit" type="button" onclick={() => wechseln("code")}>
-        <i class="fa-solid fa-link"></i> Mit Code koppeln
+      <div class="oder">oder ohne Passwort</div>
+      <button class="knopf zweit" type="button" onclick={() => (scannen = true)}>
+        <i class="fa-solid fa-qrcode"></i> QR scannen
       </button>
-      <p class="hinweis">Den Code zeigt die Kellerwolke am Rechner unter Einstellungen, Geräte.</p>
+      <button class="knopf still mitte" type="button" onclick={() => wechseln("code")}>
+        <i class="fa-solid fa-keyboard"></i> Code eintippen
+      </button>
+      <p class="hinweis">Den QR und den Code zeigt die Kellerwolke am Rechner unter Einstellungen, Geräte.</p>
     </form>
   {:else}
     <form class="login-karte" onsubmit={koppeln}>
@@ -79,7 +98,7 @@
         <h1>Gerät koppeln</h1>
       </div>
       <p class="hinweis links">
-        Tipp den Code vom Rechner ein. Danach bleibt dieses Gerät angemeldet, bis du es trennst; dein Passwort wird hier
+        Tipp den Code vom Rechner ein oder <button class="verweis" type="button" onclick={() => (scannen = true)}>scanne den QR</button>. Danach bleibt dieses Gerät angemeldet, bis du es trennst; dein Passwort wird hier
         nicht gespeichert.
       </p>
       {#if fehler}<div class="fehler"><i class="fa-solid fa-circle-exclamation"></i> {fehler}</div>{/if}
@@ -117,6 +136,15 @@
   {/if}
 </div>
 
+{#if scannen}
+  <QrScanner
+    hinweis="QR-Code vom Rechner in den Rahmen halten"
+    gelesen={gescannt}
+    abbrechen={() => (scannen = false)}
+    anders={{ text: "Code eintippen", icon: "fa-keyboard", tun: () => { scannen = false; wechseln("code"); } }}
+  />
+{/if}
+
 <style>
   .oder {
     display: flex;
@@ -131,6 +159,18 @@
     flex: 1;
     height: 1px;
     background: var(--rand);
+  }
+  .mitte {
+    justify-content: center;
+  }
+  .verweis {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: var(--akzent);
+    cursor: pointer;
+    text-decoration: underline;
   }
   .zweit {
     justify-content: center;
