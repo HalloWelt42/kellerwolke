@@ -4,7 +4,6 @@
 import { spielen, type Spur } from "../player.svelte";
 import { oeffneVollansicht } from "../vorschau.svelte";
 import { aktiveFlaeche } from "../zustand.svelte";
-import { waehleAnsicht } from "../ansicht.svelte";
 import type { Browser } from "../browser.svelte";
 import type { Knoten, Pfadteil } from "../types";
 import { ausKnoten, type MedienEintrag } from "./adressen";
@@ -27,7 +26,6 @@ export function medienOeffnen(liste: MedienEintrag[], index: number): boolean {
 }
 
 export function zumOrdner(pfad: Pfadteil[], markiereId?: string): void {
-  waehleAnsicht("dateien");
   aktiveFlaeche().oeffnePfad(pfad, markiereId);
 }
 
@@ -43,4 +41,17 @@ export function medienDerFlaeche(b: Browser): MedienEintrag[] {
 export function knotenOeffnen(b: Browser, k: Knoten): boolean {
   const liste = medienDerFlaeche(b);
   return medienOeffnen(liste, liste.findIndex((m) => m.id === k.id));
+}
+
+// Aktionen der Art (KW-5): Diashow aller Bilder der Fläche, alle Titel der Fläche nacheinander.
+export function diashowDerFlaeche(b: Browser): boolean {
+  const bilder = medienDerFlaeche(b).filter((m) => m.art === "bild");
+  if (!bilder.length) return false;
+  oeffneVollansicht(bilder, 0, true);
+  return true;
+}
+
+export function alleAbspielen(b: Browser): boolean {
+  const titel = medienDerFlaeche(b).filter((m) => m.art === "audio");
+  return medienOeffnen(titel, 0);
 }

@@ -2,7 +2,6 @@ import * as api from "./api";
 import { playerZuruecksetzen } from "./player.svelte";
 import { kontoVerlassen } from "./zustand.svelte";
 import { schliesseVollansicht } from "./vorschau.svelte";
-import { waehleAnsicht } from "./ansicht.svelte";
 import { verwaltungSchliessen } from "./verwaltung.svelte";
 import type { Benutzer, GeraeteArt } from "./types";
 
@@ -27,7 +26,6 @@ function aufraeumen(): void {
   playerZuruecksetzen();
   schliesseVollansicht();
   kontoVerlassen();
-  waehleAnsicht("dateien");
   verwaltungSchliessen();
   api.lesezugangBeenden();
   auth.angemeldet = false;

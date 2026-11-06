@@ -31,18 +31,15 @@
   import Teilen from "./lib/Teilen.svelte";
   import Modal from "./lib/Modal.svelte";
   import Logo from "./lib/Logo.svelte";
-  import AppLeiste from "./lib/AppLeiste.svelte";
   import PlayerLeiste from "./lib/PlayerLeiste.svelte";
   import PlayerKern from "./lib/PlayerKern.svelte";
   import Meldung from "./lib/Meldung.svelte";
-  import Medien from "./lib/medien/Medien.svelte";
   import Vollansicht from "./lib/medien/Vollansicht.svelte";
   import { knotenOeffnen } from "./lib/medien/oeffnen";
   import MobilApp from "./lib/mobil/MobilApp.svelte";
   import { geraet } from "./lib/geraet.svelte";
   import { verbindung } from "./lib/verbindung.svelte";
   import { aktuelleSpur } from "./lib/player.svelte";
-  import { ansicht, waehleAnsicht, medienEinstellung, MEDIEN_BEREICHE } from "./lib/ansicht.svelte";
   import type { Knoten } from "./lib/types";
 
   let teilenKnoten = $state<Knoten | null>(null);
@@ -82,14 +79,8 @@
     suchtext = haupt.suchbegriff;
   });
 
-  const istMedien = $derived(ansicht.aktiv === "medien");
-  // Die Medienansicht gibt es nur dort, wo Medien liegen; sonst zurück zu den Dateien.
-  $effect(() => {
-    if (istMedien && !MEDIEN_BEREICHE.includes(haupt.bereich)) waehleAnsicht("dateien");
-  });
-
-  const istSplit = $derived(zustand.split && haupt.bereich === "dateien" && !istMedien);
-  const mitDetail = $derived(!istMedien && haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit);
+  const istSplit = $derived(zustand.split && haupt.bereich === "dateien");
+  const mitDetail = $derived(haupt.detail !== null && haupt.auswahl.anzahl <= 1 && !istSplit);
   const avatarText = $derived((auth.benutzer?.name ?? "?").slice(0, 1).toUpperCase());
   const laufendeVorgaenge = $derived(
     zustand.vorgaenge.filter((v) => v.status === "laeuft").length +
@@ -275,34 +266,23 @@
           </span>
         </div>
       {/if}
-      <AppLeiste />
-      {#if !istMedien}
-        <Werkzeugleiste
-          onNeuerOrdner={() => (neuerOrdnerOffen = true)}
-          onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
+      <Werkzeugleiste
+        onNeuerOrdner={() => (neuerOrdnerOffen = true)}
+        onPapierkorbLeeren={() => (papierkorbLeerenOffen = true)}
+      />
+      {#if istSplit}
+        <Splitscreen
+          onTeilen={(k) => (teilenKnoten = k)}
+          onEndgueltig={(knoten) => (endgueltig = { ziel: aktiveFlaeche(), knoten })}
         />
-        {#if istSplit}
-          <Splitscreen
-            onTeilen={(k) => (teilenKnoten = k)}
-            onEndgueltig={(knoten) => (endgueltig = { ziel: aktiveFlaeche(), knoten })}
-          />
-        {:else}
-          <Breadcrumb browser={haupt} />
-          <Meldung browser={haupt} />
-          <Dateiliste
-            browser={haupt}
-            onTeilen={(k) => (teilenKnoten = k)}
-            onEndgueltig={(knoten) => (endgueltig = { ziel: haupt, knoten })}
-          />
-        {/if}
       {:else}
-        {#if medienEinstellung.quelle === "alle"}
-          <nav class="breadcrumb"><i class="fa-solid fa-layer-group"></i> <span class="aktuell">Alle Medien</span></nav>
-        {:else}
-          <Breadcrumb browser={haupt} />
-        {/if}
+        <Breadcrumb browser={haupt} />
         <Meldung browser={haupt} />
-        <Medien browser={haupt} />
+        <Dateiliste
+          browser={haupt}
+          onTeilen={(k) => (teilenKnoten = k)}
+          onEndgueltig={(knoten) => (endgueltig = { ziel: haupt, knoten })}
+        />
       {/if}
     </section>
 

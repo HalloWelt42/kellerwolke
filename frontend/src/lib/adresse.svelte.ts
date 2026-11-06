@@ -1,14 +1,13 @@
 // Die Adresse im Browser zeigt, wo man ist, mit echten Pfaden:
 //   /dateien/Apps/Probe            Ordner in "Meine Dateien"
 //   /dateien/Apps/Probe/notiz.txt  Ordner mit gezeigter Datei
-//   /favoriten  /geteilt  /papierkorb  /medien  /suche?q=...
+//   /favoriten  /geteilt  /papierkorb  /suche?q=...  /medien (nur am Telefon; am Rechner führt es zu Dateien)
 //   /extern/<Quelle>/<Unterpfad>   externe Quelle
 //   /einstellungen/<Seite>         Verwaltung (am Rechner); am Telefon dazu /mehr
 // Zurück und Vor im Browser führen dorthin zurück, und jede Adresse lässt sich als Link öffnen. Gespiegelt wird die
 // Hauptfläche; in der geteilten Ansicht bleibt die Adresse beim Hauptort. Ein Ortswechsel legt einen neuen Eintrag in
 // den Verlauf, eine andere gezeigte Datei im selben Ordner ersetzt ihn nur.
 import * as api from "./api";
-import { ansicht, waehleAnsicht } from "./ansicht.svelte";
 import { auth } from "./auth.svelte";
 import { vielleichtNeuLaden } from "./fassung.svelte";
 import { geraet } from "./geraet.svelte";
@@ -76,7 +75,8 @@ export function ortAus(pfadname: string, suche: string): Ort {
 // Wo man gerade ist, aus dem Zustand der Oberfläche.
 function aktuellerOrt(): Ort {
   if (!geraet.mobil && verwaltung.offen) return { art: "einstellungen", seite: verwaltung.seite };
-  if (geraet.mobil ? mobil.reiter === "medien" && !mobil.seite : ansicht.aktiv === "medien") return { art: "medien" };
+  // Medien ist nur noch am Telefon ein eigener Ort; am Rechner zeigt die Ansicht Dateien die Medien (KW-5).
+  if (geraet.mobil && mobil.reiter === "medien" && !mobil.seite) return { art: "medien" };
   if (geraet.mobil && mobil.reiter === "mehr" && !mobil.seite) return { art: "mehr" };
   switch (haupt.bereich) {
     case "dateien": {
@@ -155,12 +155,10 @@ async function anwenden(ort: Ort): Promise<void> {
       return;
     }
     verwaltung.offen = false;
-    if (ort.art === "medien") {
-      if (geraet.mobil) zeigeReiter("medien");
-      else waehleAnsicht("medien");
+    if (ort.art === "medien" && geraet.mobil) {
+      zeigeReiter("medien");
       return;
     }
-    if (!geraet.mobil) waehleAnsicht("dateien");
     switch (ort.art) {
       case "dateien":
         await dateienAnwenden(ort.teile);

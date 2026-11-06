@@ -1,12 +1,13 @@
 <script lang="ts">
   import { formatKuerzel, vorschauUrl } from "./adressen";
 
-  // Standbild eines Videos mit Abspielzeichen; ohne Standbild (kein ffmpeg) das Film-Symbol.
-  // Sie zeigt nur - geöffnet wird über die Ansicht (Doppelklick, Klick im Detail).
+  // Standbild eines Videos mit Abspielzeichen; ohne Standbild (kein ffmpeg) das Film-Symbol. Mit `abspielen` ist das
+  // Zeichen ein Knopf (Kacheln, KW-5), sonst zeigt es nur und geöffnet wird über die Ansicht (Doppelklick, Detail).
   interface Props {
     m: { id: string; etag: string | null; name: string };
+    abspielen?: () => void;
   }
-  let { m }: Props = $props();
+  let { m, abspielen }: Props = $props();
   let kaputt = $state(false);
   $effect(() => {
     void m.id;
@@ -23,7 +24,22 @@
   {/if}
   <span class="vv-format">{formatKuerzel(m.name)}</span>
   <!-- Dauerhaft sichtbar: so ist klar, dass es ein Video ist und kein Bild. -->
-  <span class="vv-play"><i class="fa-solid fa-play"></i></span>
+  {#if abspielen}
+    <button
+      class="vv-play"
+      title="Abspielen"
+      aria-label="Abspielen: {m.name}"
+      onclick={(e) => {
+        e.stopPropagation();
+        abspielen();
+      }}
+      ondblclick={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-play"></i>
+    </button>
+  {:else}
+    <span class="vv-play"><i class="fa-solid fa-play"></i></span>
+  {/if}
 </div>
 
 <style>
@@ -45,6 +61,9 @@
   }
   .vv-play {
     position: absolute;
+    color: #fff;
+    padding: 0;
+    cursor: pointer;
     width: 42px; height: 42px; border-radius: 50%;
     display: grid; place-items: center;
     font-size: 0.95rem;

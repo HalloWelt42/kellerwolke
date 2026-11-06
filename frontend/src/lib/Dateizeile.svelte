@@ -2,6 +2,8 @@
   import type { Anfrage, Knoten } from "./types";
   import { symbol, groesseText, datum, ordnerInhalt, rolleText, mitBegleitern } from "./format";
   import { anfrageStand } from "./anfragestand";
+  import { player, aktuelleSpur } from "./player.svelte";
+  import Dauer from "./medien/Dauer.svelte";
 
   export type RowAktion =
     | "herunterladen"
@@ -22,6 +24,8 @@
     gruppe?: "zu" | "offen" | null; // Hauptdatei mit Begleitern in dieser Liste
     begleiter?: boolean; // steht eingerückt unter seiner Hauptdatei
     anfrage?: Anfrage | null; // offene Anfrage an eine App zu dieser Datei
+    nummer?: number | null; // Titelnummer in der Ansicht Audio (statt des Symbols)
+    onMedium?: () => void; // Aktion der Art: Bild im Vollbild, Ton und Video abspielen (KW-5)
     onGruppe?: () => void;
     onClick: (e: MouseEvent) => void;
     onDblClick: () => void;
@@ -47,6 +51,8 @@
     gruppe = null,
     begleiter = false,
     anfrage = null,
+    nummer = null,
+    onMedium,
     onGruppe,
     onClick,
     onDblClick,
@@ -74,6 +80,17 @@
 
   const stand = $derived(anfrage ? anfrageStand(anfrage) : null);
 
+  // Medien bekommen statt des Symbols einen Knopf mit der Aktion ihrer Art; der laufende Titel ist markiert.
+  const art = $derived(k.typ === "datei" && !imPapierkorb ? (k.medienart ?? null) : null);
+  const spielt = $derived(art === "audio" && aktuelleSpur()?.id === k.id);
+  const aktion = $derived(
+    art === "bild"
+      ? { icon: "fa-expand", titel: "Vollbild" }
+      : spielt && player.laeuft
+        ? { icon: "fa-pause", titel: "Pause" }
+        : { icon: "fa-play", titel: spielt ? "Weiter abspielen" : "Abspielen" },
+  );
+
   let entwurf = $state(k.name);
   $effect(() => {
     if (umbenennenAktiv) entwurf = k.name;
@@ -99,6 +116,7 @@
 
 <div
   class="zeile"
+  class:spielt
   class:begleiter
   class:gewaehlt
   class:gezogen
@@ -133,7 +151,26 @@
   </span>
 
   <span class="z-name">
-    <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
+    {#if art && onMedium}
+      <button
+        class="sym-knopf art-{art}"
+        class:spielt
+        title={aktion.titel}
+        aria-label="{aktion.titel}: {k.name}"
+        onclick={(e) => {
+          e.stopPropagation();
+          onMedium();
+        }}
+        ondblclick={(e) => e.stopPropagation()}
+      >
+        <span class="sk-ruhe">
+          {#if nummer}{nummer}{:else}<i class="fa-solid {sym.icon} {sym.klasse}"></i>{/if}
+        </span>
+        <span class="sk-aktion"><i class="fa-solid {aktion.icon}"></i></span>
+      </button>
+    {:else}
+      <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
+    {/if}
     {#if umbenennenAktiv}
       <input
         class="umbenennen-feld"
@@ -182,6 +219,9 @@
     {/if}
   </span>
 
+  <span class="z-meta z-dauer">
+    {#if art === "audio" || art === "video"}<Dauer m={k} {art} />{/if}
+  </span>
   <span class="z-meta">{metaText}</span>
   <span class="z-meta z-geaendert">{datum(k.geaendert_am)}</span>
 

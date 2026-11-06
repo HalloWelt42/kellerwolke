@@ -39,6 +39,13 @@
   let sichtbar = $state(SCHRITT);
   const angezeigt = $derived(sortiert.slice(0, sichtbar));
   const mehrVorhanden = $derived(sichtbar < sortiert.length);
+  // Ansicht Audio: die Titel sind durchnummeriert wie auf einem Album (KW-5)
+  const titelNummer = $derived.by(() => {
+    const nr = new Map<string, number>();
+    if (browser.wirksameArt !== "audio") return nr;
+    for (const k of sortiert) if (k.typ === "datei" && k.medienart === "audio") nr.set(k.id, nr.size + 1);
+    return nr;
+  });
 
   // Schlüssel, der sich ändert, wenn Standort, Sortierung oder Filter wechseln
   // (für das Zurücksetzen der Lazy-Grenze; nicht bei Live-Poll).
@@ -512,6 +519,7 @@
       <div class="skelett-zeile">
         <span class="sk kreis"></span>
         <span class="sk" style="width: {40 + ((i * 13) % 45)}%"></span>
+        <span></span>
         <span class="sk" style="width: 60%"></span>
         <span class="sk" style="width: 80%"></span>
       </div>
@@ -645,9 +653,10 @@
         </div>
       {/if}
     </div>
-  {:else if browser.ansicht === "grid"}
+  {:else if !browser.zeigtListe}
     <div
-      class="grid"
+      class="grid g-{browser.kachelgroesse}"
+      class:nur-bilder={browser.wirksameArt === "bild"}
       bind:this={containerEl}
       role="presentation"
       onmousedown={flaecheMouseDown}
@@ -743,6 +752,7 @@
             ></i>
           {/if}
         </button>
+        <span class="sp-dauer">Dauer</span>
         <button
           class="sortbar"
           class:aktiv={browser.sortKey === "groesse"}
@@ -787,6 +797,8 @@
           gruppe={k.begleiter_anzahl && !imPapierkorb ? (browser.offeneGruppen[k.id] ? "offen" : "zu") : null}
           begleiter={!imPapierkorb && !!k.haupt_id && hauptDa.has(k.haupt_id)}
           anfrage={offeneAnfrageZu(k.id)}
+          nummer={titelNummer.get(k.id) ?? null}
+          onMedium={() => medienAktivieren(k)}
           onGruppe={() => browser.gruppeUmschalten(k.id)}
           onClick={(e) => rowClick(e, k)}
           onDblClick={() => rowDblClick(k)}

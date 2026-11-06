@@ -1,6 +1,7 @@
 import * as api from "./api";
 import { erzeugeAuswahl, type Auswahl } from "./auswahl.svelte";
 import { filterAktiv, leererFilter, passt, type Filterzustand } from "./filter";
+import { ARTEN_BEREICHE, type Artfilter, type Kachelgroesse } from "./ansicht.svelte";
 import { eindeutigeId } from "./id";
 import type { ExternEintrag, Knoten, Pfadteil, Version } from "./types";
 
@@ -71,6 +72,9 @@ export class Browser {
   sortKey = $state<SortKey>("name");
   sortRichtung = $state<SortRichtung>("auf");
   ansicht = $state<Ansicht>("liste");
+  // Filter nach Art und Kachelgröße (KW-5): die Art wählt Inhalt und Darstellung, Ordner bleiben immer sichtbar.
+  art = $state<Artfilter>("alle");
+  kachelgroesse = $state<Kachelgroesse>("klein");
   // Verschieben über Navigation: gemerkte Auswahl, Ziel ist der Ordner, in dem man "Hierher" wählt.
   verschiebeIds = $state<string[] | null>(null);
 
@@ -82,8 +86,31 @@ export class Browser {
 
   // In der Liste stehen Begleitdateien direkt unter ihrer Hauptdatei, wenn deren Gruppe offen ist, sonst gar nicht;
   // liegt die Hauptdatei nicht in der Liste (Suche, Filter), stehen sie für sich.
+  // Wie viele Dateien je Art hier liegen (Anzahl an den Knöpfen des Filters), vor dem Filter nach Art.
+  artZahlen = $derived.by(() => {
+    const z: Record<Artfilter, number> = { alle: 0, bild: 0, audio: 0, video: 0 };
+    for (const k of this.eintraege) {
+      if (k.typ !== "datei") continue;
+      z.alle += 1;
+      if (k.medienart) z[k.medienart] += 1;
+    }
+    return z;
+  });
+
+  // Die Art, die hier wirkt: nur in Bereichen mit Arten, sonst alles (die gewählte bleibt für die Rückkehr gemerkt).
+  get wirksameArt(): Artfilter {
+    return ARTEN_BEREICHE.includes(this.bereich) ? this.art : "alle";
+  }
+
+  // Die Darstellung, die die Fläche tatsächlich zeigt: Audio ist eine Titelliste, keine Kachel-Sache.
+  get zeigtListe(): boolean {
+    return this.ansicht === "liste" || this.wirksameArt === "audio";
+  }
+
   sichtbar = $derived.by(() => {
-    const quelle = filterAktiv(this.filter) ? this.eintraege.filter((k) => passt(k.name, this.filter)) : this.eintraege;
+    const art = this.wirksameArt;
+    const nachArt = art === "alle" ? this.eintraege : this.eintraege.filter((k) => k.typ !== "datei" || k.medienart === art);
+    const quelle = filterAktiv(this.filter) ? nachArt.filter((k) => passt(k.name, this.filter)) : nachArt;
     const rang = (k: Knoten) => (k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2);
     const key = this.sortKey;
     const dir = this.sortRichtung === "auf" ? 1 : -1;
@@ -96,7 +123,7 @@ export class Browser {
       return v * dir;
     });
     // Kacheln: Begleiter stehen ohnehin neben ihrer Hauptdatei (gleicher Stamm); im Papierkorb ist jede Zeile für sich.
-    if (this.ansicht !== "liste" || this.bereich === "papierkorb") return sortiert;
+    if (!this.zeigtListe || this.bereich === "papierkorb") return sortiert;
     const da = new Set(sortiert.map((k) => k.id));
     const begleiter = new Map<string, Knoten[]>();
     for (const k of sortiert) {

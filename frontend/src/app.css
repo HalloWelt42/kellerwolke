@@ -24,6 +24,10 @@
   --gefahr-weich: #fbe7e6;
   --warn: #d99500;
   --ordner: #f0b34a;
+  /* Farben der Medienarten (Filter nach Art, Kacheln, Liste) */
+  --art-bild: #1f9d6b;
+  --art-audio: #7a52d6;
+  --art-video: #d9612b;
   --schatten-1: 0 1px 2px rgba(20, 30, 45, 0.08);
   --schatten-2: 0 8px 28px rgba(20, 30, 45, 0.18);
   --a1: 4px;
@@ -60,6 +64,9 @@
   --gefahr-weich: #3a1d1d;
   --warn: #e8b54a;
   --ordner: #e8b54a;
+  --art-bild: #44c995;
+  --art-audio: #a688f0;
+  --art-video: #f08a55;
   --schatten-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --schatten-2: 0 10px 34px rgba(0, 0, 0, 0.5);
 }
@@ -407,23 +414,56 @@ textarea {
 .werkzeuge .luecke {
   flex: 1;
 }
-.ansicht-umschalter {
-  display: flex;
+/* Knopfleiste: voneinander abhängige Knöpfe, genau einer aktiv; Symbol (und Anzahl), der Text steht im Hover */
+.seg {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  background: var(--flaeche-2);
   border: 1px solid var(--rand);
   border-radius: var(--r2);
-  overflow: hidden;
+  padding: 2px;
 }
-.ansicht-umschalter button {
+.seg button {
   border: none;
-  background: var(--flaeche);
+  background: transparent;
   color: var(--text-2);
-  padding: 0 var(--a3);
-  height: 36px;
+  font: inherit;
+  font-size: 0.86rem;
+  height: 32px;
+  min-width: 34px;
+  padding: 0 var(--a2);
+  border-radius: var(--r1);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
-.ansicht-umschalter button.aktiv {
+.seg button:hover:not(:disabled) {
+  background: var(--flaeche-3);
+  color: var(--text);
+}
+.seg button.aktiv {
   background: var(--akzent-weich);
   color: var(--akzent-stark);
+}
+.seg button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.seg .zahl {
+  font-size: 0.74rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.seg button.aktiv .zahl {
+  color: inherit;
+}
+.seg .trenner {
+  width: 1px;
+  background: var(--rand);
+  margin: 4px 2px;
 }
 
 /* Breadcrumb */
@@ -480,7 +520,7 @@ textarea {
 .listenkopf,
 .zeile {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 110px 170px 96px;
+  grid-template-columns: 34px minmax(0, 1fr) 64px 110px 170px 96px;
   align-items: center;
   gap: var(--a3);
   padding: 0 var(--a4);
@@ -490,7 +530,7 @@ textarea {
 @container (max-width: 620px) {
   .listenkopf,
   .zeile {
-    grid-template-columns: 34px minmax(0, 1fr) 92px 92px;
+    grid-template-columns: 34px minmax(0, 1fr) 56px 92px 92px;
   }
   /* Hoehere Spezifitaet als ".listenkopf .sortbar" (steht spaeter in der Datei),
      damit das Datum-Kopffeld wirklich verschwindet - ohne !important. */
@@ -637,6 +677,73 @@ textarea {
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
+.z-dauer,
+.listenkopf .sp-dauer {
+  text-align: right;
+}
+.listenkopf .sp-dauer {
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+/* Medien in der Liste (KW-5): an Stelle des Symbols ein Knopf mit der Aktion der Art; beim Überfahren und beim
+   laufenden Titel zeigt er die Aktion, sonst Symbol oder Titelnummer */
+.sym-knopf {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--r1);
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.sym-knopf > span {
+  grid-area: 1 / 1;
+}
+.sym-knopf .sk-ruhe i {
+  font-size: 1.55rem;
+}
+.sym-knopf .sk-aktion {
+  opacity: 0;
+  color: #fff;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r1);
+  display: grid;
+  place-items: center;
+}
+.sym-knopf.art-bild .sk-aktion {
+  background: var(--art-bild);
+}
+.sym-knopf.art-audio .sk-aktion {
+  background: var(--art-audio);
+}
+.sym-knopf.art-video .sk-aktion {
+  background: var(--art-video);
+}
+.zeile:hover .sym-knopf .sk-aktion,
+.sym-knopf:focus-visible .sk-aktion,
+.sym-knopf.spielt .sk-aktion {
+  opacity: 1;
+}
+.zeile:hover .sym-knopf .sk-ruhe,
+.sym-knopf:focus-visible .sk-ruhe,
+.sym-knopf.spielt .sk-ruhe {
+  opacity: 0;
+}
+.zeile.spielt {
+  background: color-mix(in srgb, var(--art-audio) 9%, transparent);
+}
+.zeile.spielt .titel {
+  color: var(--art-audio);
+  font-weight: 500;
+}
 .z-akt {
   display: flex;
   gap: var(--a1);
@@ -685,11 +792,14 @@ textarea {
 }
 
 /* ===== Grid / Kacheln ===== */
+/* Drei Größen (KW-5): klein wie bisher in Dateien, mittel wie die frühere Medienansicht, groß doppelt so groß */
 .grid {
+  --spalte: 150px;
+  --vorschau: 88px;
   flex: 1;
   overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--spalte), 100%), 1fr));
   gap: var(--a3);
   padding: var(--a4);
   align-content: start;
@@ -715,8 +825,20 @@ textarea {
 .kachel.gezogen {
   opacity: 0.45;
 }
+.grid.g-mittel {
+  --spalte: 190px;
+  --vorschau: 128px;
+}
+.grid.g-gross {
+  --spalte: 300px;
+  --vorschau: 210px;
+}
+.grid.g-gross .kachel .k-name {
+  font-size: 0.95rem;
+}
 .kachel .vorschau {
-  height: 88px;
+  height: var(--vorschau);
+  position: relative;
   border-radius: var(--r1);
   background: var(--flaeche-3);
   display: grid;
@@ -764,6 +886,101 @@ textarea {
 .kachel:hover .aus-box,
 .kachel.gewaehlt .aus-box {
   opacity: 1;
+}
+/* Marke mit der Dauer von Ton und Video, unten rechts in der Vorschau */
+.kachel .k-dauer {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 1;
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+/* Bild: Vollbild beim Überfahren */
+.kachel .k-vollbild {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity var(--schnell);
+}
+.grid.g-gross .kachel .k-vollbild {
+  width: 58px;
+  height: 58px;
+  font-size: 1.3rem;
+}
+.kachel:hover .k-vollbild,
+.kachel .k-vollbild:focus-visible {
+  opacity: 1;
+}
+.kachel .k-unter {
+  display: none;
+}
+/* Ansicht Bilder: Fotos randlos, der Name nur beim Überfahren; Ordner bleiben, wie sie sind */
+/* Kein overflow an der Kachel: im Raster mit fester Höhe setzte es ihre Mindesthöhe auf 0 und die Reihen schrumpften;
+   das Abschneiden macht die Vorschau (overflow hidden, gerundet) */
+.grid.nur-bilder .kachel.art-bild {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--r2);
+  display: flex;
+  flex-direction: column;
+}
+/* Das Foto füllt die Kachel so hoch wie eine Ordnerkachel daneben (Vorschau plus Name und Größe) */
+.grid.nur-bilder .kachel.art-bild .vorschau {
+  margin: 0;
+  flex: 1;
+  height: auto;
+  min-height: calc(var(--vorschau) + 44px);
+  border-radius: var(--r2);
+}
+.grid.nur-bilder .kachel.art-bild .k-name-zeile,
+.grid.nur-bilder .kachel.art-bild .k-meta,
+.grid.nur-bilder .kachel.art-bild .umbenennen-feld {
+  display: none;
+}
+.grid.nur-bilder .kachel.art-bild .k-unter {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  padding: 18px var(--a2) 6px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  color: #fff;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity var(--schnell);
+  pointer-events: none;
+}
+.grid.nur-bilder .kachel.art-bild:hover .k-unter {
+  opacity: 1;
+}
+.grid.nur-bilder .kachel.art-bild.gewaehlt {
+  outline: 3px solid var(--akzent);
+  outline-offset: -3px;
 }
 
 /* ===== Auswahl-Leiste (Stapel-Aktionen) ===== */
@@ -1017,6 +1234,8 @@ textarea {
   .liste .zeile {
     grid-template-columns: 34px minmax(0, 1fr) 76px;
   }
+  .liste .zeile .z-dauer,
+  .liste .listenkopf .sp-dauer,
   .liste .zeile .z-akt,
   .liste .listenkopf > span:last-child {
     display: none;
@@ -1271,7 +1490,7 @@ select.feld {
 }
 .skelett-zeile {
   display: grid;
-  grid-template-columns: 34px 1fr 110px 170px;
+  grid-template-columns: 34px 1fr 64px 110px 170px;
   gap: var(--a3);
   align-items: center;
   padding: 0 var(--a4);
@@ -1679,7 +1898,9 @@ select.feld {
     grid-template-columns: 30px 1fr 84px;
   }
   .listenkopf .sp-geaendert,
+  .listenkopf .sp-dauer,
   .zeile .z-geaendert,
+  .zeile .z-dauer,
   .z-akt {
     display: none;
   }
@@ -1740,12 +1961,17 @@ select.feld {
 }
 /* Schmale Bereiche: kompakte Spalten (Auswahl, Name, Groesse), Datum/Aktionen
    entfallen, damit lange Namen nicht abgeschnitten werden. */
-.pane .zeile {
-  grid-template-columns: 30px 1fr auto;
+.pane .zeile,
+.pane .listenkopf {
+  grid-template-columns: 30px minmax(0, 1fr) 88px;
   padding: 0 var(--a3);
 }
 .pane .zeile .z-geaendert,
-.pane .zeile .z-akt {
+.pane .zeile .z-dauer,
+.pane .zeile .z-akt,
+.pane .listenkopf .sp-geaendert,
+.pane .listenkopf .sp-dauer,
+.pane .listenkopf > span:last-child {
   display: none;
 }
 

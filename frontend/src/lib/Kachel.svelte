@@ -4,6 +4,7 @@
   import BildVorschau from "./medien/BildVorschau.svelte";
   import VideoVorschau from "./medien/VideoVorschau.svelte";
   import AudioVorschau from "./medien/AudioVorschau.svelte";
+  import Dauer from "./medien/Dauer.svelte";
 
   interface Props {
     k: Knoten;
@@ -23,7 +24,7 @@
     onOrdnerDragOver?: (e: DragEvent) => void;
     onOrdnerDragLeave?: () => void;
     onOrdnerDrop?: (e: DragEvent) => void;
-    onSpielen?: () => void; // Audio: der Knopf auf dem Cover startet oder pausiert
+    onSpielen?: () => void; // Aktion der Art: Bild im Vollbild, Ton und Video abspielen (Knopf auf der Vorschau)
   }
   let {
     k,
@@ -84,7 +85,7 @@
 </script>
 
 <div
-  class="kachel"
+  class="kachel art-{art ?? k.typ}"
   class:gewaehlt
   class:gezogen
   class:zielordner
@@ -118,10 +119,27 @@
   <div class="vorschau" class:ordner={k.typ !== "datei"} class:hat-vorschau={!!art}>
     {#if art === "bild"}
       <BildVorschau m={k} />
+      {#if onSpielen}
+        <button
+          class="k-vollbild"
+          title="Vollbild"
+          aria-label="Vollbild: {k.name}"
+          onclick={(e) => {
+            e.stopPropagation();
+            onSpielen();
+          }}
+          ondblclick={(e) => e.stopPropagation()}
+        >
+          <i class="fa-solid fa-expand"></i>
+        </button>
+      {/if}
+      <span class="k-unter">{k.name}</span>
     {:else if art === "video"}
-      <VideoVorschau m={k} />
+      <VideoVorschau m={k} abspielen={onSpielen} />
+      <span class="k-dauer"><Dauer m={k} art="video" /></span>
     {:else if art === "audio"}
       <AudioVorschau m={k} spielen={() => onSpielen?.()} />
+      <span class="k-dauer"><Dauer m={k} art="audio" /></span>
     {:else}
       <i class="fa-solid {sym.icon}"></i>
     {/if}
