@@ -1,8 +1,8 @@
-import type { Knoten, Medienart, Medium, Pfadteil } from "../types";
+import type { Knoten, Medienart, Pfadteil } from "../types";
 import { heilen, lesezugang } from "./lesezugang.svelte";
 
-// Ein Medium, wie es Vollansicht, Player und Medienansicht kennen - gebaut aus
-// einem Knoten der Dateiliste oder einem Eintrag der Medienliste.
+// Ein Medium, wie es Vollansicht und Player kennen - gebaut aus
+// einem Knoten einer Fläche.
 export interface MedienEintrag {
   id: string;
   name: string;
@@ -20,13 +20,6 @@ export function ausKnoten(k: Knoten, pfad: Pfadteil[] | null, eigen = true): Med
   return {
     id: k.id, name: k.name, etag: k.etag, art: k.medienart, groesse: k.groesse ?? null, pfad,
     geaendert_am: k.geaendert_am, favorit: eigen ? !!k.favorit : null, eigen,
-  };
-}
-
-export function ausMedium(m: Medium): MedienEintrag {
-  return {
-    id: m.id, name: m.name, etag: m.etag, art: m.art, groesse: m.groesse, pfad: m.pfad,
-    geaendert_am: m.geaendert_am, favorit: null, eigen: true,
   };
 }
 

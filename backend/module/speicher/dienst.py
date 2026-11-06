@@ -22,7 +22,6 @@ from app.config import EINSTELLUNGEN
 from app.inhaltstyp import inhaltstyp_aus_name
 from app.io_pool import im_thread
 from app.ports import SpeicherNichtVerfuegbar
-from module.medien.arten import such_muster
 from module.speicher import begleiter
 from module.speicher.begleiter import GruppeKonflikt
 
@@ -912,11 +911,6 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             return await repo.kinder(besitzer_id, parent_id)
-
-    async def medien_im_baum(self, besitzer_id):
-        """Alle lebenden Mediendateien des Kontos im ganzen Baum, je mit Ordnerkette und Versionsstand."""
-        async with self.pool.connection() as conn:
-            return await PostgresMetadataRepository(conn).alle_dateien(besitzer_id, such_muster())
 
     async def knoten_des_nutzers(self, besitzer_id, knoten_id):
         """Liefert den Knoten nur, wenn er dem Nutzer gehoert - sonst None."""

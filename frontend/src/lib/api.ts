@@ -12,7 +12,6 @@ import type {
   Knoten,
   Konto,
   Kopplung,
-  Medium,
   Pfadteil,
   PoolAufraeumen,
   PoolPruefung,
@@ -208,10 +207,6 @@ export function pfadVon(id: string): Promise<Pfadteil[]> {
 // Ein Pfad im eigenen Baum ("Apps/Probe/notiz.txt") zu Knoten und Ordnerkette darüber (ohne "Meine Dateien").
 export function pfadAufloesen(pfad: string): Promise<{ kette: Pfadteil[]; id: string; name: string; typ: string }> {
   return hole(`/v1/dateien/aufloesen?pfad=${encodeURIComponent(pfad)}`);
-}
-
-export function alleMedien(): Promise<Medium[]> {
-  return hole<Medium[]>("/v1/medien/alle");
 }
 
 // --- Dateien ----------------------------------------------------------------

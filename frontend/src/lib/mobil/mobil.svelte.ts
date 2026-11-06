@@ -1,11 +1,11 @@
-// Navigation der Telefon-Oberfläche: vier Reiter, Unterseiten (Suche, Geteilt,
+// Navigation der Telefon-Oberfläche: drei Reiter (Medien sind Teil von Dateien, KW-5), Unterseiten (Suche, Geteilt,
 // Papierkorb) und das eine Blatt von unten. Die Daten zeigt dieselbe Fläche wie
 // am Rechner (haupt); hier steht nur, was das Telefon anders zeigt.
 import * as api from "../api";
 import { haupt } from "../zustand.svelte";
 import type { AppAktion, Knoten, Pfadteil } from "../types";
 
-export type MobilReiter = "dateien" | "medien" | "favoriten" | "mehr";
+export type MobilReiter = "dateien" | "favoriten" | "mehr";
 export type MobilSeite = "suche" | "geteilt" | "papierkorb";
 
 // Was Halten-Bestätigung und Symbol von einem Eintrag brauchen (auch aus der Medienliste).

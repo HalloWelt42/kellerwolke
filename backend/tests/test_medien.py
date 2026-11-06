@@ -164,18 +164,19 @@ async def test_strom_mit_bereichen(umgebung):
     assert (await client.get(f"/api/v1/inhalt/strom/{k['id']}", headers={**h, "Range": "bytes=999999-"})).status_code == 416
 
 
-async def test_liste_und_medienart(umgebung):
+async def test_medienart_an_jedem_knoten(umgebung):
     client, app, _ = umgebung
     h = await _anmelden(client)
     ordner = (await client.post("/api/v1/dateien/ordner", json={"name": "Urlaub"}, headers=h)).json()
-    r = await client.post("/api/v1/dateien/upload", data={"parent_id": ordner["id"]},
-                          files={"datei": ("film.mp4", b"v", "video/mp4")}, headers=h)
+    await client.post("/api/v1/dateien/upload", data={"parent_id": ordner["id"]},
+                      files={"datei": ("film.mp4", b"v", "video/mp4")}, headers=h)
     await _hoch(client, h, "text.txt", b"t")
-    alle = (await client.get("/api/v1/medien/alle", headers=h)).json()
-    assert [(m["name"], m["art"], [p["name"] for p in m["pfad"]]) for m in alle] == [("film.mp4", "video", ["Urlaub"])]
-    assert alle[0]["etag"] == r.json()["etag"]
+    # Die baumweite Liste aller Medien gibt es nicht mehr (KW-5: Medien sind Teil von Dateien)
+    assert (await client.get("/api/v1/medien/alle", headers=h)).status_code == 404
     kinder = (await client.get("/api/v1/dateien", headers=h)).json()
     assert {k["name"]: k["medienart"] for k in kinder} == {"Urlaub": None, "text.txt": None}
+    im_ordner = (await client.get(f"/api/v1/dateien?parent_id={ordner['id']}", headers=h)).json()
+    assert {k["name"]: k["medienart"] for k in im_ordner} == {"film.mp4": "video"}
 
 
 async def test_aufraeumen_behaelt_nur_aktuelle_staende(umgebung):

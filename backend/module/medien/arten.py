@@ -26,7 +26,3 @@ def endung(name: str) -> str:
 def medienart(name: str) -> Medienart | None:
     return _ARTEN.get(endung(name))
 
-
-def such_muster() -> list[str]:
-    """LIKE-Muster aller Medienendungen, für die baumweite Medienliste."""
-    return [f"%{e}" for e in sorted(_ARTEN)]

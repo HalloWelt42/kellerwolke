@@ -6,7 +6,8 @@
   import { fassung } from "../fassung.svelte";
   import { verbindung } from "../verbindung.svelte";
   import { vollansichtOffen } from "../vorschau.svelte";
-  import { knotenOeffnen } from "../medien/oeffnen";
+  import { alleAbspielen, diashowDerFlaeche, knotenOeffnen } from "../medien/oeffnen";
+  import { ARTEN_BEREICHE } from "../ansicht.svelte";
   import { thema, themaWaehlen, type ThemaWahl } from "../thema.svelte";
   import type { SortKey } from "../browser.svelte";
   import type { Knoten } from "../types";
@@ -17,17 +18,16 @@
   import MobilHalten from "./MobilHalten.svelte";
   import MobilEingabe from "./MobilEingabe.svelte";
   import MobilHochladen from "./MobilHochladen.svelte";
-  import MobilMedien from "./MobilMedien.svelte";
+  import MobilArten from "./MobilArten.svelte";
   import MobilMehr from "./MobilMehr.svelte";
   import MobilVollbild from "./MobilVollbild.svelte";
   import MiniSpieler from "./MiniSpieler.svelte";
 
-  // Schale der Telefon-Oberfläche (Entwurf mockups/mobil.html): Kopf je Ort,
+  // Schale der Telefon-Oberfläche (Entwurf mockups/mobil.html): Kopf je Ort, Filter nach Art unter der Suche,
   // Bänder für Verbindung, Speicher und Meldungen, Inhalt, Schwebeknopf,
   // Mini-Spieler, Reiter und das Blatt von unten.
   const REITER: { id: MobilReiter; label: string; icon: string }[] = [
     { id: "dateien", label: "Dateien", icon: "fa-folder" },
-    { id: "medien", label: "Medien", icon: "fa-images" },
     { id: "favoriten", label: "Favoriten", icon: "fa-star" },
     { id: "mehr", label: "Mehr", icon: "fa-ellipsis" },
   ];
@@ -64,6 +64,11 @@
     mobil.reiter === "dateien" && !mobil.seite && haupt.rechte.anlegen && !haupt.verschiebeIds && verbindung.ok,
   );
   const mitSortieren = $derived(zeigtListe && mobil.seite !== "suche");
+  // Filter nach Art (KW-5), wo es Arten gibt; im Kopf die Aktion der Art: Diashow bzw. alles abspielen.
+  const mitArten = $derived(zeigtListe && ARTEN_BEREICHE.includes(haupt.bereich) && haupt.bereich !== "suche");
+  const art = $derived(haupt.wirksameArt);
+  const mitDiashow = $derived(mitArten && art === "bild" && haupt.artZahlen.bild > 0);
+  const mitAbspielen = $derived(mitArten && art === "audio" && haupt.artZahlen.audio > 0);
 
   // --- Suche: erst mit "Suchen" auf der Tastatur ---
   let suchtext = $state("");
@@ -154,8 +159,11 @@
       <button class="m-knopf" aria-label="Zurück" onclick={() => (mobil.seite === "suche" ? sucheBeenden() : zurueck())}><i class="fa-solid fa-chevron-left"></i></button>
     {/if}
     <h1 class:ohne-zurueck={!kopf.zurueck}>{kopf.titel}{#if kopf.unter}<span class="m-unter">{kopf.unter}</span>{/if}</h1>
-    {#if mobil.reiter === "medien" && !mobil.seite}
-      <button class="m-knopf" aria-label="Suchen" onclick={sucheOeffnen}><i class="fa-solid fa-magnifying-glass"></i></button>
+    {#if mitDiashow}
+      <button class="m-knopf akzent" aria-label="Diashow" onclick={() => diashowDerFlaeche(haupt)}><i class="fa-solid fa-images"></i></button>
+    {/if}
+    {#if mitAbspielen}
+      <button class="m-knopf akzent" aria-label="Alle abspielen" onclick={() => alleAbspielen(haupt)}><i class="fa-solid fa-circle-play"></i></button>
     {/if}
     {#if mitSortieren}
       <button class="m-knopf" aria-label="Sortieren" onclick={() => blattOeffnen({ art: "sortieren" })}><i class="fa-solid fa-arrow-down-a-z"></i></button>
@@ -172,6 +180,9 @@
     </form>
   {:else if (mobil.reiter === "dateien" || mobil.reiter === "favoriten") && !mobil.seite}
     <button class="m-suche" onclick={sucheOeffnen}><i class="fa-solid fa-magnifying-glass"></i> In allen Dateien suchen</button>
+  {/if}
+  {#if mitArten}
+    <MobilArten browser={haupt} />
   {/if}
 
   <!-- Bänder -->
@@ -196,9 +207,7 @@
   <!-- Inhalt -->
   <div class="m-rahmen">
     <div class="m-inhalt">
-      {#if mobil.reiter === "medien" && !mobil.seite}
-        <MobilMedien />
-      {:else if mobil.reiter === "mehr" && !mobil.seite}
+      {#if mobil.reiter === "mehr" && !mobil.seite}
         <MobilMehr />
       {:else if mobil.seite === "suche" && !gesucht}
         <div class="m-leer"><i class="fa-solid fa-magnifying-glass"></i><p>Sucht in Namen und, wo lesbar, im Inhalt aller eigenen Dateien.</p></div>

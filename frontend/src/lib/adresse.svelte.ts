@@ -1,7 +1,7 @@
 // Die Adresse im Browser zeigt, wo man ist, mit echten Pfaden:
 //   /dateien/Apps/Probe            Ordner in "Meine Dateien"
 //   /dateien/Apps/Probe/notiz.txt  Ordner mit gezeigter Datei
-//   /favoriten  /geteilt  /papierkorb  /suche?q=...  /medien (nur am Telefon; am Rechner führt es zu Dateien)
+//   /favoriten  /geteilt  /papierkorb  /suche?q=...  (die frühere Adresse /medien führt zu Dateien)
 //   /extern/<Quelle>/<Unterpfad>   externe Quelle
 //   /einstellungen/<Seite>         Verwaltung (am Rechner); am Telefon dazu /mehr
 // Zurück und Vor im Browser führen dorthin zurück, und jede Adresse lässt sich als Link öffnen. Gespiegelt wird die
@@ -20,9 +20,9 @@ export type Ort =
   | { art: "extern"; teile: string[] } // erster Teil: Name der Quelle, danach der Unterpfad
   | { art: "suche"; q: string }
   | { art: "einstellungen"; seite: EinstellungsSeite | null }
-  | { art: "favoriten" | "geteilt" | "papierkorb" | "medien" | "mehr" };
+  | { art: "favoriten" | "geteilt" | "papierkorb" | "mehr" };
 
-const EINFACH = ["favoriten", "geteilt", "papierkorb", "medien", "mehr"] as const;
+const EINFACH = ["favoriten", "geteilt", "papierkorb", "mehr"] as const;
 
 function kodiert(teile: string[]): string {
   return teile.map(encodeURIComponent).join("/");
@@ -63,6 +63,8 @@ export function ortAus(pfadname: string, suche: string): Ort {
     });
   const [kopf, ...rest] = teile;
   if ((EINFACH as readonly string[]).includes(kopf)) return { art: kopf as (typeof EINFACH)[number] };
+  // Frühere Seite Medien (Lesezeichen, Web-App): die Medien sind jetzt Teil von Dateien (KW-5)
+  if (kopf === "medien") return { art: "dateien", teile: [] };
   if (kopf === "extern") return { art: "extern", teile: rest };
   if (kopf === "suche") return { art: "suche", q: new URLSearchParams(suche).get("q") ?? "" };
   if (kopf === "einstellungen") {
@@ -75,8 +77,6 @@ export function ortAus(pfadname: string, suche: string): Ort {
 // Wo man gerade ist, aus dem Zustand der Oberfläche.
 function aktuellerOrt(): Ort {
   if (!geraet.mobil && verwaltung.offen) return { art: "einstellungen", seite: verwaltung.seite };
-  // Medien ist nur noch am Telefon ein eigener Ort; am Rechner zeigt die Ansicht Dateien die Medien (KW-5).
-  if (geraet.mobil && mobil.reiter === "medien" && !mobil.seite) return { art: "medien" };
   if (geraet.mobil && mobil.reiter === "mehr" && !mobil.seite) return { art: "mehr" };
   switch (haupt.bereich) {
     case "dateien": {
@@ -155,10 +155,6 @@ async function anwenden(ort: Ort): Promise<void> {
       return;
     }
     verwaltung.offen = false;
-    if (ort.art === "medien" && geraet.mobil) {
-      zeigeReiter("medien");
-      return;
-    }
     switch (ort.art) {
       case "dateien":
         await dateienAnwenden(ort.teile);

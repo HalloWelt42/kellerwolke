@@ -86,17 +86,6 @@ export interface Pfadteil {
   name: string;
 }
 
-// Ein Eintrag der baumweiten Medienliste.
-export interface Medium {
-  id: string;
-  name: string;
-  art: Medienart;
-  etag: string | null;
-  groesse: number | null;
-  geaendert_am: string;
-  pfad: Pfadteil[];
-}
-
 export interface Konto {
   id: string;
   name: string;

@@ -82,7 +82,7 @@
 .m-rahmen { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .m-inhalt { flex: 1; overflow-y: auto; overflow-x: clip; overscroll-behavior: contain; padding-bottom: 96px; }
 .m-tabs {
-  flex: none; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 4px calc(6px + var(--m-unten));
+  flex: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 6px 4px calc(6px + var(--m-unten));
   background: var(--m-flaeche); border-top: 1px solid var(--m-rand);
 }
 .m-tab {
@@ -212,15 +212,34 @@
 .m-info div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
 .m-info span:first-child { color: #aab; }
 
-/* ----- Medien ----- */
+/* ----- Segment, Raster, Spieler ----- */
 .m-segment { display: flex; margin: 0 var(--m-a) 10px; background: var(--m-flaeche-2); border-radius: 10px; padding: 3px; flex: none; }
 .m-segment button { flex: 1; text-align: center; padding: 8px 0; min-height: 40px; border-radius: 8px; border: none; background: none; font-size: var(--m-klein); color: var(--m-text-2); cursor: pointer; }
 .m-segment button.an { background: var(--m-flaeche); color: var(--m-text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
 .m-raster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
 .m-raster button { aspect-ratio: 1; border: none; padding: 0; background: var(--m-flaeche-2); position: relative; overflow: hidden; cursor: pointer; color: var(--m-text-3); }
 .m-raster img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.m-raster .m-film { position: absolute; right: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; display: grid; place-items: center; font-size: 11px; }
-.m-datum { font-size: var(--m-klein); font-weight: 600; padding: 14px var(--m-a) 8px; }
+/* Filter nach Art in Dateien (KW-5): Symbol in der Farbe der Art und Anzahl; leere Arten blass */
+.m-arten button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.m-arten button:disabled { opacity: 0.4; cursor: default; }
+.m-arten .art-bild i { color: #7a5cf0; }
+.m-arten .art-audio i { color: #e0569b; }
+.m-arten .art-video i { color: #e08a2b; }
+.m-fotos { margin-top: 12px; }
+/* Ton als Titelliste: Nummer statt Symbol, der laufende Titel markiert */
+.m-nummer { width: 36px; text-align: center; flex: none; color: var(--m-text-3); font-variant-numeric: tabular-nums; }
+.m-zeile.spielt { background: var(--m-akzent-weich); }
+.m-zeile.spielt .m-nummer, .m-zeile.spielt .m-name { color: #e0569b; font-weight: 600; }
+/* Videos zu zweit: Standbild mit Abspielzeichen und Dauer, darunter Name und Größe */
+.m-videos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px var(--m-a); }
+.m-video { display: flex; flex-direction: column; align-items: stretch; text-align: left; border: none; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.m-standbild { aspect-ratio: 16 / 10; border-radius: 12px; background: #1d232c; position: relative; overflow: hidden; display: grid; place-items: center; color: #fff; font-size: 22px; margin-bottom: 6px; }
+.m-standbild img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.m-standbild > i { position: relative; width: 44px; height: 44px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); display: grid; place-items: center; font-size: 17px; }
+.m-dauer { position: absolute; right: 6px; bottom: 6px; font-size: 13px; padding: 1px 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); font-variant-numeric: tabular-nums; }
+.m-dauer:empty { display: none; }
+.m-video .m-name { font-size: var(--m-klein); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-video .m-meta { display: block; }
 .m-spieler {
   flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; margin: 0 8px 6px;
   background: var(--m-flaeche); border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); border: none; text-align: left;
