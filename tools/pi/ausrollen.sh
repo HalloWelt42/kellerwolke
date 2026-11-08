@@ -9,6 +9,9 @@ BPORT="$(wert KELLERWOLKE_BACKEND_PORT)"; FPORT="$(wert KELLERWOLKE_FRONTEND_POR
 
 backend/.venv/bin/pip install -q -r backend/requirements.txt
 (cd frontend && npm install --no-audit --no-fund --silent && npm run build --silent >/dev/null)
+# Datenbank auf den Stand des Compose bringen: nur bei einer Änderung neu angelegt (etwa die Bindung an 127.0.0.1, HELF-169)
+docker compose --env-file "$WURZEL/.env" up -d db 2>&1 | grep -v "^ *Container .* Running$" || true
+for _ in $(seq 1 30); do docker compose --env-file "$WURZEL/.env" exec -T db pg_isready -q 2>/dev/null && break; sleep 1; done
 sudo systemctl restart kellerwolke-backend
 sudo systemctl restart kellerwolke-web
 
