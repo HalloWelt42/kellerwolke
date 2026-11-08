@@ -619,5 +619,6 @@ class AblageDienst:
 
     async def ich(self, akteur: AppAkteur) -> dict:
         zugang = await self.zugang.zugang(akteur.benutzer_id, akteur.zugang_id)
+        # die Rolle des Kontos: Vorschaltdienste lassen App-Schlüssel nach denselben Regeln durch wie Anmeldungen (HELF-169)
         return {"app": akteur.app, "konto": akteur.benutzer["name"], "konto_id": akteur.benutzer_id,
-                "rechte": zugang["rechte"] if zugang else []}
+                "rolle": akteur.benutzer.get("rolle") or "mitglied", "rechte": zugang["rechte"] if zugang else []}

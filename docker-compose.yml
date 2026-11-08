@@ -15,8 +15,9 @@ services:
       POSTGRES_DB: ${KELLERWOLKE_DB_NAME:-kellerwolke}
       POSTGRES_USER: ${KELLERWOLKE_DB_USER:-kellerwolke}
       POSTGRES_PASSWORD: ${KELLERWOLKE_DB_PASS:-kellerwolke}
+    # nur am eigenen Rechner: das Backend läuft daneben und spricht sie über 127.0.0.1 an (HELF-169)
     ports:
-      - "${KELLERWOLKE_DB_PORT:-5460}:5432"
+      - "127.0.0.1:${KELLERWOLKE_DB_PORT:-5460}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

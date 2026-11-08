@@ -134,6 +134,7 @@ class IchAus(BaseModel):
     app: str
     konto: str
     konto_id: UUID
+    rolle: str
     rechte: list[RechtAus]
 
 

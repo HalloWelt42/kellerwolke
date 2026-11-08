@@ -71,7 +71,7 @@ async def test_zugang_anlegen_mit_vorgaberechten(umgebung):
     assert kopf["Authorization"].startswith("Bearer kw_app_")
     assert {(r["pfad"], r["recht"]) for r in z["rechte"]} == {("Apps", "lesen"), ("Apps/Transkription", "schreiben")}
     ich = (await client.get("/api/v1/ablage/ich", headers=kopf)).json()
-    assert ich["app"] == "Transkription" and ich["konto"] == "chef"
+    assert ich["app"] == "Transkription" and ich["konto"] == "chef" and ich["rolle"] == "admin"
     assert (await client.post("/api/v1/app-zugaenge", json={"app": "transkription"}, headers=sitzung)).status_code == 409
     assert (await client.post("/api/v1/app-zugaenge", json={"app": "a/b"}, headers=sitzung)).status_code == 422
     assert "schluessel" not in str((await client.get("/api/v1/app-zugaenge", headers=sitzung)).json())
