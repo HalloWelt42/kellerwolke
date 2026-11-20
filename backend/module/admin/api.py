@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.abhaengig import aktueller_admin, hole_auth, hole_speicher
+from app.ports import AufraeumenVerweigert
 from module.admin.modelle import (
     BenutzerAnlegen,
     BenutzerUpdate,
@@ -64,7 +65,10 @@ async def pool_pruefung(tief: bool = False, admin=Depends(aktueller_admin),
 
 @router.post("/pool-aufraeumen", response_model=PoolAufraeumenAus)
 async def pool_aufraeumen(admin=Depends(aktueller_admin), speicher=Depends(hole_speicher)):
-    return PoolAufraeumenAus(**await speicher.pool_aufraeumen())
+    try:
+        return PoolAufraeumenAus(**await speicher.pool_aufraeumen())
+    except AufraeumenVerweigert as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.post("/externe-quelle", response_model=KnotenAus, status_code=201)

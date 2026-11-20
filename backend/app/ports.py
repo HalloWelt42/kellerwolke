@@ -16,6 +16,12 @@ class SpeicherNichtVerfuegbar(Exception):
     HTTP 503 - der Aufrufer soll spaeter erneut versuchen, nichts geht verloren."""
 
 
+class AufraeumenVerweigert(Exception):
+    """Das Aufraeumen des Pools haette ungewoehnlich viele Bloecke entfernt: dann passt meist die Datenbank nicht zum
+    Speicher (leer, falsch angebunden, verloren), und echte Dateien gaelten als verwaist (NETZ-28). Es wird nichts
+    geloescht; die API uebersetzt das in HTTP 409."""
+
+
 class DateiZuGross(Exception):
     """Der Strom hat die erlaubte Obergrenze ueberschritten. Wird beim Streamen
     erkannt (nicht erst danach), damit nie eine ganze Datei im Speicher landet,

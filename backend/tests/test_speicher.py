@@ -13,7 +13,7 @@ import pytest
 
 from app.adapters.filesystem_blobstore import FilesystemBlobStore
 from app.adapters.postgres_metadata import PostgresMetadataRepository
-from app.ports import SpeicherNichtVerfuegbar
+from app.ports import AufraeumenVerweigert, SpeicherNichtVerfuegbar
 from module.speicher.dienst import SpeicherDienst
 from tests.hilfen import markierter_blobstore
 
@@ -493,3 +493,45 @@ async def test_zip_stroemt_und_bleibt_gueltig(dienst, benutzer_id):
         assert "Paket/klein.txt" in namen
         assert zf.read("Paket/gross.bin") == gross, "Inhalt stimmt nicht"
         assert zf.read("Paket/klein.txt") == b"hallo"
+
+
+# --- NETZ-28: nie einen vorhandenen Speicher als neu behandeln --------------------------------------------------------
+
+async def test_leere_datenbank_bei_vorhandenem_pool_startet_nicht(pool, tmp_path):
+    """Datenbank leer (verloren, falsch angebunden), am Pfad liegt aber ein Pool: keine neue Marke, kein Start."""
+    pfad = tmp_path / "pool"
+    pfad.mkdir()
+    (pfad / ".kellerwolke_pool").write_text("alte-marke")
+    dienst = SpeicherDienst(pool, FilesystemBlobStore(str(pfad)))
+    with pytest.raises(SystemExit, match="liegt schon ein Pool"):
+        await dienst.speicher_initialisieren(str(pfad))
+    assert (pfad / ".kellerwolke_pool").read_text() == "alte-marke"
+    async with pool.connection() as conn:
+        assert await PostgresMetadataRepository(conn).speicherort_holen() is None
+
+
+async def test_bekannter_speicherort_ohne_marke_uebernimmt_vorhandene(pool, tmp_path):
+    pfad = tmp_path / "pool"
+    pfad.mkdir()
+    (pfad / ".kellerwolke_pool").write_text("alte-marke")
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await PostgresMetadataRepository(conn).speicherort_setzen(str(pfad), None)
+    dienst = SpeicherDienst(pool, FilesystemBlobStore(str(pfad)))
+    await dienst.speicher_initialisieren(str(pfad))
+    assert (pfad / ".kellerwolke_pool").read_text() == "alte-marke"
+    assert await dienst.speicher_erreichbar() is True
+
+
+async def test_aufraeumen_verweigert_wenn_fast_alles_verwaist(dienst, benutzer_id):
+    """Passt die Datenbank nicht zum Speicher, wären echte Dateien verwaist: nichts löschen."""
+    await dienst.datei_hochladen(benutzer_id, None, "echt.txt", b"inhalt")
+    wurzel = Path(dienst.blobstore.wurzel)
+    for i in range(30):
+        name = f"{i:02x}" + "0" * 62
+        ordner = wurzel / str(benutzer_id) / name[:2]
+        ordner.mkdir(parents=True, exist_ok=True)
+        (ordner / name).write_bytes(b"echter inhalt ohne eintrag")
+    with pytest.raises(AufraeumenVerweigert):
+        await dienst.pool_aufraeumen()
+    assert len(list((wurzel / str(benutzer_id)).rglob("*" + "0" * 62))) == 30

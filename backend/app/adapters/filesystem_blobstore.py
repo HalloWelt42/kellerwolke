@@ -52,6 +52,14 @@ class FilesystemBlobStore:
         self._marker_pfad().write_text(marker)
         self._marker = marker
 
+    @staticmethod
+    def vorhandener_marker(pfad) -> "str | None":
+        """Marke einer am Pfad schon liegenden Pool-Wurzel, sonst None (auch wenn der Pfad nicht lesbar ist)."""
+        try:
+            return (Path(pfad) / MARKER_DATEI).read_text().strip() or None
+        except OSError:
+            return None
+
     def verfuegbar(self) -> bool:
         """True nur, wenn die Marker-Datei der echten Platte da ist und passt."""
         if not self._marker:

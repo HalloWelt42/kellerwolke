@@ -149,6 +149,11 @@ Sicherung des Pi (siehe [[Grundlage Pi]]).
 - Die Kellerwolke startet nicht und meldet den Pool: die externe Platte ist nicht eingehängt. Mit
   `KELLERWOLKE_POOL_MUSS_EXTERN` legt sie den Pool nie ersatzweise auf die Systemplatte; Platte einhängen
   (siehe [[Grundlage Pi]]), dann `sudo systemctl restart kellerwolke-backend`.
+- Die Kellerwolke startet nicht und meldet "liegt schon ein Pool ..., aber die Datenbank kennt keinen Speicherort": die
+  Datenbank ist leer oder falsch angebunden (etwa ein neues Postgres-Volume). Sie richtet den Speicher dann bewusst nicht
+  neu ein; die Datenbank zurückspielen wie in Schritt 4, dann `sudo systemctl restart kellerwolke-backend`.
+- Konsistenz prüfen meldet sehr viele verwaiste Blöcke und Aufräumen verweigert (409): die Datenbank passt nicht zum
+  Speicher; nicht aufräumen, sondern die Datenbank prüfen bzw. zurückspielen.
 - Das Backend ist abgestürzt: systemd startet es neu (`sudo systemctl status kellerwolke-backend`,
   `journalctl -u kellerwolke-backend`).
 - Das iPhone meldet ein ungültiges Zertifikat: es vertraut der Hausstelle nicht, oder das Zertifikat ist abgelaufen

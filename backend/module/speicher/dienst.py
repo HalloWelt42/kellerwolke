@@ -21,7 +21,7 @@ from app.adapters.postgres_metadata import PostgresMetadataRepository
 from app.config import EINSTELLUNGEN
 from app.inhaltstyp import inhaltstyp_aus_name
 from app.io_pool import im_thread
-from app.ports import SpeicherNichtVerfuegbar
+from app.ports import AufraeumenVerweigert, SpeicherNichtVerfuegbar
 from module.speicher import begleiter
 from module.speicher.begleiter import GruppeKonflikt
 
@@ -97,6 +97,12 @@ def _ist_hash(wert) -> bool:
     return isinstance(wert, str) and len(wert) == 64 and all(
         c in "0123456789abcdef" for c in wert
     )
+
+
+# Aufraeumen verwaister Bloecke (NETZ-28): bis hierhin immer, darueber nur bis zu diesem Anteil aller Bloecke. Mehr
+# heisst fast immer, dass die Datenbank nicht zum Speicher passt; dann wird nichts geloescht.
+VERWAIST_IMMER = 25
+VERWAIST_ANTEIL = 0.02
 
 
 def _auf_systemplatte(pfad) -> bool:
@@ -356,6 +362,12 @@ class SpeicherDienst:
         if not await self.speicher_erreichbar():
             raise SpeicherNichtVerfuegbar("Speicher nicht erreichbar - Aufräumen abgebrochen")
         bericht = await self.pool_pruefen()
+        bloecke = [o for o in bericht["verwaist"] if _ist_uuid(o["besitzer_id"]) and _ist_hash(o["name"])]
+        if len(bloecke) > VERWAIST_IMMER and len(bloecke) > bericht["geprueft"] * VERWAIST_ANTEIL:
+            raise AufraeumenVerweigert(
+                f"{len(bloecke)} von {bericht['geprueft']} Blöcken wären verwaist (mehr als {VERWAIST_ANTEIL:.0%}); "
+                "die Datenbank passt vermutlich nicht zum Speicher. Nichts gelöscht."
+            )
         entfernt, bytes_frei = 0, 0
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
@@ -455,6 +467,27 @@ class SpeicherDienst:
             return row["pfad"]
 
         pfad = row["pfad"] if row else standard
+
+        # Liegt am Pfad schon ein Pool, wird nie eine neue Marke geschrieben (NETZ-28): Kennt die Datenbank den
+        # Speicherort, nur ohne Marke (aelterer Stand), wird die vorhandene uebernommen. Kennt sie ihn gar nicht, ist
+        # die Datenbank leer, verloren oder falsch angebunden; dann startet die Kellerwolke nicht, statt einen
+        # vorhandenen Speicher als neu zu behandeln.
+        try:
+            vorhanden = await im_thread(FilesystemBlobStore.vorhandener_marker, pfad, timeout=EINSTELLUNGEN.io_timeout)
+        except SpeicherNichtVerfuegbar:
+            vorhanden = None
+        if vorhanden and row:
+            self.blobstore.setze_wurzel(pfad, vorhanden)
+            async with self.pool.connection() as conn:
+                async with conn.transaction():
+                    await PostgresMetadataRepository(conn).speicherort_setzen(pfad, vorhanden)
+            return pfad
+        if vorhanden:
+            raise SystemExit(
+                f"[kellerwolke] Am Speicher {pfad} liegt schon ein Pool (Marke {vorhanden}), aber die Datenbank kennt "
+                "keinen Speicherort: Datenbank leer, verloren oder falsch angebunden. Nichts wird neu eingerichtet; "
+                "die Datenbank aus der Sicherung zurückspielen (Handbuch)."
+            )
 
         if EINSTELLUNGEN.pool_muss_extern and _auf_systemplatte(pfad):
             self.blobstore.setze_wurzel(pfad, None)

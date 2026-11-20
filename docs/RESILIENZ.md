@@ -31,6 +31,13 @@ sein. Danach wird sie nie automatisch neu geschrieben: fehlt sie beim Booten,
 weil das Laufwerk noch nicht da ist, wartet die App, statt eine falsche
 Markierung auf der Systemplatte anzulegen.
 
+Liegt am Pfad schon ein Pool mit Marker, wird nie ein neuer geschrieben (NETZ-28).
+Kennt die Datenbank den Speicherort nur ohne Marker (älterer Stand), übernimmt
+sie den vorhandenen. Kennt sie gar keinen Speicherort, ist die Datenbank leer,
+verloren oder falsch angebunden: dann startet die Kellerwolke nicht, statt einen
+vorhandenen Speicher als neu zu behandeln. Abhilfe: Datenbank aus der Sicherung
+zurückspielen.
+
 Der Marker ist bewusst universell: er funktioniert auf dem Entwickler-Mac mit
 einer Platte genauso wie auf dem Zielgerät mit mehreren. Eine reine Geräte-ID-
 Prüfung (`st_dev`) würde auf der Einzelplatte falsch auslösen und kommt darum
@@ -112,4 +119,6 @@ abweichen. Ein Abgleich (Verwaltung -> Speicherorte -> Konsistenz prüfen) finde
   nicht zum Hash (Bitfäule).
 
 Erst wird geprüft und das Ergebnis angezeigt, dann entscheidet ein Admin über das
-Aufräumen - nie automatisch.
+Aufräumen - nie automatisch. Wären auf einmal mehr als 2 % aller Blöcke verwaist (mindestens 25),
+bricht das Aufräumen ab und löscht nichts (HTTP 409, NETZ-28): Dann passt fast
+immer die Datenbank nicht zum Speicher, und echte Dateien gälten als verwaist.
