@@ -1,5 +1,6 @@
 import type { Knoten, Medienart, Pfadteil } from "../types";
 import { heilen, lesezugang } from "./lesezugang.svelte";
+import { istVerweis, liestInhalt } from "../knoten";
 
 // Ein Medium, wie es Vollansicht und Player kennen - gebaut aus
 // einem Knoten einer Fläche.
@@ -15,11 +16,12 @@ export interface MedienEintrag {
   eigen: boolean; // eigene Datei: favorisieren und löschen möglich
 }
 
+// Ein Verweis zeigt sein Original (Etag, Größe und Art sind dessen); einen Stern hat er nicht (KW-10).
 export function ausKnoten(k: Knoten, pfad: Pfadteil[] | null, eigen = true): MedienEintrag | null {
-  if (k.typ !== "datei" || !k.medienart) return null;
+  if (!liestInhalt(k) || !k.medienart) return null;
   return {
     id: k.id, name: k.name, etag: k.etag, art: k.medienart, groesse: k.groesse ?? null, pfad,
-    geaendert_am: k.geaendert_am, favorit: eigen ? !!k.favorit : null, eigen,
+    geaendert_am: k.geaendert_am, favorit: eigen && !istVerweis(k) ? !!k.favorit : null, eigen,
   };
 }
 

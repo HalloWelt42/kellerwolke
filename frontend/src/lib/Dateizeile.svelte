@@ -4,6 +4,7 @@
   import { anfrageStand } from "./anfragestand";
   import { player, aktuelleSpur } from "./player.svelte";
   import Dauer from "./medien/Dauer.svelte";
+  import { istVerweis, liestInhalt, mitVerweisen, verweiseText } from "./knoten";
 
   export type RowAktion =
     | "herunterladen"
@@ -11,7 +12,8 @@
     | "loeschen"
     | "wiederherstellen"
     | "endgueltig"
-    | "favorit";
+    | "favorit"
+    | "original";
 
   interface Props {
     k: Knoten;
@@ -70,18 +72,22 @@
 
   const sym = $derived(symbol(k));
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
+  const verweis = $derived(istVerweis(k));
   const metaText = $derived(
     k.typ === "ordner"
       ? ordnerInhalt(k.kinder_anzahl, "-")
-      : k.typ === "datei" && k.groesse != null
+      : liestInhalt(k) && k.groesse != null
         ? groesseText(k.groesse)
         : "-",
+  );
+  const verweisTitel = $derived(
+    k.verwaist ? "Das Original gibt es nicht mehr; der Verweis zeigt ins Leere" : `Verweis auf ${k.ziel_name ?? "eine Datei"}`,
   );
 
   const stand = $derived(anfrage ? anfrageStand(anfrage) : null);
 
   // Medien bekommen statt des Symbols einen Knopf mit der Aktion ihrer Art; der laufende Titel ist markiert.
-  const art = $derived(k.typ === "datei" && !imPapierkorb ? (k.medienart ?? null) : null);
+  const art = $derived(liestInhalt(k) && !imPapierkorb ? (k.medienart ?? null) : null);
   const spielt = $derived(art === "audio" && aktuelleSpur()?.id === k.id);
   const aktion = $derived(
     art === "bild"
@@ -114,10 +120,35 @@
   }
 </script>
 
+<!-- Symbol der Zeile: Knopf mit der Aktion der Art (Medien) oder das Symbol; ein Verweis trägt dazu den Pfeil -->
+{#snippet symbolTeil()}
+  {#if art && onMedium}
+    <button
+      class="sym-knopf art-{art}"
+      class:spielt
+      title={aktion.titel}
+      aria-label="{aktion.titel}: {k.name}"
+      onclick={(e) => {
+        e.stopPropagation();
+        onMedium();
+      }}
+      ondblclick={(e) => e.stopPropagation()}
+    >
+      <span class="sk-ruhe">
+        {#if nummer}{nummer}{:else}<i class="fa-solid {sym.icon} {sym.klasse}"></i>{/if}
+      </span>
+      <span class="sk-aktion"><i class="fa-solid {aktion.icon}"></i></span>
+    </button>
+  {:else}
+    <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
+  {/if}
+{/snippet}
+
 <div
   class="zeile"
   class:spielt
   class:begleiter
+  class:verwaist={verweis && k.verwaist}
   class:gewaehlt
   class:gezogen
   class:zielordner
@@ -151,25 +182,12 @@
   </span>
 
   <span class="z-name">
-    {#if art && onMedium}
-      <button
-        class="sym-knopf art-{art}"
-        class:spielt
-        title={aktion.titel}
-        aria-label="{aktion.titel}: {k.name}"
-        onclick={(e) => {
-          e.stopPropagation();
-          onMedium();
-        }}
-        ondblclick={(e) => e.stopPropagation()}
+    {#if verweis}
+      <span class="sym-verweis" class:verwaist={k.verwaist} title={verweisTitel}
+        >{@render symbolTeil()}<i class="verweis-pfeil fa-solid {k.verwaist ? 'fa-link-slash' : 'fa-share'}"></i></span
       >
-        <span class="sk-ruhe">
-          {#if nummer}{nummer}{:else}<i class="fa-solid {sym.icon} {sym.klasse}"></i>{/if}
-        </span>
-        <span class="sk-aktion"><i class="fa-solid {aktion.icon}"></i></span>
-      </button>
     {:else}
-      <i class="sym fa-solid {sym.icon} {sym.klasse}"></i>
+      {@render symbolTeil()}
     {/if}
     {#if umbenennenAktiv}
       <input
@@ -209,6 +227,21 @@
       {#if k.rolle && begleiter}
         <span class="rolle-chip">{rolleText(k.rolle)}</span>
       {/if}
+      {#if verweis}
+        <span class="verweis-chip" class:verwaist={k.verwaist} title={verweisTitel}
+          ><i class="fa-solid {k.verwaist ? 'fa-link-slash' : 'fa-share'}"></i><span class="vc-text"
+            >{k.verwaist ? "verwaist" : "Verweis"}</span
+          ></span
+        >
+        {#if imPapierkorb && !k.verwaist}
+          <span class="verweis-marke">allein gelöscht, das Original bleibt</span>
+        {/if}
+      {:else if k.verweis_anzahl}
+        <span class="verweis-marke" title={imPapierkorb ? "Kommen beim Wiederherstellen mit zurück" : "Verweise auf diese Datei"}
+          ><i class="fa-solid fa-share"></i>
+          <span class="vm-text">{imPapierkorb ? mitVerweisen(k.verweis_anzahl) : verweiseText(k.verweis_anzahl)}</span></span
+        >
+      {/if}
       {#if stand}
         <span class="anfrage-pille" class:wartet={stand.wartet} title={stand.titel}>
           <i class={stand.wartet ? "fa-regular fa-clock" : "fa-solid fa-circle-notch fa-spin"}></i>
@@ -247,6 +280,53 @@
       >
         <i class="fa-solid fa-trash"></i>
       </button>
+    {:else if verweis}
+      {#if !k.verwaist}
+        <button
+          class="icon-knopf"
+          title="Zum Original"
+          onclick={(e) => {
+            e.stopPropagation();
+            onAktion("original");
+          }}
+        >
+          <i class="fa-solid fa-arrow-right-to-bracket"></i>
+        </button>
+        <button
+          class="icon-knopf"
+          title="Herunterladen"
+          onclick={(e) => {
+            e.stopPropagation();
+            onAktion("herunterladen");
+          }}
+        >
+          <i class="fa-solid fa-download"></i>
+        </button>
+      {/if}
+      {#if schreibbar}
+        {#if !k.verwaist}
+          <button
+            class="icon-knopf"
+            title="Umbenennen"
+            onclick={(e) => {
+              e.stopPropagation();
+              onAktion("umbenennen");
+            }}
+          >
+            <i class="fa-solid fa-pen"></i>
+          </button>
+        {/if}
+        <button
+          class="icon-knopf gefahr"
+          title="Verweis in den Papierkorb"
+          onclick={(e) => {
+            e.stopPropagation();
+            onAktion("loeschen");
+          }}
+        >
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      {/if}
     {:else}
       <button
         class="icon-knopf"

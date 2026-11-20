@@ -164,10 +164,3 @@
   </Modal>
 {/if}
 
-<style>
-  .modal-knoepfe {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--a2);
-  }
-</style>

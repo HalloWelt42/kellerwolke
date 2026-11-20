@@ -3,7 +3,8 @@ import { erzeugeAuswahl, type Auswahl } from "./auswahl.svelte";
 import { filterAktiv, leererFilter, passt, type Filterzustand } from "./filter";
 import { ARTEN_BEREICHE, type Artfilter, type Kachelgroesse } from "./ansicht.svelte";
 import { eindeutigeId } from "./id";
-import type { ExternEintrag, Knoten, Pfadteil, Version } from "./types";
+import { istDateiartig } from "./knoten";
+import type { ExternEintrag, Folge, Knoten, Pfadteil, Version } from "./types";
 
 // Eine instanziierbare Browsing-Fläche: hält Pfad, Liste, Auswahl, Filter,
 // Sortierung, Detail und alle Lade-/Navigations-/Schreibaktionen. Die
@@ -90,7 +91,7 @@ export class Browser {
   artZahlen = $derived.by(() => {
     const z: Record<Artfilter, number> = { alle: 0, bild: 0, audio: 0, video: 0 };
     for (const k of this.eintraege) {
-      if (k.typ !== "datei") continue;
+      if (!istDateiartig(k)) continue;
       z.alle += 1;
       if (k.medienart) z[k.medienart] += 1;
     }
@@ -109,7 +110,7 @@ export class Browser {
 
   sichtbar = $derived.by(() => {
     const art = this.wirksameArt;
-    const nachArt = art === "alle" ? this.eintraege : this.eintraege.filter((k) => k.typ !== "datei" || k.medienart === art);
+    const nachArt = art === "alle" ? this.eintraege : this.eintraege.filter((k) => !istDateiartig(k) || k.medienart === art);
     const quelle = filterAktiv(this.filter) ? nachArt.filter((k) => passt(k.name, this.filter)) : nachArt;
     const rang = (k: Knoten) => (k.typ === "ordner" ? 0 : k.typ === "extern" ? 1 : 2);
     const key = this.sortKey;
@@ -544,7 +545,32 @@ export class Browser {
     this.verschiebeIds = null;
   };
 
+  // In den Papierkorb. Nähme das Löschen Begleiter oder Verweise von anderswo mit, fragt die Fläche erst nach und
+  // zeigt sie mit Pfaden (loeschFrage, KW-10); sonst geht es wie bisher sofort. Ist die Vorschau nicht zu bekommen,
+  // wird nicht gelöscht.
+  loeschFrage = $state<{ knoten: Knoten[]; folgen: Folge[] } | null>(null);
+
   loeschen = async (ids: string[]): Promise<void> => {
+    if (!ids.length) return;
+    let folgen: Folge[];
+    try {
+      folgen = await api.loeschfolgen(ids);
+    } catch (f) {
+      this.fehler = (f as Error).message;
+      return;
+    }
+    if (!folgen.length) return this.loeschenBestaetigt(ids);
+    const knoten = ids.map((id) => this.eintraege.find((k) => k.id === id)).filter((k): k is Knoten => !!k);
+    this.loeschFrage = { knoten, folgen };
+  };
+
+  loeschFrageAbbrechen = (): void => {
+    this.loeschFrage = null;
+  };
+
+  // Löscht ohne weitere Frage: die Folgen hat der Mensch gesehen (Dialog, Halten am Telefon) oder es gibt keine.
+  loeschenBestaetigt = async (ids: string[]): Promise<void> => {
+    this.loeschFrage = null;
     try {
       for (const id of ids) await api.loeschen(id);
     } catch (f) {
@@ -553,6 +579,18 @@ export class Browser {
     this.auswahl.leeren();
     await this.aktualisiere();
   };
+
+  // Zu einem eigenen Eintrag in seinem Ordner springen, ihn markieren und sein Detail zeigen (Zum Original, ein
+  // Verweis aus dem Detail des Originals, eine Folge der Löschvorschau).
+  zeigeEintrag = async (id: string): Promise<void> => {
+    try {
+      await this.oeffnePfad(await api.pfadVon(id), id);
+    } catch (f) {
+      this.fehler = (f as Error).message;
+    }
+  };
+
+  zumOriginal = (k: Knoten): Promise<void> => (k.ziel_id ? this.zeigeEintrag(k.ziel_id) : Promise.resolve());
 
   wiederherstellen = async (ids: string[]): Promise<void> => {
     try {

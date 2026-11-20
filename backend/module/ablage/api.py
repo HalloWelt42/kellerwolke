@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from psycopg.errors import UniqueViolation
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +18,7 @@ from app.ports import DateiZuGross
 from module.ablage.dienst import TEXT_GRENZE, TEXT_VORGABE, KeinSchreibrecht, KeinVollzugriff, Unsichtbar, VorbedingungFehlt
 from module.ablage.strom import StromLeser
 from module.speicher.begleiter import GruppeKonflikt
+from module.speicher.verweise import VerweisNurLesbar
 from module.speicher.dienst import Gesperrt, NameBelegt, VorbedingungVerletzt, ZielUngueltig
 from module.suche.dienst import indizierung_starten
 from module.appzugang.modelle import RechtAus
@@ -53,14 +54,39 @@ class AblageKnotenAus(BaseModel):
     sperre: SperreAus | None = None          # gültige Bearbeitungssperre einer App
     haupt_id: UUID | None = None             # ein Begleiter: seine Hauptdatei
     rolle: str | None = None                 # ein Begleiter: seine Rolle (transkript, untertitel, sprache ...)
+    ziel_id: UUID | None = None              # ein Verweis: sein Original (Größe, ETag, Inhalt sind dessen)
+    verwaist: bool = False                   # ein Verweis ohne lebendes Original
+    sha256: str | None = None                # Prüfsumme des Inhalts der aktuellen Version (beim Verweis: des Originals)
     erstellt_am: datetime
     geaendert_am: datetime
 
 
 class PapierkorbAus(AblageKnotenAus):
-    """Eine Papierkorb-Wurzel mit den Begleitern, die mit ihr gelöscht wurden."""
+    """Eine Papierkorb-Wurzel mit den Begleitern und Verweisen, die mit ihr gelöscht wurden (Verweise nur, soweit
+    die App sie sehen darf)."""
     geloescht_am: datetime
     begleiter: list[AblageKnotenAus] = Field(default_factory=list)
+    verweise: list[AblageKnotenAus] = Field(default_factory=list)
+
+
+class VerweisEingabe(BaseModel):
+    ziel_id: UUID = Field(description="die Datei, auf die der Verweis zeigt (ein Verweis zählt als sein Original)")
+    pfad: str = Field(min_length=1, max_length=4000, description="Ordner und Name des Verweises, etwa Apps/Telegram/Familie/2026-11/Foto.jpg")
+
+
+class FolgeAus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: UUID
+    name: str
+    art: Literal["begleiter", "verweis"]
+    pfad: str
+    zu_id: UUID                              # die Datei, an der er hängt
+    rolle: str | None = None
+
+
+class LoeschfolgenAus(BaseModel):
+    folgen: list[FolgeAus]
+    verborgen: int                           # so viele weitere, die die App nicht sehen darf
 
 
 class UmziehenEingabe(BaseModel):
@@ -149,6 +175,7 @@ class VersionAus(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: UUID
     groesse: int
+    sha256: str
     erstellt_am: datetime
     aktuell: bool
 
@@ -162,7 +189,7 @@ def _fehler(f: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(f))
     if isinstance(f, (KeinSchreibrecht, KeinVollzugriff)):
         return HTTPException(status_code=403, detail=str(f))
-    if isinstance(f, (FileExistsError, NameBelegt, GruppeKonflikt)):
+    if isinstance(f, (FileExistsError, NameBelegt, GruppeKonflikt, VerweisNurLesbar)):
         return HTTPException(status_code=409, detail=str(f))
     if isinstance(f, ZielUngueltig):
         return HTTPException(status_code=404, detail=str(f))
@@ -178,7 +205,7 @@ def _fehler(f: Exception) -> HTTPException:
 
 
 _FEHLER = (Unsichtbar, KeinSchreibrecht, KeinVollzugriff, FileExistsError, ValueError, VorbedingungVerletzt, VorbedingungFehlt, DateiZuGross,
-           Gesperrt, NameBelegt)
+           Gesperrt, NameBelegt, VerweisNurLesbar)
 
 
 def _bedingung(request: Request) -> tuple[str | None, bool]:
@@ -361,9 +388,48 @@ async def begleiter_anhaengen(knoten_id: UUID, rolle: str, eingabe: AnhaengenEin
         raise _fehler(f) from None
 
 
+@router.post("/verweis", response_model=AblageKnotenAus)
+async def verweis(eingabe: VerweisEingabe, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Verweis anlegen statt einer Kopie: Schreibrecht im Ordner, Leserecht auf das Original. Derselbe Aufruf noch
+    einmal liefert den vorhandenen Verweis; ein anderer Eintrag unter dem Namen weist ab (409)."""
+    try:
+        return await ablage.verweis_anlegen(akteur, eingabe.ziel_id, eingabe.pfad)
+    except UniqueViolation:
+        raise HTTPException(status_code=409, detail="Name im Ordner bereits vergeben") from None
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/knoten/{knoten_id}/verweise", response_model=list[AblageKnotenAus])
+async def verweise(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Lebende Verweise auf eine Datei, soweit die App sie sehen darf."""
+    try:
+        return await ablage.verweise(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
+@router.get("/pruefsumme/{sha256}", response_model=list[AblageKnotenAus])
+async def pruefsumme(sha256: str = Path(pattern=r"^[0-9a-f]{64}$"), akteur=Depends(aktuelle_app),
+                     ablage=Depends(hole_ablage)):
+    """Gibt es diesen Inhalt schon? Dateien, deren aktuelle Version genau diesen sha256 hat, soweit die App sie lesen
+    darf (Verweise zählen nicht); leer heißt: nichts Lesbares."""
+    return await ablage.pruefsumme(akteur, sha256)
+
+
+@router.get("/knoten/{knoten_id}/loeschfolgen", response_model=LoeschfolgenAus)
+async def loeschfolgen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Was Löschen mitnähme (Begleiter, Verweise von anderswo), bevor die App löscht."""
+    try:
+        return await ablage.loeschfolgen(akteur, knoten_id)
+    except _FEHLER as f:
+        raise _fehler(f) from None
+
+
 @router.delete("/knoten/{knoten_id}", status_code=204)
 async def loeschen(knoten_id: UUID, akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
-    """In den Papierkorb (wiederherstellbar); endgültig löscht nur das Konto."""
+    """In den Papierkorb (wiederherstellbar); endgültig löscht nur das Konto. Ein Verweis geht allein; eine Datei
+    nimmt ihre Begleiter und alle Verweise darauf mit (vorher zeigt `loeschfolgen`, welche)."""
     try:
         await ablage.loeschen(akteur, knoten_id)
     except _FEHLER as f:

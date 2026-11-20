@@ -23,7 +23,9 @@ stand: af3a0dc
 
 Die Kellerwolke ist der Dateispeicher des Hauses und zugleich das Konto für alles: Man meldet sich mit dem
 Kellerwolke-Konto bei jeder App des Verbunds an, und jede App bekommt hier ihren App-Schlüssel, mit dem sie Dateien
-liest und Ergebnisse als Begleitdateien neben die Quelle legt (etwa Transkripte neben Aufnahmen). Dateien liegen mit
+liest und Ergebnisse als Begleitdateien neben die Quelle legt (etwa Transkripte neben Aufnahmen). Jede Datei gibt es
+genau einmal: braucht eine App eine vorhandene Datei, legt sie in ihrem Ordner einen Verweis darauf an (Pfeil am
+Symbol, Kennzeichen "Verweis") statt einer Kopie; der Vertrag für Apps steht in `docs/APPS.md`. Dateien liegen mit
 allen Versionen im Dateipool, Metadaten in PostgreSQL; die Oberfläche läuft im Browser und als Web-App auf dem iPhone,
 WebDAV bindet die Ablage im Finder ein.
 
@@ -154,6 +156,9 @@ Sicherung des Pi (siehe [[Grundlage Pi]]).
   neu ein; die Datenbank zurückspielen wie in Schritt 4, dann `sudo systemctl restart kellerwolke-backend`.
 - Konsistenz prüfen meldet sehr viele verwaiste Blöcke und Aufräumen verweigert (409): die Datenbank passt nicht zum
   Speicher; nicht aufräumen, sondern die Datenbank prüfen bzw. zurückspielen.
+- Ein Eintrag zeigt "verwaist": er ist ein Verweis, dessen Original endgültig gelöscht ist oder im Papierkorb liegt.
+  Das Original aus dem Papierkorb holen (dann ist der Verweis wieder heil) oder den Verweis entfernen. Löschen eines
+  Originals nimmt seine Verweise mit; vorher zeigt die Oberfläche, welche.
 - Das Backend ist abgestürzt: systemd startet es neu (`sudo systemctl status kellerwolke-backend`,
   `journalctl -u kellerwolke-backend`).
 - Das iPhone meldet ein ungültiges Zertifikat: es vertraut der Hausstelle nicht, oder das Zertifikat ist abgelaufen

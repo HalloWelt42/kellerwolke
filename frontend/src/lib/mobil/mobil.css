@@ -18,6 +18,7 @@
   --m-gefahr: #df524f;
   --m-gefahr-weich: #fbe7e6;
   --m-gut: #2faf5b;
+  --m-warn: #b07a00;
   --m-schleier: rgba(15, 20, 25, 0.45);
   --m-schrift: 17px;
   --m-klein: 15px;
@@ -45,6 +46,7 @@
   --m-gefahr: #ff6b6b;
   --m-gefahr-weich: #3a1d1d;
   --m-gut: #4ade80;
+  --m-warn: #e8b54a;
   --m-schleier: rgba(0, 0, 0, 0.6);
 }
 
@@ -163,6 +165,27 @@
 
 /* Begleitdateien und Anfragen an Apps (Entwurf mockups/begleiter-mobil.html) */
 .m-meta .m-begleit { color: var(--m-text-2); white-space: nowrap; }
+/* Verweise (KW-10): Pfeil am Symbol, "Verweis" bzw. "verwaist" in der zweiten Zeile, Folgen vor dem Halten */
+.m-sym-verweis { position: relative; display: inline-grid; place-items: center; flex: none; }
+.m-sym-verweis .m-pfeil {
+  position: absolute; right: -4px; bottom: -2px; width: 17px; height: 17px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--m-flaeche); color: var(--m-akzent);
+  font-size: 9px; box-shadow: 0 0 0 1px var(--m-rand);
+}
+.m-sym-verweis.verwaist .m-symbol { color: var(--m-text-3); }
+.m-sym-verweis.verwaist .m-pfeil { color: var(--m-warn); }
+.m-meta .m-verweis { color: var(--m-akzent); white-space: nowrap; }
+.m-meta .m-verwaist { color: var(--m-warn); white-space: nowrap; }
+.m-zeile.verwaist .m-name { color: var(--m-text-3); }
+.m-folgen-text { margin: 4px var(--m-a) 4px; font-size: var(--m-klein); color: var(--m-text-2); }
+.m-folgen { margin: 4px var(--m-a) 8px; padding: 0; list-style: none; border: 1px solid var(--m-rand); border-radius: var(--m-r); }
+.m-folgen li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 0 10px; padding: 10px 12px; font-size: var(--m-klein); }
+.m-folgen li + li { border-top: 1px solid var(--m-rand); }
+.m-folgen li i { color: var(--m-text-2); text-align: center; padding-top: 2px; }
+.m-folgen .f-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-folgen .f-pfad { grid-column: 2; font-size: var(--m-marke); color: var(--m-text-3); overflow-wrap: anywhere; }
+.m-folgen li.f-kopf { display: block; padding: 8px 12px 4px; font-size: var(--m-marke); color: var(--m-text-3);
+  text-transform: uppercase; letter-spacing: 0.5px; background: var(--m-flaeche-2); }
 .m-meta .m-anfrage { color: var(--m-akzent); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .m-meta .m-anfrage.wartet { color: var(--m-text-2); }
 .m-blatt .m-gruppe { padding-top: 10px; }

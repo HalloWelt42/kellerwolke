@@ -5,6 +5,7 @@
   import VideoVorschau from "./medien/VideoVorschau.svelte";
   import AudioVorschau from "./medien/AudioVorschau.svelte";
   import Dauer from "./medien/Dauer.svelte";
+  import { istDateiartig, istVerweis, liestInhalt } from "./knoten";
 
   interface Props {
     k: Knoten;
@@ -49,16 +50,18 @@
 
   const sym = $derived(symbol(k));
   // Vorschau nach Medienart (vom Server); andere Dateien zeigen ihr Symbol.
-  const art = $derived(k.typ === "datei" ? (k.medienart ?? null) : null);
+  const art = $derived(liestInhalt(k) ? (k.medienart ?? null) : null);
   const istOrdnerZiel = $derived(k.typ === "ordner" && schreibbar);
   const metaText = $derived(
     k.typ === "ordner"
       ? ordnerInhalt(k.kinder_anzahl)
       : k.typ === "extern"
         ? "Externe Quelle"
-        : k.groesse != null
-          ? groesseText(k.groesse)
-          : "Datei",
+        : k.verwaist
+          ? "Verweis, verwaist"
+          : k.groesse != null
+            ? groesseText(k.groesse)
+            : "Datei",
   );
 
   let entwurf = $state(k.name);
@@ -116,7 +119,13 @@
     <i class="fa-solid fa-check"></i>
   </span>
 
-  <div class="vorschau" class:ordner={k.typ !== "datei"} class:hat-vorschau={!!art}>
+  <div class="vorschau" class:ordner={!istDateiartig(k)} class:hat-vorschau={!!art}>
+    {#if istVerweis(k)}
+      <span class="k-verweis" class:verwaist={k.verwaist}
+        title={k.verwaist ? "Verweis, das Original gibt es nicht mehr" : `Verweis auf ${k.ziel_name ?? "eine Datei"}`}
+        ><i class="fa-solid {k.verwaist ? 'fa-link-slash' : 'fa-share'}"></i></span
+      >
+    {/if}
     {#if art === "bild"}
       <BildVorschau m={k} />
       {#if onSpielen}

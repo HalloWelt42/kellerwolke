@@ -11,6 +11,7 @@
   import { thema, themaWaehlen, type ThemaWahl } from "../thema.svelte";
   import type { SortKey } from "../browser.svelte";
   import type { Knoten } from "../types";
+  import { istDateiartig, istVerweis } from "../knoten";
   import { mobil, zeigeReiter, zurueck, sucheBeenden, blattOeffnen, blattSchliessen, aktionenOeffnen, type MobilReiter } from "./mobil.svelte";
   import Blatt from "./Blatt.svelte";
   import MobilListe from "./MobilListe.svelte";
@@ -97,7 +98,11 @@
       aktionenOeffnen(k);
       return;
     }
-    if (k.typ !== "datei") {
+    if (istVerweis(k) && k.verwaist) {
+      aktionenOeffnen(k); // ohne Original gibt es nichts zu öffnen, nur zu entfernen
+      return;
+    }
+    if (!istDateiartig(k)) {
       const ausSucheOderFavoriten = haupt.bereich === "suche" || haupt.bereich === "favoriten";
       haupt.oeffnen(k);
       if (ausSucheOderFavoriten && k.typ === "ordner") {

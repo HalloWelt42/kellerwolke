@@ -6,6 +6,11 @@ seinem Versatz und wird an eine Datei außerhalb des Blob-Pools angehängt. Wie 
 dieser Datei - das gilt auch nach einem Abbruch mitten im Teil oder einem Neustart. Mit dem letzten Byte wird die
 Datei wie jeder Upload eingetragen (neue Version bei gleichem Namen), auf Wunsch nur bei passender Prüfsumme.
 Ruhende Uploads räumt die tägliche Pflege nach einigen Tagen weg.
+
+Ein Upload gehört dem, der ihn begonnen hat: der Anmeldung oder genau einer App (zugang_id, KW-11). Nur er sieht ihn,
+setzt ihn fort und bricht ihn ab. Wer mit dem letzten Teil einträgt, bestimmt der Aufrufer (`eintragen`): für eine
+App prüft die Ablage dabei ihre Rechte erneut; ohne Angabe trägt der Upload selbst ins Konto ein. Eine Bedingung für
+eine vorhandene Datei (Stand oder nur neu anlegen) steht am Upload und gilt beim Eintragen unter Sperre.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +27,10 @@ from uuid import UUID
 from psycopg.rows import dict_row
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
-from module.speicher.dienst import ZielUngueltig
+from module.speicher.dienst import Bedingung, ZielUngueltig
+
+# Trägt die vollständige Datei ein: (Zeile des Uploads, geöffnete Teildatei, Obergrenze) -> Knoten.
+Eintragen = Callable[[dict, object, int], Awaitable[dict]]
 
 
 class UploadNichtGefunden(Exception):
@@ -79,46 +87,53 @@ class UploadDienst:
                       empfangen=min(self._empfangen(zeile["besitzer_id"], zeile["id"]), zeile["groesse"]),
                       pruefsumme=zeile["pruefsumme"], erstellt_am=zeile["erstellt_am"], zuletzt_am=zeile["zuletzt_am"])
 
-    async def _zeile(self, besitzer_id, upload_id) -> dict:
+    async def _zeile(self, besitzer_id, upload_id, zugang_id=None) -> dict:
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute("SELECT * FROM upload WHERE id=%s AND besitzer_id=%s", (upload_id, besitzer_id))
+                await cur.execute("SELECT * FROM upload WHERE id=%s AND besitzer_id=%s AND zugang_id IS NOT DISTINCT FROM %s",
+                                  (upload_id, besitzer_id, zugang_id))
                 zeile = await cur.fetchone()
         if not zeile:
             raise UploadNichtGefunden("Upload nicht gefunden")
         return zeile
 
-    async def anlegen(self, besitzer_id, parent_id, name: str, groesse: int, pruefsumme: str | None) -> Upload:
+    async def anlegen(self, besitzer_id, parent_id, name: str, groesse: int, pruefsumme: str | None,
+                      zugang_id=None, etag: str | None = None, nur_neu: bool = False) -> Upload:
+        """Neuer Upload; zugang_id nennt die App, der er gehört (ohne: die Anmeldung). etag oder nur_neu ist die
+        Bedingung für eine vorhandene Datei beim Eintragen. Rechte einer App prüft der Aufrufer vorher."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 if not await PostgresMetadataRepository(conn).ordner_lebt(besitzer_id, parent_id):
                     raise ZielUngueltig("Zielordner nicht gefunden")
                 async with conn.cursor(row_factory=dict_row) as cur:
                     await cur.execute(
-                        "INSERT INTO upload (besitzer_id, parent_id, name, groesse, pruefsumme) "
-                        "VALUES (%s,%s,%s,%s,%s) RETURNING *", (besitzer_id, parent_id, name, groesse, pruefsumme))
+                        "INSERT INTO upload (besitzer_id, parent_id, name, groesse, pruefsumme, zugang_id, bedingung_etag, "
+                        "nur_neu) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+                        (besitzer_id, parent_id, name, groesse, pruefsumme, zugang_id, etag, nur_neu))
                     zeile = await cur.fetchone()
         datei = self._datei(besitzer_id, zeile["id"])
         await asyncio.to_thread(lambda: (datei.parent.mkdir(parents=True, exist_ok=True), datei.touch()))
         return self._als_upload(zeile)
 
-    async def holen(self, besitzer_id, upload_id) -> Upload:
-        return self._als_upload(await self._zeile(besitzer_id, upload_id))
+    async def holen(self, besitzer_id, upload_id, zugang_id=None) -> Upload:
+        return self._als_upload(await self._zeile(besitzer_id, upload_id, zugang_id))
 
-    async def liste(self, besitzer_id) -> list[Upload]:
+    async def liste(self, besitzer_id, zugang_id=None) -> list[Upload]:
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute("SELECT * FROM upload WHERE besitzer_id=%s ORDER BY erstellt_am", (besitzer_id,))
+                await cur.execute("SELECT * FROM upload WHERE besitzer_id=%s AND zugang_id IS NOT DISTINCT FROM %s "
+                                  "ORDER BY erstellt_am", (besitzer_id, zugang_id))
                 return [self._als_upload(z) for z in await cur.fetchall()]
 
-    async def anhaengen(self, besitzer_id, upload_id, versatz: int, strom: AsyncIterator[bytes], max_bytes: int):
+    async def anhaengen(self, besitzer_id, upload_id, versatz: int, strom: AsyncIterator[bytes], max_bytes: int,
+                        zugang_id=None, eintragen: Eintragen | None = None):
         """Hängt ein Teil an. Liefert (Upload, None) oder, mit dem letzten Byte, (Upload, eingetragener Knoten)."""
         schluessel = str(upload_id)
         if schluessel in self._laufend:
             raise UploadLaeuft("An diesem Upload wird gerade ein Teil angehängt")
         self._laufend.add(schluessel)
         try:
-            zeile = await self._zeile(besitzer_id, upload_id)
+            zeile = await self._zeile(besitzer_id, upload_id, zugang_id)
             empfangen = self._empfangen(besitzer_id, upload_id)
             if versatz != empfangen:
                 raise FalscherVersatz(empfangen)
@@ -140,19 +155,25 @@ class UploadDienst:
                 await conn.execute("UPDATE upload SET zuletzt_am=now() WHERE id=%s", (upload_id,))
             if empfangen < zeile["groesse"]:
                 return self._als_upload({**zeile}), None
-            return self._als_upload({**zeile}), await self._fertigstellen(zeile, max_bytes)
+            return self._als_upload({**zeile}), await self._fertigstellen(zeile, max_bytes, eintragen or self._eintragen)
         finally:
             self._laufend.discard(schluessel)
 
-    async def _fertigstellen(self, zeile: dict, max_bytes: int) -> dict:
+    async def _eintragen(self, zeile: dict, quelle, max_bytes: int) -> dict:
+        """Eintragen ins Konto (Upload der Anmeldung), mit der Bedingung und Prüfsumme des Uploads."""
+        knoten, _, _ = await self.speicher.datei_hochladen_strom(
+            zeile["besitzer_id"], zeile["parent_id"], zeile["name"], quelle, max_bytes,
+            Bedingung(etag=zeile["bedingung_etag"], nur_neu=zeile["nur_neu"]), pruefsumme=zeile["pruefsumme"])
+        return knoten
+
+    async def _fertigstellen(self, zeile: dict, max_bytes: int, eintragen: Eintragen) -> dict:
         """Trägt die vollständige Datei ein; danach gibt es den Upload nicht mehr. Scheitert das Eintragen (Ziel weg,
-        Name ist ein Ordner, Prüfsumme falsch), bleibt er liegen, bis er abgebrochen oder weggeräumt wird."""
+        Name ist ein Ordner, Prüfsumme falsch, Recht entzogen, Stand veraltet), bleibt er liegen, bis er abgebrochen
+        oder weggeräumt wird."""
         datei = self._datei(zeile["besitzer_id"], zeile["id"])
         quelle = await asyncio.to_thread(open, datei, "rb")
         try:
-            knoten, _, _ = await self.speicher.datei_hochladen_strom(
-                zeile["besitzer_id"], zeile["parent_id"], zeile["name"], quelle, max_bytes,
-                pruefsumme=zeile["pruefsumme"])
+            knoten = await eintragen(zeile, quelle, max_bytes)
         finally:
             await asyncio.to_thread(quelle.close)
         await self._entfernen(zeile["besitzer_id"], zeile["id"])
@@ -163,10 +184,10 @@ class UploadDienst:
             await conn.execute("DELETE FROM upload WHERE id=%s", (upload_id,))
         await asyncio.to_thread(self._datei(besitzer_id, upload_id).unlink, True)
 
-    async def abbrechen(self, besitzer_id, upload_id) -> None:
+    async def abbrechen(self, besitzer_id, upload_id, zugang_id=None) -> None:
         if str(upload_id) in self._laufend:
             raise UploadLaeuft("An diesem Upload wird gerade ein Teil angehängt")
-        await self._zeile(besitzer_id, upload_id)
+        await self._zeile(besitzer_id, upload_id, zugang_id)
         await self._entfernen(besitzer_id, upload_id)
 
     async def aufraeumen(self) -> int:

@@ -390,11 +390,6 @@
     font-size: 2.4rem;
     color: var(--akzent);
   }
-  .modal-knoepfe {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--a2);
-  }
   .global-drop {
     position: fixed;
     inset: 0;

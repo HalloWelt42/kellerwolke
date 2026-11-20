@@ -6,6 +6,7 @@ import type {
   AuthStatus,
   Benutzer,
   ExternEintrag,
+  Folge,
   Freigabe,
   GeraeteArt,
   Geraet,
@@ -19,6 +20,7 @@ import type {
   SpeicherStatus,
   Verschiebung,
   Version,
+  VerweisEintrag,
   Vorgang,
 } from "./types";
 import { verbindung } from "./verbindung.svelte";
@@ -365,6 +367,17 @@ export function endgueltigLoeschen(id: string): Promise<void> {
 
 export function versionen(id: string): Promise<Version[]> {
   return hole<Version[]>(`/v1/dateien/${id}/versionen`);
+}
+
+// Was das Löschen dieser Auswahl mitnähme (Begleiter, Verweise von anderswo); leer: keine Folgen.
+export async function loeschfolgen(ids: string[]): Promise<Folge[]> {
+  return (await hole<{ folgen: Folge[] }>("/v1/dateien/loeschfolgen", { method: "POST", body: JSON.stringify({ ids }) }))
+    .folgen;
+}
+
+// Lebende Verweise auf eine eigene Datei, mit Ordnerpfad.
+export function verweiseAuf(id: string): Promise<VerweisEintrag[]> {
+  return hole<VerweisEintrag[]>(`/v1/dateien/${id}/verweise`);
 }
 
 // --- Suche ------------------------------------------------------------------

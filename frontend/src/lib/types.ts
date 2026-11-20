@@ -6,7 +6,7 @@ export interface Benutzer {
   aktiv: boolean;
 }
 
-export type Knotentyp = "ordner" | "datei" | "extern";
+export type Knotentyp = "ordner" | "datei" | "extern" | "verweis";
 
 export interface Knoten {
   id: string;
@@ -40,6 +40,37 @@ export interface Knoten {
   begleiter_app?: string | null; // App, die den Begleiter angelegt hat
   begleiter_anzahl?: number;
   haupt_name?: string | null;
+  // Verweise (KW-10): ein Verweis nennt sein Original (Größe, ETag und Medienart sind dessen); verwaist heißt, das
+  // Original fehlt oder liegt im Papierkorb. Eine Datei zählt die lebenden Verweise darauf (im Papierkorb: die mit ihr
+  // gelöschten). Regeln in knoten.ts.
+  ziel_id?: string | null;
+  ziel_name?: string | null;
+  verwaist?: boolean;
+  verweis_anzahl?: number;
+  verweis_app?: string | null; // App, die den Verweis angelegt hat
+  sha256?: string | null; // Prüfsumme des Inhalts der aktuellen Version
+}
+
+// Was das Löschen mitnähme (Folgenvorschau): ein Begleiter oder ein Verweis von anderswo, mit Ordnerpfad.
+export interface Folge {
+  id: string;
+  name: string;
+  art: "begleiter" | "verweis";
+  ort: string;
+  parent_id: string | null;
+  rolle: string | null;
+  zu_id: string;
+  zu_name: string;
+}
+
+// Ein Verweis auf eine Datei (Detail des Originals).
+export interface VerweisEintrag {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  ort: string;
+  app: string | null;
+  erstellt_am: string;
 }
 
 // Was eine App mit einer Datei kann (Dateimenü, Abschnitt "Mit Apps").
@@ -139,6 +170,7 @@ export interface Version {
   id: string;
   groesse: number;
   inhalt_hash: string;
+  sha256: string;
   erstellt_am: string;
 }
 

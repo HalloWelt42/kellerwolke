@@ -15,6 +15,8 @@
   import Filterleiste from "./Filterleiste.svelte";
   import { vollansichtOffen } from "./vorschau.svelte";
   import { knotenOeffnen } from "./medien/oeffnen";
+  import { istVerweis, liestInhalt, mitVerweisen, ortText } from "./knoten";
+  import LoeschFolgen from "./LoeschFolgen.svelte";
 
   // Eine wiederverwendbare Browsing-Fläche: rendert genau einen Browser (die
   // Einzelansicht ODER eine Splitscreen-Pane). Alle Interaktionen - Klick,
@@ -43,7 +45,7 @@
   const titelNummer = $derived.by(() => {
     const nr = new Map<string, number>();
     if (browser.wirksameArt !== "audio") return nr;
-    for (const k of sortiert) if (k.typ === "datei" && k.medienart === "audio") nr.set(k.id, nr.size + 1);
+    for (const k of sortiert) if (liestInhalt(k) && k.medienart === "audio") nr.set(k.id, nr.size + 1);
     return nr;
   });
 
@@ -95,7 +97,7 @@
   const gewaehlteKnoten = $derived(browser.eintraege.filter((k) => auswahl.istGewaehlt(k.id)));
   // Mehrere geht als ZIP (eigene Dateien); geteilte nur einzeln.
   const herunterladbar = $derived(
-    rechte.zip || (gewaehlteKnoten.length === 1 && gewaehlteKnoten[0].typ === "datei"),
+    rechte.zip || (gewaehlteKnoten.length === 1 && liestInhalt(gewaehlteKnoten[0])),
   );
 
   let umbenennenId = $state<string | null>(null);
@@ -143,8 +145,8 @@
   // "Öffnen": Medien spielen oder zeigen, Ordner navigieren, sonst das Detail
   // (in einer Pane ohne Detail das Herunterladen, damit es nie ins Leere geht).
   function aktivieren(k: Knoten) {
-    if (k.typ === "datei" && medienAktivieren(k)) return;
-    if (k.typ === "datei" && !mitDetail) browser.herunterladen(k);
+    if (liestInhalt(k) && medienAktivieren(k)) return;
+    if (liestInhalt(k) && !mitDetail) browser.herunterladen(k);
     else browser.oeffnen(k);
   }
 
@@ -156,7 +158,7 @@
   // erst wenn es gar keine Ansicht gibt, wird die Datei geholt. Ordner
   // navigiert bereits der Einfachklick.
   function rowDblClick(k: Knoten) {
-    if (k.typ !== "datei" || imPapierkorb) return;
+    if (!liestInhalt(k) || imPapierkorb) return;
     if (!medienAktivieren(k)) browser.herunterladen(k);
   }
 
@@ -184,6 +186,7 @@
     else if (art === "wiederherstellen") browser.wiederherstellen([k.id]);
     else if (art === "endgueltig") onEndgueltig?.([k]);
     else if (art === "favorit") browser.favoritUmschalten(k);
+    else if (art === "original") browser.zumOriginal(k);
   }
 
   // --- Drag-and-drop (verschieben) -------------------------------------------
@@ -353,6 +356,16 @@
     }
   }
 
+  // Ordner des Originals eines Verweises für das Menü ("Apps/ImageVault/2026/11"); ohne Antwort ohne Pfad.
+  async function ortDesOriginals(k: Knoten): Promise<string | null> {
+    if (!istVerweis(k) || k.verwaist || !k.ziel_id) return null;
+    try {
+      return ortText((await api.pfadVon(k.ziel_id)).map((t) => t.name).join("/"));
+    } catch {
+      return null;
+    }
+  }
+
   function zurHauptdatei(k: Knoten) {
     if (!k.haupt_id) return;
     auswahl.waehleEinzeln(k.haupt_id);
@@ -376,7 +389,7 @@
     const mehrere = auswahl.anzahl > 1;
     const x = e.clientX;
     const y = e.clientY;
-    const apps = mehrere ? [] : await appAktionen(k);
+    const [apps, originalOrt] = await Promise.all([mehrere ? [] : appAktionen(k), mehrere ? null : ortDesOriginals(k)]);
     const gruppe = k.begleiter_anzahl ? mitBegleitern(k.begleiter_anzahl) : k.haupt_id ? "mit der Gruppe" : undefined;
     const eintraege: MenuEintrag[] = [];
     if (imPapierkorb) {
@@ -392,10 +405,19 @@
         fn: () => onEndgueltig?.(gewaehlteKnoten),
       });
     } else {
-      if (!mehrere) {
+      const verweis = !mehrere && istVerweis(k);
+      if (!mehrere && !(verweis && k.verwaist)) {
         eintraege.push({ label: "Öffnen", icon: "fa-arrow-up-right-from-square", fn: () => aktivieren(k) });
       }
-      if (!mehrere && k.typ === "datei") {
+      if (verweis && !k.verwaist) {
+        eintraege.push({
+          label: "Zum Original",
+          icon: "fa-arrow-right-to-bracket",
+          unter: originalOrt ?? undefined,
+          fn: () => browser.zumOriginal(k),
+        });
+      }
+      if (!mehrere && liestInhalt(k)) {
         eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => browser.herunterladen(k) });
       } else if (!mehrere && k.typ === "ordner" && rechte.zip) {
         eintraege.push({
@@ -406,14 +428,14 @@
       } else if (mehrere && rechte.zip) {
         eintraege.push({ label: "Herunterladen", icon: "fa-download", fn: () => stapelHerunterladen() });
       }
-      if (!mehrere && rechte.favorit) {
+      if (!mehrere && rechte.favorit && !verweis) {
         eintraege.push({
           label: k.favorit ? "Aus den Favoriten" : "Zu den Favoriten",
           icon: k.favorit ? "fa-star-half-stroke" : "fa-star",
           fn: () => browser.favoritUmschalten(k),
         });
       }
-      if (!mehrere && rechte.umbenennen) {
+      if (!mehrere && rechte.umbenennen && !(verweis && k.verwaist)) {
         eintraege.push({ label: "Umbenennen", icon: "fa-pen", fn: () => umbenennenStart(k) });
       }
       if (!mehrere && rechte.teilen) {
@@ -452,12 +474,21 @@
           label: "In den Papierkorb",
           icon: "fa-trash",
           gefahr: true,
-          unter: mehrere ? undefined : k.begleiter_anzahl ? mitBegleitern(k.begleiter_anzahl) : k.haupt_id ? "nur dieser" : undefined,
+          unter: mehrere ? undefined : loeschenHinweis(k),
           fn: () => browser.loeschen([...auswahl.ids]),
         });
       }
     }
     kontext = { x, y, eintraege };
+  }
+
+  // Was "In den Papierkorb" mitnimmt, kurz im Menü; die genaue Liste zeigt die Folgenvorschau vor dem Löschen.
+  function loeschenHinweis(k: Knoten): string | undefined {
+    if (istVerweis(k)) return "nur der Verweis";
+    const b = k.begleiter_anzahl ? mitBegleitern(k.begleiter_anzahl) : "";
+    const v = k.verweis_anzahl ? mitVerweisen(k.verweis_anzahl) : "";
+    if (b && v) return `${b} und ${v.slice("mit ".length)}`;
+    return b || v || (k.haupt_id ? "nur dieser" : undefined);
   }
 
   // --- Stapel-Aktionen --------------------------------------------------------
@@ -468,7 +499,7 @@
     const knoten = ids
       .map((id) => browser.eintraege.find((e) => e.id === id))
       .filter((k): k is Knoten => !!k);
-    if (knoten.length === 1 && knoten[0].typ === "datei") {
+    if (knoten.length === 1 && liestInhalt(knoten[0])) {
       await browser.herunterladen(knoten[0]);
       return;
     }
@@ -584,10 +615,10 @@
           role="row"
           tabindex="-1"
           onclick={() => {
-            if (k.typ === "datei") auswahl.waehleEinzeln(k.id);
-            if (k.typ !== "datei" || mitDetail) browser.geteiltOeffnen(k);
+            if (liestInhalt(k)) auswahl.waehleEinzeln(k.id);
+            if (!liestInhalt(k) || mitDetail) browser.geteiltOeffnen(k);
           }}
-          ondblclick={() => k.typ === "datei" && medienAktivieren(k)}
+          ondblclick={() => liestInhalt(k) && medienAktivieren(k)}
         >
           <span class="z-aus"></span>
           <span class="z-name">
@@ -606,7 +637,7 @@
           </span>
           <span class="z-meta z-geaendert">{datum(k.geaendert_am)}</span>
           <span class="z-akt">
-            {#if k.typ === "datei"}
+            {#if liestInhalt(k)}
               <button
                 class="icon-knopf"
                 title="Herunterladen"
@@ -848,6 +879,8 @@
     onAbbrechen={() => auswahl.leeren()}
   />
 {/if}
+
+<LoeschFolgen {browser} />
 
 {#if kontext}
   <Kontextmenue

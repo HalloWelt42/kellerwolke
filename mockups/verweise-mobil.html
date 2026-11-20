@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Kellerwolke - Verweise am Telefon (KW-10)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <link rel="stylesheet" href="/mockups/mobil.css" />
+    <style>
+      /* neu: Verweise am Telefon */
+      .m-sym-verweis { position: relative; display: inline-grid; place-items: center; flex: none; }
+      .m-sym-verweis .m-pfeil {
+        position: absolute; right: -4px; bottom: -2px; width: 17px; height: 17px; border-radius: 50%;
+        display: grid; place-items: center; background: var(--m-flaeche); color: var(--m-akzent);
+        font-size: 9px; box-shadow: 0 0 0 1px var(--m-rand);
+      }
+      .m-sym-verweis.verwaist .m-symbol { color: var(--m-text-3); }
+      .m-sym-verweis.verwaist .m-pfeil { color: #d99500; }
+      .m-meta .m-verweis { color: var(--m-akzent); white-space: nowrap; }
+      .m-meta .m-verwaist { color: #b07a00; white-space: nowrap; }
+      :root[data-theme="dunkel"] .m-meta .m-verwaist { color: #e8b54a; }
+      .m-zeile.verwaist .m-name { color: var(--m-text-3); }
+      .m-aktion .m-zweizeilig { min-width: 0; display: flex; flex-direction: column; }
+      .m-aktion .m-zweizeilig span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .m-aktion .m-zweizeilig span:last-child { font-size: var(--m-marke); color: var(--m-text-3); }
+      .m-blatt.hoch { max-height: 760px; overflow-y: auto; }
+      .m-folgen { margin: 4px 0 12px; padding: 0; list-style: none; border: 1px solid var(--m-rand); border-radius: var(--m-r); }
+      .m-folgen li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 0 10px; padding: 10px 12px; font-size: var(--m-klein); }
+      .m-folgen li + li { border-top: 1px solid var(--m-rand); }
+      .m-folgen li i { color: var(--m-text-2); text-align: center; padding-top: 2px; }
+      .m-folgen .f-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .m-folgen .f-pfad { grid-column: 2; font-size: var(--m-marke); color: var(--m-text-3); overflow-wrap: anywhere; }
+      .m-folgen .f-kopf { display: block; padding: 8px 12px 4px; font-size: var(--m-marke); color: var(--m-text-3);
+        text-transform: uppercase; letter-spacing: 0.5px; background: var(--m-flaeche-2); }
+      .m-blatt .m-folgen, .m-blatt .m-folgen-text { margin-left: var(--m-a); margin-right: var(--m-a); }
+      .m-folgen-text { margin: 0 0 4px; font-size: var(--m-klein); color: var(--m-text-2); }
+    </style>
+  </head>
+  <body>
+    <div class="buehne">
+
+      <!-- 1. Ordner der Telegram-App -->
+      <div>
+        <p class="zustand-titel">1. Ordner: Verweise mit Pfeil am Symbol</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf">
+            <button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button>
+            <h1>2026-11<span class="m-unter">Apps/Telegram/Familie</span></h1>
+            <button class="m-knopf"><i class="fa-solid fa-arrow-down-a-z"></i></button>
+          </div>
+          <div class="m-suche"><i class="fa-solid fa-magnifying-glass"></i> In 2026-11 suchen</div>
+          <div class="m-inhalt">
+            <div class="m-gruppe">Dateien</div>
+            <div class="m-liste">
+              <div class="m-zeile"><span class="m-sym-verweis"><i class="fa-solid fa-file-image m-symbol bild"></i><i class="m-pfeil fa-solid fa-share"></i></span><div class="m-text"><div class="m-name">2026-11-03 18-42 Oma Geburtstag.jpg</div><div class="m-meta">3,2 MB · <span class="m-verweis"><i class="fa-solid fa-share"></i> Verweis</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><span class="m-sym-verweis"><i class="fa-solid fa-file-image m-symbol bild"></i><i class="m-pfeil fa-solid fa-share"></i></span><div class="m-text"><div class="m-name">2026-11-03 18-44 Torte.jpg</div><div class="m-meta">2,7 MB · <span class="m-verweis"><i class="fa-solid fa-share"></i> Verweis</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-audio m-symbol ton"></i><div class="m-text"><div class="m-name">2026-11-04 07-15 Sprachnachricht Papa.ogg</div><div class="m-meta">184 KB · 04.11.2026</div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile verwaist"><span class="m-sym-verweis verwaist"><i class="fa-solid fa-file-image m-symbol"></i><i class="m-pfeil fa-solid fa-link-slash"></i></span><div class="m-text"><div class="m-name">2026-11-05 12-03 Ausflug.jpg</div><div class="m-meta"><span class="m-verwaist"><i class="fa-solid fa-link-slash"></i> verwaist, Original fehlt</span></div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+              <div class="m-zeile"><i class="fa-solid fa-file-lines m-symbol"></i><div class="m-text"><div class="m-name">Verlauf 2026-11.md</div><div class="m-meta">38 KB · heute</div></div><span class="m-mehr"><i class="fa-solid fa-ellipsis-vertical"></i></span></div>
+            </div>
+          </div>
+          <div class="m-plus"><i class="fa-solid fa-plus"></i></div>
+          <nav class="m-tabs">
+            <span class="m-tab aktiv"><i class="fa-solid fa-folder"></i>Dateien</span>
+            <span class="m-tab"><i class="fa-solid fa-images"></i>Medien</span>
+            <span class="m-tab"><i class="fa-solid fa-star"></i>Favoriten</span>
+            <span class="m-tab"><i class="fa-solid fa-ellipsis"></i>Mehr</span>
+          </nav>
+        </div>
+      </div>
+
+      <!-- 2. Blatt eines Verweises -->
+      <div>
+        <p class="zustand-titel">2. Verweis antippen: Zum Original</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>2026-11</h1></div>
+          <div class="m-inhalt"></div>
+          <div class="m-schleier"></div>
+          <div class="m-blatt">
+            <div class="m-griff"></div>
+            <div class="m-blatt-kopf"><span class="m-sym-verweis"><i class="fa-solid fa-file-image m-symbol bild"></i><i class="m-pfeil fa-solid fa-share"></i></span><div class="m-text"><div class="m-name">2026-11-03 18-42 Oma Geburtstag.jpg</div><div class="m-meta">Verweis auf IMG_4711.jpg</div></div></div>
+            <div class="m-aktion"><i class="fa-solid fa-eye"></i> Öffnen</div>
+            <div class="m-aktion"><i class="fa-solid fa-arrow-right-to-bracket"></i><span class="m-zweizeilig"><span>Zum Original</span><span>Apps/ImageVault/2026/11</span></span></div>
+            <div class="m-aktion"><i class="fa-solid fa-arrow-up-from-bracket"></i> Teilen oder sichern<span class="m-hinweis">Telefon</span></div>
+            <div class="m-aktion"><i class="fa-solid fa-pen"></i> Umbenennen</div>
+            <div class="m-aktion"><i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben</div>
+            <div class="m-aktion gefahr"><i class="fa-solid fa-trash"></i> In den Papierkorb<span class="m-hinweis">halten, nur der Verweis</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Original löschen: Folgen vor dem Halten -->
+      <div>
+        <p class="zustand-titel">3. Original löschen: erst die Folgen, dann halten</p>
+        <div class="telefon">
+          <div class="m-status"></div>
+          <div class="m-kopf"><button class="m-knopf"><i class="fa-solid fa-chevron-left"></i></button><h1>11</h1></div>
+          <div class="m-inhalt"></div>
+          <div class="m-schleier"></div>
+          <div class="m-blatt hoch">
+            <div class="m-griff"></div>
+            <div class="m-blatt-kopf"><i class="fa-solid fa-file-image m-symbol bild"></i><div class="m-text"><div class="m-name">IMG_4711.jpg</div><div class="m-meta">3,2 MB · Apps/ImageVault/2026/11</div></div></div>
+            <p class="m-folgen-text">Mit dem Original kommen in den Papierkorb:</p>
+            <ul class="m-folgen">
+              <li class="f-kopf">2 Verweise</li>
+              <li><i class="fa-solid fa-share"></i><span class="f-name">2026-11-03 18-42 Oma Geburtstag.jpg</span><span class="f-pfad">Apps/Telegram/Familie/2026-11</span></li>
+              <li><i class="fa-solid fa-share"></i><span class="f-name">Oma 80.jpg</span><span class="f-pfad">Apps/Telegram/Verein/2026-11</span></li>
+              <li class="f-kopf">1 Begleiter</li>
+              <li><i class="fa-solid fa-file-lines"></i><span class="f-name">IMG_4711.beschreibung.json</span><span class="f-pfad">Apps/ImageVault/2026/11</span></li>
+            </ul>
+            <p class="m-folgen-text" style="color: var(--m-text-3); font-size: var(--m-marke);">Wiederherstellen holt alle zusammen zurück.</p>
+            <div class="m-halten" style="margin-left: 0; margin-right: 0;"><span class="m-fuellung" style="width: 35%"></span><span class="m-ring" style="--anteil: 35"></span><span style="position: relative;">Halten: alle 4 in den Papierkorb</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-leiste">
+      <button data-theme-btn="hell" title="Hell"><i class="fa-solid fa-sun"></i></button>
+      <button data-theme-btn="dunkel" title="Dunkel"><i class="fa-solid fa-moon"></i></button>
+    </div>
+    <script>
+      const setzeThema = (t) => {
+        document.documentElement.dataset.theme = t;
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => b.classList.toggle("aktiv", b.dataset.themeBtn === t));
+      };
+      document.querySelectorAll("[data-theme-btn]").forEach((b) => (b.onclick = () => setzeThema(b.dataset.themeBtn)));
+      setzeThema(new URLSearchParams(location.search).get("thema") === "dunkel" ? "dunkel" : "hell");
+    </script>
+  </body>
+</html>

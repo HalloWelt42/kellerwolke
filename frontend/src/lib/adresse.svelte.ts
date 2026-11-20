@@ -14,6 +14,7 @@ import { geraet } from "./geraet.svelte";
 import { mobil, zeigeReiter, zeigeSeite } from "./mobil/mobil.svelte";
 import { EINSTELLUNGS_SEITEN, verwaltung, type EinstellungsSeite } from "./verwaltung.svelte";
 import { haupt } from "./zustand.svelte";
+import { istDateiartig } from "./knoten";
 
 export type Ort =
   | { art: "dateien"; teile: string[]; datei?: string }
@@ -81,7 +82,7 @@ function aktuellerOrt(): Ort {
   switch (haupt.bereich) {
     case "dateien": {
       const d = haupt.detail;
-      const imOrdner = d && d.typ === "datei" && (d.parent_id ?? null) === haupt.aktuellerOrdner;
+      const imOrdner = d && istDateiartig(d) && (d.parent_id ?? null) === haupt.aktuellerOrdner;
       return { art: "dateien", teile: haupt.pfad.slice(1).map((p) => p.name), datei: imOrdner ? d.name : undefined };
     }
     case "extern":

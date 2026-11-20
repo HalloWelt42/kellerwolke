@@ -11,9 +11,10 @@ from io import BytesIO
 
 from psycopg.rows import dict_row
 
-from app.adapters.postgres_metadata import PostgresMetadataRepository
+from app.adapters.postgres_metadata import ZIEL_JOIN, ZIEL_SPALTEN, PostgresMetadataRepository
 from app.namen import nfc
 
+from module.speicher.verweise import ohne_doppel
 from module.suche.extraktion import inhalt_noetig, lesemenge, text_extrahieren
 
 
@@ -36,8 +37,8 @@ class SuchDienst:
         braucht, und zwar aus dem Pfad des Blocks; das Zerlegen (PDF, docx) läuft in einem Faden, die Ereignisschleife
         bleibt frei. Fremde oder verschwundene Dateien bleiben unberührt (Isolation)."""
         stand = await speicher.eigene_datei(besitzer_id, knoten_id)
-        if stand is None:
-            return
+        if stand is None or str(stand.knoten["id"]) != str(knoten_id):
+            return                                  # verschwunden, fremd oder ein Verweis (hat keinen eigenen Inhalt)
         name = stand.knoten["name"]
         text = await self._text(speicher, stand, name) if inhalt_noetig(name, stand.groesse) else ""
         await self.inhalt_speichern(besitzer_id, knoten_id, text)
@@ -77,7 +78,8 @@ class SuchDienst:
     async def suchen(self, besitzer_id, anfrage, grenze: int = 50):
         """Treffer im Namen (Dateien und Ordner) oder im Inhalt, Name höher gewichtet; mit denselben Zusatzfeldern
         wie die Ordnerliste (Favorit, geteilt, Kinderzahl), dazu Ort (Ordnerkette) und ob der Name traf. Beide
-        Teilmengen kommen über ihren eigenen Index."""
+        Teilmengen kommen über ihren eigenen Index. Verweise zählen nicht doppelt (verweise.ohne_doppel); dafür wird
+        etwas mehr gelesen und danach auf die Grenze gekürzt."""
         anfrage = nfc(anfrage)
         async with self.pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
@@ -88,7 +90,7 @@ class SuchDienst:
                     "  UNION "
                     "  SELECT s.knoten_id FROM such_index s, q WHERE s.besitzer_id = %s AND s.inhalt_tsv @@ q.q"
                     ") "
-                    "SELECT k.*, v.groesse, "
+                    f"SELECT k.*, {ZIEL_SPALTEN}, "
                     "(SELECT count(*) FROM knoten c WHERE c.parent_id = k.id AND NOT c.geloescht) AS kinder_anzahl, "
                     "EXISTS(SELECT 1 FROM favorit f WHERE f.benutzer_id = k.besitzer_id AND f.knoten_id = k.id) AS favorit, "
                     "EXISTS(SELECT 1 FROM freigabe fr WHERE fr.knoten_id = k.id) AS geteilt, "
@@ -98,12 +100,13 @@ class SuchDienst:
                     "JOIN knoten k ON k.id = t.id AND k.besitzer_id = %s AND NOT k.geloescht "
                     "LEFT JOIN such_index s ON s.knoten_id = k.id "
                     "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+                    f"{ZIEL_JOIN}"
                     "ORDER BY (ts_rank(k.name_tsv, q.q) * 4 + coalesce(ts_rank(s.inhalt_tsv, q.q), 0)) DESC, "
                     "         k.geaendert_am DESC "
                     "LIMIT %s",
-                    (anfrage, besitzer_id, besitzer_id, besitzer_id, grenze),
+                    (anfrage, besitzer_id, besitzer_id, besitzer_id, grenze * 2),
                 )
-                treffer = await cur.fetchall()
+                treffer = ohne_doppel(await cur.fetchall())[:grenze]
             # Ort je Treffer: die Ordnerkette darüber (wenige Treffer, je eine kurze Abfrage).
             repo = PostgresMetadataRepository(conn)
             for t in treffer:

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from module.medien.arten import Medienart, medienart
 
@@ -49,11 +49,30 @@ class KnotenAus(BaseModel):
     begleiter_app: str | None = None       # App, die den Begleiter angelegt hat
     begleiter_anzahl: int = 0
     haupt_name: str | None = None          # Papierkorb: Hauptdatei eines allein gelöschten Begleiters
+    # Verweise (KW-10): ein Verweis nennt sein Original; Größe, Prüfsumme und ETag sind die des Originals. Verwaist
+    # heißt: das Original fehlt oder liegt im Papierkorb. Eine Datei zählt die lebenden Verweise darauf (im
+    # Papierkorb: die mit ihr gelöschten).
+    ziel_id: UUID | None = None
+    ziel_name: str | None = None
+    verwaist: bool = False
+    verweis_anzahl: int = 0
+    verweis_app: str | None = None         # App, die den Verweis angelegt hat
+    sha256: str | None = None              # Prüfsumme des Inhalts der aktuellen Version (KW-11)
+    ziel_etag: str | None = Field(None, exclude=True)
+
+    @model_validator(mode="after")
+    def _wie_das_original(self):
+        if self.typ == "verweis":
+            self.etag = self.ziel_etag
+        return self
 
     @computed_field
     @property
     def medienart(self) -> Medienart | None:
-        """Bild, Audio oder Video - die Oberfläche kennt die Endungen nicht selbst."""
+        """Bild, Audio oder Video - die Oberfläche kennt die Endungen nicht selbst; ein Verweis zeigt die Art seines
+        Originals."""
+        if self.typ == "verweis":
+            return medienart(self.ziel_name) if self.ziel_name else None
         return medienart(self.name) if self.typ == "datei" else None
 
 
@@ -90,6 +109,12 @@ class VersionAus(BaseModel):
     groesse: int
     inhalt_hash: str
     erstellt_am: datetime
+
+    @computed_field
+    @property
+    def sha256(self) -> str:
+        """Prüfsumme des ganzen Inhalts dieser Version (gleich inhalt_hash, unter dem Namen, den Apps erwarten)."""
+        return self.inhalt_hash
 
 
 class ExternEintragAus(BaseModel):
@@ -142,3 +167,37 @@ class ZipEingabe(BaseModel):
 
 class ZipPlanAus(BaseModel):
     eintraege: int
+
+
+class FolgeAus(BaseModel):
+    """Ein Eintrag, den das Löschen mitnähme: ein Begleiter oder ein Verweis von anderswo, mit Pfad seines Ordners."""
+
+    model_config = ConfigDict(extra="ignore")
+    id: UUID
+    name: str
+    art: str                              # begleiter | verweis
+    ort: str                              # Ordnerpfad ohne "Meine Dateien" (leer: oberste Ebene)
+    parent_id: UUID | None = None
+    rolle: str | None = None              # Begleiter: seine Rolle
+    zu_id: UUID                           # die Datei, an der er hängt
+    zu_name: str
+
+
+class AuswahlEingabe(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=1000)
+
+
+class LoeschfolgenAus(BaseModel):
+    folgen: list[FolgeAus]
+
+
+class VerweisAus(BaseModel):
+    """Ein Verweis auf eine Datei, mit dem Pfad seines Ordners (Detail des Originals)."""
+
+    model_config = ConfigDict(extra="ignore")
+    id: UUID
+    name: str
+    parent_id: UUID | None = None
+    ort: str
+    app: str | None = None                # App, die ihn angelegt hat
+    erstellt_am: datetime

@@ -7,6 +7,25 @@ from psycopg.rows import dict_row
 
 from app.namen import nfc
 
+# Verweise (KW-10): Angaben des Originals an der Zeile eines Verweises, für jede Liste gleich. Das Original zählt nur,
+# solange es lebt; sonst ist der Verweis verwaist. Erwartet die Aliase k (Knoten) und v (seine aktuelle Version);
+# groesse und sha256 sind die eigene Version oder die des Originals, verweis_anzahl zählt die lebenden Verweise darauf,
+# verweis_app nennt die App, die einen Verweis angelegt hat.
+ZIEL_JOIN = ("LEFT JOIN knoten z ON z.id = k.ziel_id AND NOT z.geloescht "
+             "LEFT JOIN version zv ON zv.id = z.aktuelle_version_id ")
+ZIEL_SPALTEN = ("coalesce(v.groesse, zv.groesse) AS groesse, coalesce(v.inhalt_hash, zv.inhalt_hash) AS sha256, "
+                "z.name AS ziel_name, z.etag AS ziel_etag, (k.typ = 'verweis' AND z.id IS NULL) AS verwaist, "
+                "(SELECT count(*) FROM knoten r WHERE r.ziel_id = k.id AND NOT r.geloescht) AS verweis_anzahl, "
+                "CASE WHEN k.typ = 'verweis' THEN (SELECT m.app FROM datei_meta m WHERE m.knoten_id = k.id) END "
+                "AS verweis_app")
+_VERSION_JOIN = "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+# Verweise, die ein Original mit in den Papierkorb genommen hat (KW-10): gleiche Wurzel, aber nicht in deren Teilbaum
+# (der Elternordner ist weder die Wurzel noch mit ihr gelöscht). Alias r; die Wurzel prüft der Aufrufer.
+_MITGENOMMEN = ("LEFT JOIN knoten rp ON rp.id = r.parent_id "
+                "WHERE r.typ = 'verweis' AND r.geloescht AND r.id <> r.geloescht_wurzel "
+                "AND (r.parent_id IS NULL OR (r.parent_id <> r.geloescht_wurzel "
+                "AND rp.geloescht_wurzel IS DISTINCT FROM r.geloescht_wurzel))")
+
 
 class PostgresMetadataRepository:
     def __init__(self, conn) -> None:
@@ -111,8 +130,8 @@ class PostgresMetadataRepository:
         )
         if parent_id is None:
             return await self._alle(
-                f"SELECT k.*, v.groesse, {zusatz} FROM knoten k "
-                "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+                f"SELECT k.*, {ZIEL_SPALTEN}, {zusatz} FROM knoten k "
+                f"{_VERSION_JOIN}{ZIEL_JOIN}"
                 "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
                 "WHERE k.besitzer_id=%s AND k.parent_id IS NULL "
                 "AND NOT k.geloescht "
@@ -121,8 +140,8 @@ class PostgresMetadataRepository:
                 (besitzer_id,),
             )
         return await self._alle(
-            f"SELECT k.*, v.groesse, {zusatz} FROM knoten k "
-            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            f"SELECT k.*, {ZIEL_SPALTEN}, {zusatz} FROM knoten k "
+            f"{_VERSION_JOIN}{ZIEL_JOIN}"
             "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "WHERE k.besitzer_id=%s AND k.parent_id=%s "
             "AND NOT k.geloescht "
@@ -133,12 +152,12 @@ class PostgresMetadataRepository:
 
     async def favoriten(self, besitzer_id):
         return await self._alle(
-            "SELECT k.*, v.groesse, true AS favorit, "
+            f"SELECT k.*, {ZIEL_SPALTEN}, true AS favorit, "
             "(SELECT count(*) FROM knoten c WHERE c.parent_id = k.id AND NOT c.geloescht) "
             "AS kinder_anzahl, "
             "EXISTS(SELECT 1 FROM freigabe fr WHERE fr.knoten_id = k.id) AS geteilt "
             "FROM favorit f JOIN knoten k ON k.id = f.knoten_id "
-            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            f"{_VERSION_JOIN}{ZIEL_JOIN}"
             "WHERE f.benutzer_id=%s AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
             "lower(k.name)",
@@ -188,13 +207,13 @@ class PostgresMetadataRepository:
     async def geteilt_mit(self, benutzer_id):
         """Knoten, die DIREKT an benutzer_id freigegeben sind (mit Eigentuemer-Name)."""
         return await self._alle(
-            "SELECT k.*, v.groesse, ob.name AS besitzer_name, "
+            f"SELECT k.*, {ZIEL_SPALTEN}, ob.name AS besitzer_name, "
             "(SELECT count(*) FROM knoten c WHERE c.parent_id=k.id AND NOT c.geloescht) "
             "AS kinder_anzahl "
             "FROM freigabe f "
             "JOIN knoten k ON k.id = f.knoten_id "
             "JOIN benutzer ob ON ob.id = k.besitzer_id "
-            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            f"{_VERSION_JOIN}{ZIEL_JOIN}"
             "WHERE f.typ='intern' AND f.ziel_benutzer_id=%s AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
             "lower(k.name)",
@@ -224,10 +243,10 @@ class PostgresMetadataRepository:
         """Kinder eines Ordners ohne Eigentuemer-Filter (fuer geteiltes Browsen;
         der Zugriff auf den Ordner ist vorher per lese_zugriff geprueft)."""
         return await self._alle(
-            "SELECT k.*, v.groesse, "
+            f"SELECT k.*, {ZIEL_SPALTEN}, "
             "(SELECT count(*) FROM knoten c WHERE c.parent_id=k.id AND NOT c.geloescht) "
             "AS kinder_anzahl "
-            "FROM knoten k LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            f"FROM knoten k {_VERSION_JOIN}{ZIEL_JOIN}"
             "WHERE k.parent_id=%s AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, "
             "lower(k.name)",
@@ -308,11 +327,14 @@ class PostgresMetadataRepository:
         # Eine Gruppe ist eine Zeile: die Hauptdatei zählt die mit ihr gelöschten Begleiter; ein allein gelöschter
         # Begleiter nennt Rolle und Hauptdatei (dorthin kommt er beim Wiederherstellen zurück).
         return await self._alle(
-            "SELECT k.*, v.groesse, bg.haupt_id, bg.rolle, hk.name AS haupt_name, "
+            "SELECT k.*, coalesce(v.groesse, zv.groesse) AS groesse, coalesce(v.inhalt_hash, zv.inhalt_hash) AS sha256, "
+            "z.name AS ziel_name, z.etag AS ziel_etag, (k.typ = 'verweis' AND z.id IS NULL) AS verwaist, "
+            "bg.haupt_id, bg.rolle, hk.name AS haupt_name, "
             "(SELECT count(*) FROM begleiter b JOIN knoten c ON c.id = b.begleiter_id "
-            " WHERE b.haupt_id = k.id AND c.geloescht AND c.geloescht_wurzel = k.id) AS begleiter_anzahl "
+            " WHERE b.haupt_id = k.id AND c.geloescht AND c.geloescht_wurzel = k.id) AS begleiter_anzahl, "
+            f"(SELECT count(*) FROM knoten r {_MITGENOMMEN} AND r.geloescht_wurzel = k.id) AS verweis_anzahl "
             "FROM knoten k "
-            "LEFT JOIN version v ON v.id = k.aktuelle_version_id "
+            f"{_VERSION_JOIN}{ZIEL_JOIN}"
             "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "LEFT JOIN knoten hk ON hk.id = bg.haupt_id AND NOT hk.geloescht "
             "WHERE k.besitzer_id=%s AND k.geloescht AND k.geloescht_wurzel = k.id "
@@ -416,8 +438,8 @@ class PostgresMetadataRepository:
         """Eine Seite der lebenden Kinder eines Ordners in fester Reihenfolge (Ordner vor Dateien, Name, Kennung),
         mit Größe der aktuellen Version. Der Zugriff auf den Ordner ist vorher geprüft."""
         return await self._alle(
-            "SELECT k.*, v.groesse, bg.haupt_id, bg.rolle FROM knoten k "
-            "LEFT JOIN version v ON v.id = k.aktuelle_version_id LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
+            f"SELECT k.*, {ZIEL_SPALTEN}, bg.haupt_id, bg.rolle FROM knoten k "
+            f"{_VERSION_JOIN}{ZIEL_JOIN}LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "WHERE k.parent_id=%s AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, lower(k.name), k.id "
             "LIMIT %s OFFSET %s",
@@ -428,8 +450,8 @@ class PostgresMetadataRepository:
         """Eine Seite der lebenden Knoten auf der obersten Ebene eines Kontos, in derselben Reihenfolge wie
         kinder_seite. Nur für Apps mit "Alles lesen" (KW-3); der Zugriff ist vorher geprüft."""
         return await self._alle(
-            "SELECT k.*, v.groesse, bg.haupt_id, bg.rolle FROM knoten k "
-            "LEFT JOIN version v ON v.id = k.aktuelle_version_id LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
+            f"SELECT k.*, {ZIEL_SPALTEN}, bg.haupt_id, bg.rolle FROM knoten k "
+            f"{_VERSION_JOIN}{ZIEL_JOIN}LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "WHERE k.besitzer_id=%s AND k.parent_id IS NULL AND NOT k.geloescht "
             "ORDER BY CASE k.typ WHEN 'ordner' THEN 0 WHEN 'extern' THEN 1 ELSE 2 END, lower(k.name), k.id "
             "LIMIT %s OFFSET %s",
@@ -604,4 +626,77 @@ class PostgresMetadataRepository:
             "SELECT k.* FROM knoten k JOIN begleiter b ON b.begleiter_id = k.id "
             "WHERE k.geloescht AND k.geloescht_wurzel = ANY(%s) AND b.haupt_id = k.geloescht_wurzel",
             (list(wurzeln),),
+        )
+
+    # --- Verweise (Regeln in module/speicher/verweise.py) ----------------------------------------------------
+
+    async def knoten_lesend_sperren(self, knoten_id):
+        """Der Knoten, gegen gleichzeitiges Löschen gesperrt bis zum Ende der Transaktion (wie ordner_lebt)."""
+        return await self._eine("SELECT * FROM knoten WHERE id=%s FOR SHARE", (knoten_id,))
+
+    async def verweis_anlegen(self, besitzer_id, parent_id, name, ziel_id):
+        return await self._eine(
+            "INSERT INTO knoten (besitzer_id, parent_id, name, typ, ziel_id) "
+            "VALUES (%s,%s,%s,'verweis',%s) RETURNING *",
+            (besitzer_id, parent_id, nfc(name), ziel_id),
+        )
+
+    async def verweise_auf(self, ziel_id):
+        """Lebende Verweise auf eine Datei, nach Name."""
+        return await self._alle(
+            "SELECT k.*, m.app FROM knoten k LEFT JOIN datei_meta m ON m.knoten_id = k.id "
+            "WHERE k.ziel_id=%s AND k.typ='verweis' AND NOT k.geloescht ORDER BY lower(k.name), k.id",
+            (ziel_id,),
+        )
+
+    async def verweise_mitnehmen(self, wurzel_id):
+        """Lebende Verweise auf alles, was gerade mit der Wurzel in den Papierkorb kam (Teilbaum und Begleiter), gehen
+        mit: gleiche Wurzel, damit Wiederherstellen und endgültiges Löschen sie mitnehmen."""
+        return await self._alle(
+            "UPDATE knoten SET geloescht=true, geloescht_wurzel=%s "
+            "WHERE typ='verweis' AND NOT geloescht "
+            "AND ziel_id IN (SELECT id FROM knoten WHERE geloescht AND geloescht_wurzel=%s) RETURNING *",
+            (wurzel_id, wurzel_id),
+        )
+
+    async def mitgenommene_verweise(self, wurzeln):
+        """Verweise, die mit diesen Papierkorb-Wurzeln gelöscht wurden, aber anderswo liegen."""
+        if not wurzeln:
+            return []
+        return await self._alle(
+            f"SELECT r.* FROM knoten r {_MITGENOMMEN} AND r.geloescht_wurzel = ANY(%s) ORDER BY lower(r.name), r.id",
+            (list(wurzeln),),
+        )
+
+    async def verweise_in_folge(self, besitzer_id, knoten_id):
+        """Lebende Verweise außerhalb des Teilbaums, die auf eine Datei darin oder einen Begleiter davon zeigen: was
+        das Löschen dieses Knotens mitnähme (Folgenvorschau). Mit dem Namen des Originals."""
+        return await self._alle(
+            "WITH RECURSIVE baum AS ("
+            "  SELECT id FROM knoten WHERE id=%s AND besitzer_id=%s AND NOT geloescht "
+            "  UNION ALL "
+            "  SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id WHERE NOT k.geloescht"
+            "), betroffen AS ("
+            "  SELECT id FROM baum "
+            "  UNION SELECT b.begleiter_id FROM begleiter b JOIN knoten c ON c.id = b.begleiter_id AND NOT c.geloescht "
+            "  WHERE b.haupt_id IN (SELECT id FROM baum)"
+            ") SELECT r.*, z.name AS ziel_name FROM knoten r JOIN knoten z ON z.id = r.ziel_id "
+            "WHERE r.typ='verweis' AND NOT r.geloescht AND r.besitzer_id=%s AND r.ziel_id IN (SELECT id FROM betroffen) "
+            "AND r.id NOT IN (SELECT id FROM baum) ORDER BY lower(z.name), lower(r.name), r.id",
+            (knoten_id, besitzer_id, besitzer_id),
+        )
+
+    async def dateien_mit_inhalt(self, besitzer_id, sha256, grenze: int = 200):
+        """Lebende Dateien des Kontos, deren aktuelle Version genau diesen Inhalt hat (sha256), älteste zuerst."""
+        return await self._alle(
+            "SELECT k.*, v.groesse, v.inhalt_hash AS sha256 FROM version v JOIN knoten k ON k.aktuelle_version_id = v.id "
+            "WHERE v.inhalt_hash=%s AND k.besitzer_id=%s AND k.typ='datei' AND NOT k.geloescht "
+            "ORDER BY k.erstellt_am, k.id LIMIT %s",
+            (sha256, besitzer_id, grenze),
+        )
+
+    async def knoten_mit_ziel(self, knoten_id):
+        """Ein Knoten mit Größe, Prüfsumme und den Angaben seines Originals (wie eine Zeile der Listen)."""
+        return await self._eine(
+            f"SELECT k.*, {ZIEL_SPALTEN} FROM knoten k {_VERSION_JOIN}{ZIEL_JOIN}WHERE k.id=%s", (knoten_id,)
         )

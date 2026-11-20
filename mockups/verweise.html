@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="de" data-theme="hell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kellerwolke - Verweise (KW-10)</title>
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/400.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/500.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fontsource/barlow/600.css" />
+    <link rel="stylesheet" href="/frontend/node_modules/@fortawesome/fontawesome-free/css/all.min.css" />
+    <!-- Echte Gestaltung der Oberfläche; was hier unten neu ist, kommt nach der Freigabe in app.css. -->
+    <link rel="stylesheet" href="/frontend/src/app.css" />
+    <style>
+      /* ===== unverändert, aus AppLeiste.svelte, Filterleiste.svelte, Speicheranzeige.svelte ===== */
+      .app-leiste { display: flex; align-items: center; gap: var(--a1); padding: var(--a2) var(--a4) 0; flex-wrap: wrap; }
+      .app-knopf { display: inline-flex; align-items: center; gap: var(--a2); padding: var(--a1) var(--a3); border: 1px solid transparent;
+        border-radius: var(--r2); background: transparent; color: var(--text-2); font: inherit; font-size: 0.86rem; cursor: pointer; }
+      .app-knopf.aktiv { background: var(--akzent-weich); color: var(--akzent-stark); }
+      .filterleiste { display: flex; flex-wrap: wrap; align-items: center; gap: var(--a2); padding: var(--a2) var(--a4); }
+      .filter-regel { display: flex; align-items: center; gap: var(--a1); background: var(--flaeche-2); border: 1px solid var(--rand);
+        border-radius: var(--r2); padding: 2px 2px 2px var(--a2); }
+      .filter-regel .symbol { color: var(--text-3); font-size: 0.8rem; }
+      .filter-regel input { border: none; background: transparent; color: var(--text-1); font: inherit; font-size: 0.86rem;
+        padding: var(--a1) var(--a1); min-width: 160px; outline: none; }
+      .filter-regel select { border: none; background: transparent; color: var(--text-2); font: inherit; font-size: 0.8rem; padding: 2px; }
+      .opt { border: 1px solid transparent; background: transparent; color: var(--text-2); font: inherit; font-size: 0.8rem; font-weight: 600;
+        min-width: 26px; height: 26px; padding: 0 var(--a1); border-radius: var(--r1); display: inline-flex; align-items: center;
+        justify-content: center; gap: 4px; }
+      .opt.still { color: var(--text-3); }
+      .filter-aktionen { display: flex; align-items: center; gap: var(--a1); }
+      .ring-zeile { display: flex; align-items: center; gap: var(--a3); }
+      .ring { width: 56px; height: 56px; flex: none; transform: rotate(-90deg); }
+      .ring .spur { fill: none; stroke: var(--flaeche-3); stroke-width: 5; }
+      .ring .seg { fill: none; stroke-width: 5; stroke-linecap: round; }
+      .ring .seg.kw { stroke: var(--akzent); }
+      .ring .seg.sonst { stroke: var(--rand-stark); }
+      .legende { display: flex; flex-direction: column; gap: var(--a1); font-size: 0.78rem; color: var(--text-2); min-width: 0; }
+      .le { display: flex; align-items: center; gap: var(--a2); white-space: nowrap; }
+      .punkt { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+      .punkt.kw { background: var(--akzent); }
+      .punkt.frei { background: var(--flaeche-3); border: 1px solid var(--rand-stark); }
+      .nav-version { margin: var(--a3) var(--a3) var(--a1); font-size: 0.72rem; color: var(--text-3); }
+
+      /* ===== neu: Verweise (KW-10) ===== */
+      /* Symbol eines Verweises: das Symbol der Art des Originals mit einem kleinen Pfeil unten rechts */
+      .sym-verweis { position: relative; display: inline-grid; place-items: center; flex: none; }
+      .sym-verweis .verweis-pfeil {
+        position: absolute; right: -5px; bottom: -3px;
+        width: 14px; height: 14px; border-radius: 50%;
+        display: grid; place-items: center;
+        background: var(--flaeche); color: var(--akzent-stark);
+        font-size: 0.56rem; box-shadow: 0 0 0 1px var(--rand);
+      }
+      .sym-verweis.verwaist > .sym { color: var(--text-3); }
+      .sym-verweis.verwaist .verweis-pfeil { color: var(--warn); }
+      .verweis-chip {
+        flex: none; display: inline-flex; align-items: center; gap: 4px;
+        font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.4px;
+        padding: 1px 7px; border-radius: 999px;
+        background: var(--akzent-weich); color: var(--akzent-stark); white-space: nowrap;
+      }
+      .verweis-chip.verwaist { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--text); }
+      .zeile.verwaist .titel { color: var(--text-3); }
+      .verweis-marke { flex: none; font-size: 0.76rem; color: var(--text-3); white-space: nowrap; }
+      @container (max-width: 620px) {
+        .verweis-chip .vc-text, .verweis-marke .vm-text { display: none; }
+      }
+      /* Detail: Original eines Verweises und Verweise eines Originals */
+      .original-karte {
+        display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px var(--a2); align-items: center;
+        padding: var(--a2) var(--a3); border: 1px solid var(--rand); border-radius: var(--r2); background: var(--flaeche-2);
+      }
+      .original-karte i { color: var(--text-2); text-align: center; }
+      .original-karte .o-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .original-karte .o-pfad { grid-column: 2; font-size: 0.8rem; color: var(--text-3); overflow-wrap: anywhere; }
+      .original-karte.fehlt { border-style: dashed; background: transparent; }
+      .original-karte.fehlt i { color: var(--warn); }
+      .detail-block .knopf.breit { width: 100%; justify-content: center; margin-top: var(--a2); }
+      .pruefsumme { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.76rem; overflow-wrap: anywhere; }
+      /* Folgenvorschau vor dem Löschen eines Originals */
+      .folgen-text { margin: 0 0 var(--a3); color: var(--text-2); }
+      .folgen-liste { list-style: none; margin: 0 0 var(--a3); padding: 0; display: flex; flex-direction: column; gap: 2px;
+        max-height: 300px; overflow-y: auto; border: 1px solid var(--rand); border-radius: var(--r2); }
+      .folgen-liste li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 0 var(--a2); align-items: center;
+        padding: 7px var(--a3); }
+      .folgen-liste li + li { border-top: 1px solid var(--rand); }
+      .folgen-liste li i { color: var(--text-2); text-align: center; }
+      .folgen-liste .f-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .folgen-liste .f-pfad { grid-column: 2 / 4; font-size: 0.78rem; color: var(--text-3); overflow-wrap: anywhere; }
+      .folgen-liste li.f-kopf { display: block; padding: 6px var(--a3) 2px; font-size: 0.68rem; text-transform: uppercase;
+        letter-spacing: 0.5px; color: var(--text-3); background: var(--flaeche-2); }
+      .folgen-hinweis { margin: 0 0 var(--a4); font-size: 0.85rem; color: var(--text-3); }
+      .modal-knoepfe { display: flex; justify-content: flex-end; gap: var(--a2); flex-wrap: wrap; }
+      /* ===== nur für den Entwurf: Zustand wählen ===== */
+      .entwurf-wahl {
+        position: fixed;
+        right: 12px;
+        bottom: 12px;
+        z-index: 40;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        background: var(--flaeche);
+        border: 1px solid var(--rand);
+        border-radius: var(--r2);
+        box-shadow: var(--schatten-1);
+        font-size: 0.78rem;
+      }
+      .entwurf-wahl a {
+        padding: 3px 8px;
+        border-radius: var(--r1);
+        color: var(--text-2);
+        text-decoration: none;
+      }
+      .entwurf-wahl a.an { background: var(--akzent); color: var(--akzent-text); }
+    </style>
+  </head>
+  <body>
+    <nav class="entwurf-wahl" aria-label="Zustand des Entwurfs"></nav>
+
+    <div class="app" id="app">
+      <header class="kopf">
+        <div class="marke"><svg width="22" height="22" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true" class="kw-logo">
+          <rect x="5" y="11" width="22" height="7" rx="3.5" /><circle cx="10" cy="12.5" r="4.5" /><circle cx="16" cy="8.5" r="6" />
+          <circle cx="22" cy="13" r="4" /><rect x="9" y="21" width="14" height="2.6" rx="1.3" /><rect x="9" y="25" width="14" height="2.6" rx="1.3" />
+          <rect x="9" y="29" width="14" height="2.6" rx="1.3" /></svg> Kellerwolke</div>
+        <form class="kopf-suche" onsubmit="return false">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="In allen Dateien suchen ..." />
+        </form>
+        <div class="kopf-rechts">
+          <button class="icon-knopf kopf-knopf" title="Vorgänge">
+            <i class="fa-solid fa-list-check"></i>
+           
+          </button>
+          <div class="nutzer-bereich">
+            <button class="nutzer-chip"><span class="avatar">M</span> Marcel <i class="fa-solid fa-chevron-down pfeil"></i></button>
+          </div>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <div class="nav-titel">Bereiche <button class="nav-einklapp" title="Navigation ausblenden"><i class="fa-solid fa-angles-left"></i></button></div>
+        <button class="nav-eintrag" data-aktiv="dateien"><i class="fa-solid fa-folder"></i> Meine Dateien</button>
+        <button class="nav-eintrag"><i class="fa-solid fa-star"></i> Favoriten</button>
+        <button class="nav-eintrag"><i class="fa-solid fa-share-nodes"></i> Geteilt</button>
+        <button class="nav-eintrag"><i class="fa-solid fa-folder-tree"></i> Externe Quellen</button>
+        <button class="nav-eintrag" data-aktiv="papierkorb"><i class="fa-solid fa-trash"></i> Papierkorb</button>
+        <div class="nav-fuss">
+          <div class="speicher">
+            <div class="ring-zeile">
+              <svg class="ring" viewBox="0 0 36 36" role="img" aria-label="Speicherbelegung">
+                <circle class="spur" cx="18" cy="18" r="15.5" pathLength="100"></circle>
+                <circle class="seg sonst" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="1 100" stroke-dashoffset="-3"></circle>
+                <circle class="seg kw" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="3 100" stroke-dashoffset="0"></circle>
+              </svg>
+              <div class="legende"><div class="le"><span class="punkt kw"></span> Kellerwolke 1.8 GB</div><div class="le"><span class="punkt frei"></span> Frei 615.3 GB</div></div>
+            </div>
+          </div>
+          <div class="nav-version">Kellerwolke v0.97.0</div>
+        </div>
+      </nav>
+
+      <section class="inhalt">
+        <div class="app-leiste">
+          <button type="button" class="app-knopf aktiv"><i class="fa-solid fa-folder"></i><span>Dateien</span></button>
+          <button type="button" class="app-knopf"><i class="fa-solid fa-photo-film"></i><span>Medien</span></button>
+        </div>
+        <div class="werkzeuge">
+          <button class="knopf primaer" data-ausser="6"><i class="fa-solid fa-folder-plus"></i> Neuer Ordner</button>
+          <label class="knopf" data-ausser="6"><i class="fa-solid fa-arrow-up-from-bracket"></i> Hochladen</label>
+          <button class="knopf" data-nur="6"><i class="fa-solid fa-trash-can"></i> Papierkorb leeren</button>
+          <span class="luecke"></span>
+          <div class="ansicht-umschalter">
+            <button class="aktiv" title="Liste"><i class="fa-solid fa-list"></i></button>
+            <button title="Kacheln"><i class="fa-solid fa-table-cells-large"></i></button>
+            <button title="Splitscreen"><i class="fa-solid fa-table-columns"></i></button>
+          </div>
+        </div>
+
+        <!-- Ordner der Telegram-App: Bilder sind Verweise auf die Bildablage, Sprache und Texte echte Dateien -->
+        <div data-nur="1 2 3 7" style="display: contents">
+          <nav class="breadcrumb">
+            <a>Meine Dateien</a> <i class="fa-solid fa-chevron-right"></i> <a>Apps</a> <i class="fa-solid fa-chevron-right"></i>
+            <a>Telegram</a> <i class="fa-solid fa-chevron-right"></i> <a>Familie</a> <i class="fa-solid fa-chevron-right"></i>
+            <span class="aktuell">2026-11</span>
+          </nav>
+          <div class="liste">
+            <div class="listenkopf">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-minus"></i></span></span>
+              <button class="sortbar aktiv">Name <i class="fa-solid fa-arrow-up-short-wide"></i></button>
+              <button class="sortbar">Größe</button>
+              <button class="sortbar sp-geaendert">Geändert</button>
+              <span></span>
+            </div>
+
+            <div class="zeile" data-gewaehlt="2 3">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><span class="sym-verweis" title="Verweis auf Apps/ImageVault/2026/11/IMG_4711.jpg"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><i class="verweis-pfeil fa-solid fa-share"></i></span>
+                <span class="titel">2026-11-03 18-42 Oma Geburtstag.jpg</span>
+                <span class="verweis-chip" title="Verweis auf Apps/ImageVault/2026/11/IMG_4711.jpg"><i class="fa-solid fa-share"></i><span class="vc-text">Verweis</span></span></span>
+              <span class="z-meta">3,2 MB</span><span class="z-meta z-geaendert">03.11.2026, 18:42</span>
+              <span class="z-akt"><button class="icon-knopf" title="Zum Original"><i class="fa-solid fa-arrow-right-to-bracket"></i></button><button class="icon-knopf" title="Herunterladen"><i class="fa-solid fa-download"></i></button><button class="icon-knopf" title="Umbenennen"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr" title="Verweis in den Papierkorb"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><span class="sym-verweis"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><i class="verweis-pfeil fa-solid fa-share"></i></span>
+                <span class="titel">2026-11-03 18-44 Torte.jpg</span>
+                <span class="verweis-chip"><i class="fa-solid fa-share"></i><span class="vc-text">Verweis</span></span></span>
+              <span class="z-meta">2,7 MB</span><span class="z-meta z-geaendert">03.11.2026, 18:44</span>
+              <span class="z-akt"><button class="icon-knopf" title="Zum Original"><i class="fa-solid fa-arrow-right-to-bracket"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-audio" style="color: var(--art-audio)"></i>
+                <span class="titel">2026-11-04 07-15 Sprachnachricht Papa.ogg</span></span>
+              <span class="z-meta">184 KB</span><span class="z-meta z-geaendert">04.11.2026, 07:15</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <div class="zeile verwaist" data-gewaehlt="7">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><span class="sym-verweis verwaist" title="Das Original gibt es nicht mehr"><i class="sym fa-solid fa-file-image"></i><i class="verweis-pfeil fa-solid fa-link-slash"></i></span>
+                <span class="titel">2026-11-05 12-03 Ausflug.jpg</span>
+                <span class="verweis-chip verwaist" title="Das Original gibt es nicht mehr; der Verweis zeigt ins Leere"><i class="fa-solid fa-link-slash"></i><span class="vc-text">verwaist</span></span></span>
+              <span class="z-meta">-</span><span class="z-meta z-geaendert">05.11.2026, 12:03</span>
+              <span class="z-akt"><button class="icon-knopf gefahr" title="Verweis in den Papierkorb"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-lines"></i><span class="titel">Verlauf 2026-11.md</span></span>
+              <span class="z-meta">38 KB</span><span class="z-meta z-geaendert">heute, 06:00</span><span class="z-akt"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ordner der Bildablage: das Original mit seinen Verweisen -->
+        <div data-nur="4 5" style="display: contents">
+          <nav class="breadcrumb">
+            <a>Meine Dateien</a> <i class="fa-solid fa-chevron-right"></i> <a>Apps</a> <i class="fa-solid fa-chevron-right"></i>
+            <a>ImageVault</a> <i class="fa-solid fa-chevron-right"></i> <a>2026</a> <i class="fa-solid fa-chevron-right"></i>
+            <span class="aktuell">11</span>
+          </nav>
+          <div class="liste">
+            <div class="listenkopf">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-minus"></i></span></span>
+              <button class="sortbar aktiv">Name <i class="fa-solid fa-arrow-up-short-wide"></i></button>
+              <button class="sortbar">Größe</button>
+              <button class="sortbar sp-geaendert">Geändert</button>
+              <span></span>
+            </div>
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><span class="titel">IMG_4702.jpg</span></span>
+              <span class="z-meta">2,9 MB</span><span class="z-meta z-geaendert">01.11.2026, 09:12</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+            <div class="zeile" data-gewaehlt="4 5">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><span class="titel">IMG_4711.jpg</span>
+                <span class="verweis-marke" title="Verweise darauf: Apps/Telegram/Familie/2026-11, Apps/Telegram/Verein/2026-11"><i class="fa-solid fa-share"></i> <span class="vm-text">2 Verweise</span></span></span>
+              <span class="z-meta">3,2 MB</span><span class="z-meta z-geaendert">03.11.2026, 18:42</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><span class="titel">IMG_4712.jpg</span>
+                <span class="verweis-marke"><i class="fa-solid fa-share"></i> <span class="vm-text">1 Verweis</span></span></span>
+              <span class="z-meta">2,7 MB</span><span class="z-meta z-geaendert">03.11.2026, 18:44</span>
+              <span class="z-akt"><button class="icon-knopf"><i class="fa-regular fa-star"></i></button><button class="icon-knopf"><i class="fa-solid fa-download"></i></button><button class="icon-knopf"><i class="fa-solid fa-pen"></i></button><button class="icon-knopf gefahr"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Papierkorb: das Original nimmt seine Verweise mit -->
+        <div data-nur="6" style="display: contents">
+          <nav class="breadcrumb"><span class="aktuell">Papierkorb</span></nav>
+          <div class="liste">
+            <div class="listenkopf">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-minus"></i></span></span>
+              <button class="sortbar aktiv">Name <i class="fa-solid fa-arrow-up-short-wide"></i></button>
+              <button class="sortbar">Größe</button>
+              <button class="sortbar sp-geaendert">Gelöscht</button>
+              <span></span>
+            </div>
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><span class="titel">IMG_4711.jpg</span>
+                <span class="verweis-marke" title="2026-11-03 18-42 Oma Geburtstag.jpg in Apps/Telegram/Familie/2026-11, Oma 80.jpg in Apps/Telegram/Verein/2026-11"><i class="fa-solid fa-share"></i> mit 2 Verweisen</span></span>
+              <span class="z-meta">3,2 MB</span><span class="z-meta z-geaendert">heute, 11:02</span>
+              <span class="z-akt" style="opacity:1"><button class="icon-knopf" title="Wiederherstellen, Verweise kommen mit zurück"><i class="fa-solid fa-rotate-left"></i></button><button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+            <div class="zeile">
+              <span class="z-aus"><span class="aus-box"><i class="fa-solid fa-check"></i></span></span>
+              <span class="z-name"><span class="sym-verweis"><i class="sym fa-solid fa-file-image" style="color: var(--art-bild)"></i><i class="verweis-pfeil fa-solid fa-share"></i></span>
+                <span class="titel">2026-11-03 18-44 Torte.jpg</span>
+                <span class="verweis-chip"><i class="fa-solid fa-share"></i><span class="vc-text">Verweis</span></span>
+                <span class="verweis-marke">allein gelöscht, das Original bleibt</span></span>
+              <span class="z-meta">2,7 MB</span><span class="z-meta z-geaendert">heute, 10:47</span>
+              <span class="z-akt" style="opacity:1"><button class="icon-knopf" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button><button class="icon-knopf gefahr" title="Endgültig löschen"><i class="fa-solid fa-trash"></i></button></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3: Detail eines Verweises -->
+      <aside class="detail" data-nur="3">
+        <div class="detail-kopf"><h2>Details</h2><button class="icon-knopf" title="Schließen"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="detail-vorschau"><i class="fa-solid fa-file-image" style="color: var(--art-bild)"></i></div>
+        <div class="detail-name">2026-11-03 18-42 Oma Geburtstag.jpg</div>
+        <div class="detail-block">
+          <h3>Verweis auf</h3>
+          <div class="original-karte">
+            <i class="fa-solid fa-file-image"></i><span class="o-name">IMG_4711.jpg</span>
+            <span class="o-pfad">Apps/ImageVault/2026/11</span>
+          </div>
+          <button class="knopf breit"><i class="fa-solid fa-arrow-right-to-bracket"></i> Zum Original</button>
+        </div>
+        <div class="detail-block">
+          <h3>Informationen</h3>
+          <div class="infozeile"><span>Art</span><span>Verweis, liest das Original</span></div>
+          <div class="infozeile"><span>Typ</span><span>Bild (JPEG)</span></div>
+          <div class="infozeile"><span>Größe</span><span>3,2 MB (Original)</span></div>
+          <div class="infozeile"><span>Angelegt</span><span>03.11.2026, 18:42 von Telegram-Archiv</span></div>
+          <div class="infozeile"><span>Pfad</span><span>Apps/Telegram/Familie/2026-11</span></div>
+          <div class="infozeile"><span>Prüfsumme</span><span class="pruefsumme">sha256 9f2c41d0e7b3...a81c</span></div>
+        </div>
+        <div class="detail-block">
+          <p style="margin: 0; font-size: 0.85rem; color: var(--text-3);">Ein Verweis belegt keinen Platz. Löschen nimmt nur den
+            Verweis; das Original bleibt. Ändern lässt sich nur das Original.</p>
+        </div>
+        <div class="detail-block" style="margin-top: auto;">
+          <div style="display: flex; gap: var(--a2);">
+            <button class="knopf primaer" style="flex: 1;"><i class="fa-solid fa-download"></i> Herunterladen</button>
+            <button class="knopf" style="flex: 1;"><i class="fa-solid fa-share-nodes"></i> Teilen</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 4: Detail eines Originals mit Verweisen -->
+      <aside class="detail" data-nur="4">
+        <div class="detail-kopf"><h2>Details</h2><button class="icon-knopf" title="Schließen"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="detail-vorschau"><i class="fa-solid fa-file-image" style="color: var(--art-bild)"></i></div>
+        <div class="detail-name">IMG_4711.jpg</div>
+        <div class="detail-block">
+          <h3>Informationen</h3>
+          <div class="infozeile"><span>Typ</span><span>Bild (JPEG)</span></div>
+          <div class="infozeile"><span>Größe</span><span>3,2 MB</span></div>
+          <div class="infozeile"><span>Geändert</span><span>03.11.2026, 18:42</span></div>
+          <div class="infozeile"><span>Pfad</span><span>Apps/ImageVault/2026/11</span></div>
+          <div class="infozeile"><span>Prüfsumme</span><span class="pruefsumme">sha256 9f2c41d0e7b3...a81c</span></div>
+        </div>
+        <div class="detail-block">
+          <h3>Verweise darauf</h3>
+          <ul class="begleit-liste">
+            <li><button class="begleit-eintrag"><i class="fa-solid fa-share"></i><span class="b-name">2026-11-03 18-42 Oma Geburtstag.jpg</span><span class="verweis-chip">Verweis</span>
+              <span class="b-meta">Apps/Telegram/Familie/2026-11 · von Telegram-Archiv</span></button></li>
+            <li><button class="begleit-eintrag"><i class="fa-solid fa-share"></i><span class="b-name">Oma 80.jpg</span><span class="verweis-chip">Verweis</span>
+              <span class="b-meta">Apps/Telegram/Verein/2026-11 · von Telegram-Archiv</span></button></li>
+          </ul>
+        </div>
+        <div class="detail-block" style="margin-top: auto;">
+          <div style="display: flex; gap: var(--a2);">
+            <button class="knopf primaer" style="flex: 1;"><i class="fa-solid fa-download"></i> Herunterladen</button>
+            <button class="knopf" style="flex: 1;"><i class="fa-solid fa-share-nodes"></i> Teilen</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 7: Detail eines verwaisten Verweises -->
+      <aside class="detail" data-nur="7">
+        <div class="detail-kopf"><h2>Details</h2><button class="icon-knopf" title="Schließen"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="detail-vorschau"><i class="fa-solid fa-link-slash" style="color: var(--warn)"></i></div>
+        <div class="detail-name">2026-11-05 12-03 Ausflug.jpg</div>
+        <div class="detail-block">
+          <h3>Verweis auf</h3>
+          <div class="original-karte fehlt">
+            <i class="fa-solid fa-link-slash"></i><span class="o-name">Original fehlt</span>
+            <span class="o-pfad">Das Original wurde endgültig gelöscht. Der Verweis zeigt ins Leere und lässt sich nur noch
+              entfernen.</span>
+          </div>
+        </div>
+        <div class="detail-block">
+          <h3>Informationen</h3>
+          <div class="infozeile"><span>Art</span><span>Verweis, verwaist</span></div>
+          <div class="infozeile"><span>Angelegt</span><span>05.11.2026, 12:03 von Telegram-Archiv</span></div>
+          <div class="infozeile"><span>Pfad</span><span>Apps/Telegram/Familie/2026-11</span></div>
+        </div>
+        <div class="detail-block" style="margin-top: auto;">
+          <button class="knopf" style="width: 100%; justify-content: center;"><i class="fa-solid fa-trash"></i> Verweis in den Papierkorb</button>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 2: Menü eines Verweises -->
+    <div class="kontextmenue" role="menu" data-nur="2" style="left: 560px; top: 250px;">
+      <button><i class="fa-solid fa-eye"></i> Öffnen</button>
+      <button><i class="fa-solid fa-arrow-right-to-bracket"></i> Zum Original <span class="k-unter">Apps/ImageVault/2026/11</span></button>
+      <button><i class="fa-solid fa-download"></i> Herunterladen</button>
+      <button><i class="fa-solid fa-pen"></i> Umbenennen</button>
+      <button><i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben</button>
+      <button><i class="fa-solid fa-share-nodes"></i> Teilen</button>
+      <div class="ktrenner"></div>
+      <button class="gefahr"><i class="fa-solid fa-trash"></i> In den Papierkorb <span class="k-unter">nur der Verweis</span></button>
+    </div>
+
+    <!-- 5: Folgenvorschau vor dem Löschen des Originals -->
+    <div class="modal-hg" data-nur="5">
+      <div class="modal breit" role="dialog" aria-modal="true">
+        <div class="modal-kopf">
+          <h2>"IMG_4711.jpg" in den Papierkorb</h2>
+          <button class="icon-knopf" aria-label="Schließen"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-inhalt">
+          <p class="folgen-text">Mit dem Original kommen in den Papierkorb:</p>
+          <ul class="folgen-liste">
+            <li class="f-kopf">2 Verweise</li>
+            <li><i class="fa-solid fa-share"></i><span class="f-name">2026-11-03 18-42 Oma Geburtstag.jpg</span><span class="verweis-chip">Verweis</span>
+              <span class="f-pfad">Apps/Telegram/Familie/2026-11</span></li>
+            <li><i class="fa-solid fa-share"></i><span class="f-name">Oma 80.jpg</span><span class="verweis-chip">Verweis</span>
+              <span class="f-pfad">Apps/Telegram/Verein/2026-11</span></li>
+            <li class="f-kopf">1 Begleiter</li>
+            <li><i class="fa-solid fa-file-lines"></i><span class="f-name">IMG_4711.beschreibung.json</span><span class="rolle-chip">Beschreibung</span>
+              <span class="f-pfad">Apps/ImageVault/2026/11</span></li>
+          </ul>
+          <p class="folgen-hinweis">Alles bleibt zusammen: Wiederherstellen holt das Original mit seinen Verweisen und Begleitern
+            zurück an ihre Orte.</p>
+          <div class="modal-knoepfe">
+            <button class="knopf still">Abbrechen</button>
+            <button class="knopf primaer"><i class="fa-solid fa-trash"></i> Alle 4 in den Papierkorb</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Nur für den Entwurf: ?z=1..7 wählt den Zustand, ?thema=dunkel das Thema.
+      const ZUSTAENDE = [
+        [1, "Verweise im Ordner"], [2, "Menü Verweis"], [3, "Detail Verweis"], [4, "Original mit Verweisen"],
+        [5, "Folgen beim Löschen"], [6, "Papierkorb"], [7, "Verwaist"],
+      ];
+      const q = new URLSearchParams(location.search);
+      const z = String(q.get("z") || "1");
+      if (q.get("thema") === "dunkel") document.documentElement.dataset.theme = "dunkel";
+      const wahl = document.querySelector(".entwurf-wahl");
+      for (const [n, titel] of ZUSTAENDE) {
+        const a = document.createElement("a");
+        a.href = `?z=${n}${q.get("thema") ? "&thema=" + q.get("thema") : ""}`;
+        a.textContent = `${n} ${titel}`;
+        if (String(n) === z) a.className = "an";
+        wahl.append(a);
+      }
+      const passt = (el, attr) => el.getAttribute(attr).split(" ").includes(z);
+      document.querySelectorAll("[data-nur]").forEach((el) => { if (!passt(el, "data-nur")) el.remove(); });
+      document.querySelectorAll("[data-ausser]").forEach((el) => { if (passt(el, "data-ausser")) el.remove(); });
+      document.querySelectorAll("[data-gewaehlt]").forEach((el) => el.classList.toggle("gewaehlt", passt(el, "data-gewaehlt")));
+      document.querySelector('[data-aktiv="' + (z === "6" ? "papierkorb" : "dateien") + '"]').classList.add("aktiv");
+      if (["3", "4", "7"].includes(z)) document.getElementById("app").classList.add("mit-detail");
+    </script>
+  </body>
+</html>

@@ -60,6 +60,74 @@ Herkunft (von der Hauptdatei, Art = Rolle). Knoten in Listen und Einzelabfragen 
 Oberfläche zählt `begleiter_anzahl` die lebenden Begleiter einer Hauptdatei. Regeln und Namen stehen an einer Stelle in
 `backend/module/speicher/begleiter.py`, die Durchsetzung im Speicherdienst.
 
+## Verweise
+
+Jede Datei gibt es genau einmal (Entscheidung 20.11.2026). Braucht eine App eine Datei, die schon anderswo liegt, legt
+sie in ihrem Ordner einen Verweis darauf an statt einer Kopie: die Telegram-Ablage etwa gibt Bilder in die Bildablage
+und legt im Chat-Ordner nur den Verweis ab. Ein Verweis ist ein eigener Eintrag (`typ: "verweis"`), klar getrennt von
+echten Daten: er hat Name, Ort und eigene Felder, aber keinen eigenen Inhalt und belegt keinen Platz.
+
+| Regel | Wirkung |
+|---|---|
+| Ziel | immer eine lebende Datei desselben Kontos; zeigt das angegebene Ziel selbst auf etwas, gilt dessen Original (keine Ketten). Ordner sind kein Ziel (422) |
+| Anlegen | Schreibrecht im Ordner des Verweises, Leserecht auf das Original; sonst 403 bzw. 404 |
+| Wiederholen | derselbe Aufruf (gleicher Pfad, gleiches Original) liefert den vorhandenen Verweis; ein anderer Eintrag unter dem Namen: 409 |
+| Lesen | folgt dem Original: Inhalt, Versionen, Größe, `sha256`, ETag und Inhaltstyp sind dessen |
+| Schreiben | nur am Original; Schreiben auf einen Verweis: 409 |
+| Verweis löschen | nur der Verweis kommt in den Papierkorb, das Original bleibt |
+| Original löschen | alle lebenden Verweise darauf gehen mit in den Papierkorb (wie Begleiter, auch beim Löschen eines Ordners mit dem Original), Wiederherstellen holt sie an ihren Ort zurück (ist der Ordner weg, nach oben; ein vergebener Name bekommt einen Zusatz), endgültig löschen nimmt sie mit |
+| verwaist | das Original fehlt oder liegt im Papierkorb: `verwaist: true`, kein Inhalt (404), nur noch entfernen |
+| Suche | zählt Verweise nicht doppelt: trifft das Original, fehlt der Verweis; treffen nur Verweise, steht einer da |
+| WebDAV | zeigt Verweise als Dateien mit dem Inhalt des Originals, nur lesend (PUT, DELETE, MOVE: 403); verwaiste fehlen |
+
+**Schnittstelle:**
+
+| Weg | Zweck |
+|---|---|
+| `POST /api/v1/ablage/verweis` mit `{ziel_id, pfad}` | Verweis anlegen; `pfad` ist Ordner und Name, etwa `Apps/Telegram/Familie/2026-11/2026-11-03 Oma.jpg`; der Ordner muss es geben (`POST /api/v1/ablage/ordner`) |
+| `GET /api/v1/ablage/knoten/{id}/verweise` | lebende Verweise auf eine Datei, soweit die App sie sehen darf |
+| `GET /api/v1/ablage/knoten/{id}/loeschfolgen` | was Löschen mitnähme: `{folgen: [{id, name, art: begleiter oder verweis, pfad, zu_id, rolle}], verborgen}`; `verborgen` zählt, was die App nicht sehen darf |
+| `GET /api/v1/ablage/papierkorb?ordner={id}` | je Eintrag zusätzlich `verweise`: die mitgenommenen (soweit sichtbar) |
+| `POST /api/v1/dateien/loeschfolgen` mit `{ids}` (Oberfläche) | Folgenvorschau vor dem Löschen, je Folge mit Ordnerpfad `ort` |
+| `GET /api/v1/dateien/{id}/verweise` (Oberfläche) | Verweise auf eine Datei mit Ordnerpfad und App |
+
+Knoten in Listen und Einzelabfragen tragen dafür `typ` (`ordner`, `datei`, `extern`, `verweis`), `ziel_id` (beim
+Verweis das Original, sonst `null`), `verwaist` und `sha256`; in der Oberfläche zählt `verweis_anzahl` die lebenden
+Verweise auf eine Datei (im Papierkorb: die mitgenommenen), `verweis_app` nennt die App, die einen Verweis angelegt hat. Regeln an einer Stelle in
+`backend/module/speicher/verweise.py`, die Durchsetzung im Speicherdienst.
+
+## Prüfsumme: gibt es den Inhalt schon?
+
+Jede Version kennt den sha256 ihres ganzen Inhalts (`sha256` an Knoten und Versionen). Vor dem Hochladen fragt eine App,
+ob es den Inhalt im lesbaren Bereich schon gibt, und legt dann einen Verweis an statt einer Kopie:
+
+| Weg | Zweck |
+|---|---|
+| `GET /api/v1/ablage/pruefsumme/{sha256}` | lebende Dateien, deren aktuelle Version genau diesen Inhalt hat, soweit die App sie lesen darf, älteste zuerst; je Treffer `id`, `pfad`, `groesse`, `sha256`. Verweise zählen nicht. Leer heißt: nichts Lesbares. Kein gültiger sha256 (64 Zeichen hex, klein): 422 |
+
+Ablauf für eine App: sha256 der Datei berechnen, fragen; bei einem Treffer `POST /api/v1/ablage/verweis` mit dessen
+`id`, sonst hochladen (in einem Stück oder fortsetzbar) und dabei die Prüfsumme mitgeben.
+
+## Fortsetzbare Uploads
+
+Große Dateien (Videos, lange Sprachnachrichten) gehen in Teilen und setzen nach einer Unterbrechung am empfangenen Stand
+fort, mit der Sitzung oder mit dem App-Schlüssel:
+
+| Weg | Zweck |
+|---|---|
+| `POST /api/v1/uploads` mit `{name, parent_id, groesse, pruefsumme, etag, nur_neu}` | Upload anlegen, liefert `id` und `empfangen` |
+| `PATCH /api/v1/uploads/{id}` mit Kopf `Upload-Offset` und dem Teil als Körper | anhängen; mit dem letzten Byte ist die Datei eingetragen, die Antwort trägt `knoten` (mit `sha256`) |
+| `GET /api/v1/uploads/{id}`, `GET /api/v1/uploads` | Stand (wo es weitergeht), offene Uploads |
+| `DELETE /api/v1/uploads/{id}` | abbrechen |
+
+Für Apps gelten dieselben Regeln wie beim Schreiben in einem Stück: nur in Ordnern mit Schreibrecht (sonst 403), nicht
+auf oberster Ebene (404). Eine vorhandene Datei nur mit dem zuletzt gelesenen Stand (`etag`) oder gar nicht
+(`nur_neu: true`); ohne beides 428, ein veralteter Stand oder `nur_neu` bei vorhandener Datei 412. Geprüft wird beim
+Anlegen und noch einmal mit dem letzten Teil (Recht entzogen: 403, Stand inzwischen anders: 412, gesperrt: 423); dann
+bleibt der Upload liegen, bis die App ihn abbricht. Mit `pruefsumme` wird nur eingetragen, wenn der Inhalt genau diesen
+sha256 hat (sonst 422). Ein Upload gehört dem, der ihn begonnen hat: die App sieht nur ihre eigenen, die Anmeldung nur
+ihre. Ruhende Uploads räumt die Kellerwolke nach einigen Tagen weg.
+
 ## Aktionen und Anfragen
 
 Apps bieten dem Konto an, was sie mit Dateien können (Entscheidung 17.10.2026); das Dateimenü der Kellerwolke zeigt es

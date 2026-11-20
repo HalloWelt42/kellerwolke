@@ -24,10 +24,12 @@ from module.speicher.begleiter import GruppeKonflikt
 from module.speicher.dienst import ArchivZuGross, NameBelegt, ZielUngueltig
 from module.suche.dienst import indizierung_starten
 from module.speicher.modelle import (
+    AuswahlEingabe,
     ExternEintragAus,
     FreigabeAus,
     KnotenAus,
     KontoAus,
+    LoeschfolgenAus,
     OrdnerEingabe,
     PfadAus,
     PfadteilAus,
@@ -35,6 +37,7 @@ from module.speicher.modelle import (
     TeilenEingabe,
     UmbenennenEingabe,
     VerschiebenEingabe,
+    VerweisAus,
     VersionAus,
     ZipEingabe,
     ZipPlanAus,
@@ -224,6 +227,22 @@ async def zip_antwort(speicher, benutzer_id, ids, name: str = "kellerwolke.zip")
         raise HTTPException(status_code=404, detail="Nichts zum Packen")
     return StreamingResponse(speicher.zip_stroemen(benutzer_id, ids), media_type="application/zip",
                              headers={"Content-Disposition": dateiname_kopf(name)})
+
+
+@router.post("/loeschfolgen", response_model=LoeschfolgenAus)
+async def loeschfolgen(eingabe: AuswahlEingabe, benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    """Was das Löschen dieser Auswahl mitnähme (Begleiter und Verweise von anderswo, mit Pfaden), bevor gelöscht wird.
+    Ohne Folgen ist die Liste leer."""
+    return LoeschfolgenAus(folgen=await speicher.loeschfolgen(benutzer["id"], eingabe.ids))
+
+
+@router.get("/{knoten_id}/verweise", response_model=list[VerweisAus])
+async def verweise(knoten_id: UUID, benutzer=Depends(aktueller_benutzer), speicher=Depends(hole_speicher)):
+    """Lebende Verweise auf eine eigene Datei, mit dem Pfad ihres Ordners."""
+    liste = await speicher.verweise_auf(benutzer["id"], knoten_id)
+    if liste is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return [VerweisAus.model_validate(v) for v in liste]
 
 
 @router.get("/{knoten_id}/inhalt")

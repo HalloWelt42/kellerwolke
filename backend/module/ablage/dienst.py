@@ -14,7 +14,8 @@ from module.appzugang.dienst import AppAkteur, AppZugangDienst
 from psycopg.rows import dict_row
 
 from module.speicher import begleiter as begleiter_regeln
-from module.speicher.dienst import Bedingung, Gesperrt
+from module.speicher import verweise
+from module.speicher.dienst import Bedingung, Gesperrt, VorbedingungVerletzt
 
 MAX_SEITE = 500
 
@@ -56,13 +57,29 @@ def _hoeher(a: str | None, b: str | None) -> str | None:
     return None
 
 
-def _meta_felder(knoten: dict, meta: dict | None) -> dict:
-    """Inhaltstyp, App und Felder für die Ansicht; ohne gespeicherten Typ aus dem Namen."""
-    typ = (meta or {}).get("inhaltstyp")
-    if knoten["typ"] == "datei" and not typ:
-        typ = inhaltstyp_aus_name(knoten["name"])
-    return {"inhaltstyp": typ if knoten["typ"] == "datei" else None, "app": (meta or {}).get("app"),
-            "felder": (meta or {}).get("felder") or {}}
+def _meta_felder(knoten: dict, meta: dict | None, ziel_meta: dict | None = None) -> dict:
+    """Inhaltstyp, App und Felder für die Ansicht; ohne gespeicherten Typ aus dem Namen. Ein Verweis hat eigene App
+    und Felder, Inhaltstyp und ETag aber vom Original (ziel_meta, ziel_name und ziel_etag der Zeile)."""
+    verweis = knoten["typ"] == verweise.TYP
+    lesbar = knoten["typ"] == "datei" or (verweis and not knoten.get("verwaist"))
+    typ = ((ziel_meta if verweis else meta) or {}).get("inhaltstyp")
+    if lesbar and not typ:
+        typ = inhaltstyp_aus_name((knoten.get("ziel_name") or "") if verweis else knoten["name"])
+    aus = {"inhaltstyp": typ if lesbar else None, "app": (meta or {}).get("app"),
+           "felder": (meta or {}).get("felder") or {}}
+    if verweis:
+        aus["etag"] = knoten.get("ziel_etag")
+    return aus
+
+
+async def _metas_mit_zielen(conn, knoten: list[dict]) -> dict:
+    """Metadaten der Knoten und der Originale ihrer Verweise in einer Abfrage."""
+    ids = [k["id"] for k in knoten] + [k["ziel_id"] for k in knoten if k.get("ziel_id")]
+    return await metadaten.meta_holen(conn, ids)
+
+
+def _felder_aus(k: dict, metas: dict) -> dict:
+    return _meta_felder(k, metas.get(k["id"]), metas.get(k.get("ziel_id")))
 
 
 async def _sperre_holen(conn, knoten_id) -> dict | None:
@@ -105,9 +122,9 @@ class AblageDienst:
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             knoten = await repo.wurzel_seite(akteur.benutzer_id, max(0, ab), anzahl)
-            metas = await metadaten.meta_holen(conn, [k["id"] for k in knoten])
+            metas = await _metas_mit_zielen(conn, knoten)
         eigene = await self._rechte_dazu(akteur, knoten, "lesen")
-        return [{**k, "pfad": k["name"], "recht": eigene.get(k["id"], "lesen"), **_meta_felder(k, metas.get(k["id"]))}
+        return [{**k, "pfad": k["name"], "recht": eigene.get(k["id"], "lesen"), **_felder_aus(k, metas)}
                 for k in knoten]
 
     async def volltext(self, akteur: AppAkteur, anfrage: str, anzahl: int = 30) -> list[dict]:
@@ -115,18 +132,18 @@ class AblageDienst:
         nur mit "Alles lesen". `im_namen` sagt, ob der Name traf (sonst der Inhalt)."""
         self._vollzugriff(akteur)
         treffer = [t for t in await self.suche.suchen(akteur.benutzer_id, anfrage, grenze=max(1, min(anzahl, 100)))
-                   if t["typ"] in ("datei", "ordner")]
+                   if t["typ"] in ("datei", "ordner", verweise.TYP)]
         async with self.pool.connection() as conn:
-            metas = await metadaten.meta_holen(conn, [t["id"] for t in treffer])
+            metas = await _metas_mit_zielen(conn, treffer)
         eigene = await self._rechte_dazu(akteur, treffer, "lesen")
         return [{**t, "pfad": "/".join([*t.get("ort", []), t["name"]]), "recht": eigene.get(t["id"], "lesen"),
-                 "im_namen": bool(t.get("im_namen")), **_meta_felder(t, metas.get(t["id"]))} for t in treffer]
+                 "im_namen": bool(t.get("im_namen")), **_felder_aus(t, metas)} for t in treffer]
 
     async def text(self, akteur: AppAkteur, knoten_id, grenze: int = TEXT_VORGABE) -> dict:
         """Der Text einer lesbaren Datei (Klartext, Code, PDF, docx), gekürzt auf `grenze` Zeichen (KW-3). `lesbar`
         ist False, wenn die Art keinen Text hat (Bild, Ton) oder die Datei zu groß ist."""
         knoten, _ = await self.mit_recht(akteur, knoten_id)
-        if knoten["typ"] != "datei":
+        if knoten["typ"] not in ("datei", verweise.TYP):
             raise ValueError("Keine Datei")
         stand = await self.speicher.eigene_datei(akteur.benutzer_id, knoten_id)
         if stand is None:
@@ -148,16 +165,14 @@ class AblageDienst:
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             pfad = "/".join(await repo.pfad_namen(knoten["id"]))
-            groesse = None
-            if knoten["typ"] == "datei" and knoten["aktuelle_version_id"]:
-                version = await repo.version_holen(knoten["aktuelle_version_id"])
-                groesse = version["groesse"] if version else None
-            meta = (await metadaten.meta_holen(conn, [knoten["id"]])).get(knoten["id"])
+            zeile = await repo.knoten_mit_ziel(knoten["id"]) or {}
+            knoten = {**knoten, **{f: zeile.get(f) for f in ("groesse", "sha256", "ziel_name", "ziel_etag", "verwaist")}}
+            metas = await _metas_mit_zielen(conn, [knoten])
             sperre = await _sperre_holen(conn, knoten["id"])
             gruppe = await repo.begleiter_eintrag(knoten["id"])
-        return {**knoten, "pfad": pfad, "recht": recht, "groesse": groesse, "sperre": sperre,
+        return {**knoten, "pfad": pfad, "recht": recht, "sperre": sperre, "verwaist": bool(knoten["verwaist"]),
                 "haupt_id": gruppe["haupt_id"] if gruppe else None, "rolle": gruppe["rolle"] if gruppe else None,
-                **_meta_felder(knoten, meta)}
+                **_felder_aus(knoten, metas)}
 
     async def knoten(self, akteur: AppAkteur, knoten_id) -> dict:
         return await self._ansicht(*await self.mit_recht(akteur, knoten_id))
@@ -180,14 +195,14 @@ class AblageDienst:
             repo = PostgresMetadataRepository(conn)
             basis = "/".join(await repo.pfad_namen(ordner["id"]))
             kinder = await repo.kinder_seite(ordner["id"], max(0, ab), anzahl)
-            metas = await metadaten.meta_holen(conn, [k["id"] for k in kinder])
+            metas = await _metas_mit_zielen(conn, kinder)
             eigene = {}
             if kinder:
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT knoten_id, recht FROM app_recht WHERE zugang_id=%s AND knoten_id = ANY(%s)",
                                       (akteur.zugang_id, [k["id"] for k in kinder]))
                     eigene = {k: r for k, r in await cur.fetchall()}
-        return [{**k, "pfad": f"{basis}/{k['name']}", "recht": _hoeher(recht, eigene.get(k["id"])), **_meta_felder(k, metas.get(k["id"]))}
+        return [{**k, "pfad": f"{basis}/{k['name']}", "recht": _hoeher(recht, eigene.get(k["id"])), **_felder_aus(k, metas)}
                 for k in kinder]
 
     async def ordner_anlegen(self, akteur: AppAkteur, pfad: str) -> dict:
@@ -226,24 +241,124 @@ class AblageDienst:
         eltern, _ = await self.mit_recht(akteur, eltern["id"], "schreiben")
         return await self._in_ordner_schreiben(akteur, eltern, teile[-1], quelle, max_bytes, etag, nur_neu, inhaltstyp)
 
-    async def _in_ordner_schreiben(self, akteur: AppAkteur, eltern: dict, name: str, quelle, max_bytes: int,
-                                   etag: str | None, nur_neu: bool, inhaltstyp: str | None) -> tuple[dict, str, int]:
-        """Schreibt in einen Ordner, dessen Recht der Aufrufer geprüft hat."""
+    async def _vorab_pruefen(self, akteur: AppAkteur, eltern: dict, name: str, etag: str | None, nur_neu: bool) -> None:
+        """Was vor dem Senden des Inhalts feststeht: Ziel ist ein Ordner, unter dem Namen liegt keine andere Art, eine
+        vorhandene Datei wird nur mit Stand (If-Match) oder gar nicht (nur neu) überschrieben."""
         if eltern["typ"] != "ordner":
             raise ValueError("Ziel ist kein Ordner")
         async with self.pool.connection() as conn:
             vorhanden = await PostgresMetadataRepository(conn).knoten_finden(akteur.benutzer_id, eltern["id"], name)
+        if vorhanden and vorhanden["typ"] == verweise.TYP:
+            raise FileExistsError(f"{name} ist ein Verweis; geschrieben wird am Original")
         if vorhanden and vorhanden["typ"] != "datei":
             raise FileExistsError(f"{name} ist ein Ordner")
         if vorhanden and etag is None and not nur_neu:
             raise VorbedingungFehlt("Die Datei gibt es schon: überschreiben nur mit If-Match (zuletzt gelesener ETag)")
+        # Früh abweisen, was schon feststeht (spart das Senden); endgültig prüft der Speicher unter Sperre.
+        if vorhanden and nur_neu:
+            raise VorbedingungVerletzt("Die Datei gibt es schon")
+        if vorhanden and etag is not None and vorhanden["etag"] != etag:
+            raise VorbedingungVerletzt("Die Datei wurde inzwischen geändert")
+        if not vorhanden and etag is not None:
+            raise VorbedingungVerletzt("Die Datei gibt es nicht (mehr)")
+
+    async def _in_ordner_schreiben(self, akteur: AppAkteur, eltern: dict, name: str, quelle, max_bytes: int,
+                                   etag: str | None, nur_neu: bool, inhaltstyp: str | None,
+                                   pruefsumme: str | None = None) -> tuple[dict, str, int]:
+        """Schreibt in einen Ordner, dessen Recht der Aufrufer geprüft hat; mit pruefsumme nur bei genau diesem
+        Inhalt."""
+        await self._vorab_pruefen(akteur, eltern, name, etag, nur_neu)
         knoten, blob_hash, groesse = await self.speicher.datei_hochladen_strom(
             akteur.benutzer_id, eltern["id"], name, quelle, max_bytes,
-            Bedingung(etag=etag, nur_neu=nur_neu, zugang_id=akteur.zugang_id))
+            Bedingung(etag=etag, nur_neu=nur_neu, zugang_id=akteur.zugang_id), pruefsumme=pruefsumme)
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await metadaten.meta_schreiben(conn, knoten["id"], inhaltstyp_aus_kopf(inhaltstyp, name), akteur.app)
         return await self._ansicht(knoten, "schreiben"), blob_hash, groesse
+
+    # --- Fortsetzbare Uploads einer App (KW-11): Rechte vorab und beim Eintragen ------------------------------
+
+    async def upload_pruefen(self, akteur: AppAkteur, parent_id, name: str, etag: str | None, nur_neu: bool) -> None:
+        """Vor dem ersten Teil: Schreibrecht im Zielordner, Name frei oder eine Datei, die nur mit Stand (etag) oder
+        gar nicht (nur_neu) überschrieben wird - wie beim Schreiben in einem Stück."""
+        if parent_id is None:
+            raise Unsichtbar("Dateien legen Apps nur in Ordnern an")
+        eltern, _ = await self.mit_recht(akteur, parent_id, "schreiben")
+        await self._vorab_pruefen(akteur, eltern, name_pruefen(name), etag, nur_neu)
+
+    async def upload_eintragen(self, akteur: AppAkteur, zeile: dict, quelle, max_bytes: int) -> dict:
+        """Mit dem letzten Teil: Recht erneut prüfen (es kann inzwischen entzogen sein), dann eintragen wie jedes
+        Schreiben der App (Stand, Sperre einer anderen App, Inhaltstyp aus dem Namen, Prüfsumme des Uploads)."""
+        if zeile["parent_id"] is None:
+            raise Unsichtbar("Dateien legen Apps nur in Ordnern an")
+        eltern, _ = await self.mit_recht(akteur, zeile["parent_id"], "schreiben")
+        knoten, _, _ = await self._in_ordner_schreiben(akteur, eltern, zeile["name"], quelle, max_bytes,
+                                                       zeile["bedingung_etag"], zeile["nur_neu"], None,
+                                                       pruefsumme=zeile["pruefsumme"])
+        return knoten
+
+    # --- Verweise (Regeln in module/speicher/verweise.py) -----------------------------------------------------
+
+    async def verweis_anlegen(self, akteur: AppAkteur, ziel_id, pfad: str) -> dict:
+        """Legt unter pfad (Ordner und Name) einen Verweis auf ziel_id an: Schreibrecht im Ordner, Leserecht auf das
+        Original (zeigt ziel_id selbst auf etwas, zählt dessen Original). Derselbe Aufruf noch einmal liefert den
+        vorhandenen Verweis."""
+        teile = pfad_teile(pfad)
+        if len(teile) < 2:
+            raise Unsichtbar("Verweise legen Apps nur in Ordnern an")
+        eltern = await self.speicher.knoten_per_pfad(akteur.benutzer_id, "/".join(teile[:-1]))
+        if not eltern:
+            raise Unsichtbar("Ordner nicht gefunden")
+        eltern, _ = await self.mit_recht(akteur, eltern["id"], "schreiben")
+        if eltern["typ"] != "ordner":
+            raise ValueError("Ziel ist kein Ordner")
+        await self.mit_recht(akteur, ziel_id)
+        original = await self.speicher.original(akteur.benutzer_id, ziel_id)
+        if original is None:
+            raise verweise.VerweisUngueltig("Das Ziel ist ein verwaister Verweis")
+        await self.mit_recht(akteur, original["id"])
+        knoten = await self.speicher.verweis_anlegen(akteur.benutzer_id, eltern["id"], teile[-1], original["id"])
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                if not (await metadaten.meta_holen(conn, [knoten["id"]])).get(knoten["id"]):
+                    await metadaten.meta_schreiben(conn, knoten["id"], None, akteur.app)
+        return await self._ansicht(knoten, "schreiben")
+
+    async def verweise(self, akteur: AppAkteur, knoten_id) -> list[dict]:
+        """Lebende Verweise auf eine lesbare Datei, soweit die App sie sehen darf."""
+        knoten, _ = await self.mit_recht(akteur, knoten_id)
+        if knoten["typ"] != "datei":
+            raise Unsichtbar("Keine Datei")
+        aus = []
+        for v in await self.speicher.verweise_auf(akteur.benutzer_id, knoten_id) or []:
+            sichtbar, recht = await self.zugang.recht(akteur, v["id"])
+            if recht:
+                aus.append(await self._ansicht(sichtbar, recht))
+        return aus
+
+    async def pruefsumme(self, akteur: AppAkteur, sha256: str) -> list[dict]:
+        """Dateien mit genau diesem Inhalt (sha256 der aktuellen Version), soweit die App sie lesen darf: so erkennt
+        sie Doppel vor dem Hochladen und legt statt einer Kopie einen Verweis an."""
+        aus = []
+        for d in await self.speicher.dateien_mit_inhalt(akteur.benutzer_id, sha256):
+            knoten, recht = await self.zugang.recht(akteur, d["id"])
+            if recht:
+                aus.append(await self._ansicht(knoten, recht))
+        return aus
+
+    async def loeschfolgen(self, akteur: AppAkteur, knoten_id) -> dict:
+        """Was das Löschen mitnähme (Begleiter, Verweise von anderswo), soweit die App es sehen darf; der Rest zählt
+        nur als Zahl."""
+        await self.mit_recht(akteur, knoten_id, "schreiben")
+        folgen = await self.speicher.loeschfolgen(akteur.benutzer_id, [knoten_id])
+        sichtbar, verborgen = [], 0
+        for f in folgen:
+            _, recht = await self.zugang.recht(akteur, f["id"])
+            if recht:
+                sichtbar.append({**f, "pfad": "/".join(t for t in (f["ort"], f["name"]) if t)})
+            else:
+                verborgen += 1
+        return {"folgen": sichtbar, "verborgen": verborgen}
 
     # --- Begleitdateien (Regeln in module/speicher/begleiter.py) ---------------------------------------------
 
@@ -399,9 +514,16 @@ class AblageDienst:
             if not recht:
                 continue
             async with self.pool.connection() as conn:
-                mit = await PostgresMetadataRepository(conn).begleiter_im_papierkorb([w])
+                repo = PostgresMetadataRepository(conn)
+                mit = await repo.begleiter_im_papierkorb([w])
+                verweise_mit = await repo.mitgenommene_verweise([w])
+            sichtbar = []
+            for v in verweise_mit:
+                _, v_recht = await self.zugang.recht_im_papierkorb(akteur, v["id"])
+                if v_recht:
+                    sichtbar.append(await self._ansicht(v, v_recht))
             aus.append({**await self._ansicht(knoten, recht), "geloescht_am": knoten["geaendert_am"],
-                        "begleiter": [await self._ansicht(b, recht) for b in mit]})
+                        "begleiter": [await self._ansicht(b, recht) for b in mit], "verweise": sichtbar})
         return aus
 
     async def mit_recht_im_papierkorb(self, akteur: AppAkteur, knoten_id, noetig: str = "lesen") -> tuple[dict, str]:
@@ -545,6 +667,8 @@ class AblageDienst:
         """Neue Version einer Datei per Kennung: es zählt das Recht an der Datei selbst (so darf eine App mit einer
         offenen Anfrage die Begleiter der angefragten Datei überschreiben, ohne Recht im Ordner)."""
         knoten, _ = await self.mit_recht(akteur, knoten_id, "schreiben")
+        if knoten["typ"] == verweise.TYP:
+            raise verweise.VerweisNurLesbar(f"{knoten['name']} ist ein Verweis; geschrieben wird am Original")
         if knoten["typ"] != "datei" or knoten["parent_id"] is None:
             raise Unsichtbar("Keine Datei")
         async with self.pool.connection() as conn:
@@ -562,29 +686,33 @@ class AblageDienst:
     async def datei_kopf(self, akteur: AppAkteur, knoten_id):
         """Knoten (mit Inhaltstyp) und festgehaltener Stand einer lesbaren Datei."""
         knoten, recht = await self.mit_recht(akteur, knoten_id)
-        stand = await self.speicher.eigene_datei(akteur.benutzer_id, knoten_id) if knoten["typ"] == "datei" else None
+        lesbar = knoten["typ"] in ("datei", verweise.TYP)
+        stand = await self.speicher.eigene_datei(akteur.benutzer_id, knoten_id) if lesbar else None
         if stand is None:
-            raise Unsichtbar("Keine Datei")
+            raise Unsichtbar("Verweis ohne Original" if knoten["typ"] == verweise.TYP else "Keine Datei")
         async with self.pool.connection() as conn:
-            meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
+            meta = (await metadaten.meta_holen(conn, [stand.knoten["id"]])).get(stand.knoten["id"])
         return {**stand.knoten, **_meta_felder(stand.knoten, meta)}, stand
 
     async def versionen(self, akteur: AppAkteur, knoten_id) -> list[dict]:
         """Versionen einer lesbaren Datei, neueste zuerst; die aktuelle ist markiert."""
         knoten, _ = await self.mit_recht(akteur, knoten_id)
-        if knoten["typ"] != "datei":
+        if knoten["typ"] not in ("datei", verweise.TYP):
             raise Unsichtbar("Keine Datei")
+        original = await self.speicher.original(akteur.benutzer_id, knoten_id)
         liste = await self.speicher.versionen(akteur.benutzer_id, knoten_id) or []
-        return [{**v, "aktuell": v["id"] == knoten["aktuelle_version_id"]} for v in liste]
+        aktuell = original["aktuelle_version_id"] if original else None
+        return [{**v, "sha256": v["inhalt_hash"], "aktuell": v["id"] == aktuell} for v in liste]
 
     async def version_kopf(self, akteur: AppAkteur, knoten_id, version_id):
         """Knoten und Stand einer bestimmten Version einer lesbaren Datei."""
         knoten, _ = await self.mit_recht(akteur, knoten_id)
-        stand = await self.speicher.version_stand(akteur.benutzer_id, knoten_id, version_id) if knoten["typ"] == "datei" else None
+        lesbar = knoten["typ"] in ("datei", verweise.TYP)
+        stand = await self.speicher.version_stand(akteur.benutzer_id, knoten_id, version_id) if lesbar else None
         if stand is None:
             raise Unsichtbar("Version nicht gefunden")
         async with self.pool.connection() as conn:
-            meta = (await metadaten.meta_holen(conn, [knoten_id])).get(knoten["id"])
+            meta = (await metadaten.meta_holen(conn, [stand.knoten["id"]])).get(stand.knoten["id"])
         return {**stand.knoten, **_meta_felder(stand.knoten, meta)}, stand
 
     def stand_stroemen(self, stand, start: int = 0, laenge: int = -1):

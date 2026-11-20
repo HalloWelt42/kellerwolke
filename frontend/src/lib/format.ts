@@ -81,10 +81,12 @@ export function rollenSymbol(rolle: string | null | undefined): string | null {
 }
 
 // Liefert das Font-Awesome-Symbol und ob es die Sonderfarbe (Ordner/Extern) trägt.
+// Ein Verweis trägt das Symbol der Art seines Originals (den Pfeil daran setzt die Ansicht, siehe VerweisSymbol).
 export function symbol(k: Knoten): { icon: string; klasse: string } {
   if (k.typ === "ordner") return { icon: "fa-folder", klasse: "ordner" };
   if (k.typ === "extern") return { icon: "fa-folder-tree", klasse: "extern" };
-  const icon = rollenSymbol(k.rolle) || (k.medienart && NACH_MEDIENART[k.medienart]) || symbolFuerName(k.name);
+  const name = k.typ === "verweis" ? (k.ziel_name ?? k.name) : k.name;
+  const icon = rollenSymbol(k.rolle) || (k.medienart && NACH_MEDIENART[k.medienart]) || symbolFuerName(name);
   return { icon, klasse: "" };
 }
 
@@ -144,9 +146,10 @@ const TYP_NACH_ENDUNG: Record<string, string> = {
 export function typLabel(k: Knoten): string {
   if (k.typ === "ordner") return "Ordner";
   if (k.typ === "extern") return "Externe Quelle";
-  const punkt = k.name.lastIndexOf(".");
+  const name = k.typ === "verweis" ? (k.ziel_name ?? k.name) : k.name;
+  const punkt = name.lastIndexOf(".");
   if (punkt > 0) {
-    const endung = k.name.slice(punkt + 1).toLowerCase();
+    const endung = name.slice(punkt + 1).toLowerCase();
     if (TYP_NACH_ENDUNG[endung]) return TYP_NACH_ENDUNG[endung];
   }
   return "Datei";

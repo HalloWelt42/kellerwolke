@@ -22,8 +22,9 @@ from app.config import EINSTELLUNGEN
 from app.inhaltstyp import inhaltstyp_aus_name
 from app.io_pool import im_thread
 from app.ports import AufraeumenVerweigert, SpeicherNichtVerfuegbar
-from module.speicher import begleiter
+from module.speicher import begleiter, verweise
 from module.speicher.begleiter import GruppeKonflikt
+from module.speicher.verweise import VerweisUngueltig
 
 
 class _ZipStrom:
@@ -587,6 +588,7 @@ class SpeicherDienst:
                     return 0
                 anzahl = len(wurzeln)
                 wurzeln += [b["id"] for b in await repo.begleiter_im_papierkorb(wurzeln)]
+                wurzeln += [v["id"] for v in await repo.mitgenommene_verweise(wurzeln[:anzahl])]
                 for ref in await repo.blobrefs_im_teilbaum(wurzeln):
                     neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
                     if neu is not None and neu <= 0:
@@ -614,7 +616,8 @@ class SpeicherDienst:
                 knoten = await repo.knoten_holen(knoten_id)
                 if not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]:
                     return False
-                wurzeln = [knoten_id, *[b["id"] for b in await repo.begleiter_im_papierkorb([knoten_id])]]
+                wurzeln = [knoten_id, *[b["id"] for b in await repo.begleiter_im_papierkorb([knoten_id])],
+                           *[v["id"] for v in await repo.mitgenommene_verweise([knoten_id])]]
                 for ref in await repo.blobrefs_im_teilbaum(wurzeln):
                     neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
                     if neu is not None and neu <= 0:
@@ -681,6 +684,8 @@ class SpeicherDienst:
                         raise ZielUngueltig("Zielordner nicht gefunden")
                     # Atomar anlegen/finden (kein Check-then-act-Race).
                     knoten = await repo.datei_upsert(besitzer_id, parent_id, name)
+                    if knoten["typ"] == verweise.TYP:
+                        raise NameBelegt(f"{name} ist ein Verweis; geschrieben wird am Original")
                     if knoten["typ"] != "datei":
                         raise NameBelegt(f"{name} ist ein Ordner")
                     war_neu = knoten["eingefuegt"]
@@ -734,7 +739,22 @@ class SpeicherDienst:
 
     # --- Lesen: ein Weg für eigene und geteilte Dateien ----------------------------------------------------------
 
+    @staticmethod
+    async def _original(repo, knoten) -> dict | None:
+        """Die Datei, die ein Knoten liest: er selbst oder, bei einem Verweis, das lebende Original desselben Kontos
+        (verwaist: None). Ketten gibt es nicht; sie werden beim Anlegen aufgelöst."""
+        if not knoten or knoten["typ"] != verweise.TYP:
+            return knoten
+        if knoten["geloescht"] or not knoten["ziel_id"]:
+            return None
+        ziel = await repo.knoten_holen(knoten["ziel_id"])
+        if not ziel or ziel["besitzer_id"] != knoten["besitzer_id"] or ziel["geloescht"] or ziel["typ"] != "datei":
+            return None
+        return ziel
+
     async def _stand(self, repo, knoten) -> DateiStand | None:
+        """Stand der aktuellen Version; ein Verweis liefert den Stand seines Originals (Lesen folgt dem Ziel)."""
+        knoten = await self._original(repo, knoten)
         if not knoten or knoten["typ"] != "datei" or knoten["geloescht"] or not knoten["aktuelle_version_id"]:
             return None
         teile = await repo.chunks(knoten["aktuelle_version_id"])
@@ -767,7 +787,10 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
             knoten = await repo.knoten_holen(knoten_id)
-            if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["typ"] != "datei" or knoten["geloescht"]:
+            if not knoten or knoten["besitzer_id"] != besitzer_id:
+                return None
+            knoten = await self._original(repo, knoten)
+            if not knoten or knoten["typ"] != "datei" or knoten["geloescht"]:
                 return None
             version = await repo.version_holen(version_id)
             if not version or version["knoten_id"] != knoten["id"]:
@@ -843,7 +866,9 @@ class SpeicherDienst:
 
         async def sammeln(knoten, prefix):
             nonlocal gesamt
-            if knoten["typ"] == "datei":
+            if knoten["typ"] in ("datei", verweise.TYP):
+                if knoten.get("verwaist"):
+                    return
                 gesamt += await self._datei_groesse(knoten)
                 if gesamt > EINSTELLUNGEN.max_zip:
                     raise ArchivZuGross()
@@ -857,7 +882,7 @@ class SpeicherDienst:
         # dict.fromkeys entdoppelt mehrfach uebergebene IDs (kein Doppel-Pack).
         for kid in dict.fromkeys(ids):
             knoten = await self.knoten_des_nutzers(besitzer_id, kid)
-            if not knoten or knoten["geloescht"] or knoten["typ"] not in ("datei", "ordner"):
+            if not knoten or knoten["geloescht"] or knoten["typ"] not in ("datei", "ordner", verweise.TYP):
                 continue
             await sammeln(knoten, "")
 
@@ -1021,19 +1046,24 @@ class SpeicherDienst:
             pos += len(brocken)
 
     async def groesse(self, knoten) -> int:
-        if knoten["typ"] != "datei" or not knoten["aktuelle_version_id"]:
-            return 0
+        """Größe der aktuellen Version; bei einem Verweis die des Originals, verwaist 0."""
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
+            knoten = await self._original(repo, knoten)
+            if not knoten or knoten["typ"] != "datei" or not knoten["aktuelle_version_id"]:
+                return 0
             version = await repo.version_holen(knoten["aktuelle_version_id"])
         return version["groesse"] if version else 0
 
     async def versionen(self, besitzer_id, knoten_id):
-        if not await self.knoten_des_nutzers(besitzer_id, knoten_id):
+        """Versionen einer eigenen Datei, neueste zuerst; ein Verweis zeigt die seines Originals (verwaist: keine)."""
+        knoten = await self.knoten_des_nutzers(besitzer_id, knoten_id)
+        if not knoten:
             return None
         async with self.pool.connection() as conn:
             repo = PostgresMetadataRepository(conn)
-            return await repo.versionen(knoten_id)
+            original = await self._original(repo, knoten)
+            return await repo.versionen(original["id"]) if original else []
 
     async def papierkorb(self, besitzer_id):
         async with self.pool.connection() as conn:
@@ -1151,8 +1181,9 @@ class SpeicherDienst:
                 return await repo.knoten_holen(knoten_id)
 
     async def loeschen(self, besitzer_id, knoten_id):
-        """Legt einen lebenden Knoten samt Teilbaum in den Papierkorb, eine Hauptdatei samt Begleitern; schon
-        Gelöschtes bleibt unberührt."""
+        """Legt einen lebenden Knoten samt Teilbaum in den Papierkorb, eine Hauptdatei samt Begleitern, dazu die
+        Verweise auf alles, was dabei in den Papierkorb kommt; schon Gelöschtes bleibt unberührt. Ein Verweis geht
+        allein (das Original bleibt)."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
@@ -1162,13 +1193,15 @@ class SpeicherDienst:
                 mit = await repo.begleiter_der_haupt(knoten_id) if knoten["typ"] == "datei" else []
                 await repo.knoten_loeschen(besitzer_id, knoten_id)
                 await repo.als_begleiter_loeschen([b["id"] for b in mit], knoten_id)
+                mit += await repo.verweise_mitnehmen(knoten_id)
                 for k in [knoten, *mit]:
                     await repo.journal_anhaengen(besitzer_id, k["id"], "geloescht")
 
     async def wiederherstellen(self, besitzer_id, knoten_id):
         """Holt eine Papierkorb-Wurzel samt Teilbaum zurück. Liegt der Elternordner selbst noch im Papierkorb (oder
         gibt es ihn nicht mehr), kommt sie nach "Meine Dateien"; ist der Name dort vergeben, mit Zusatz. Begleiter
-        kommen neben ihre Hauptdatei: mit ihr gelöschte folgen ihr, ein allein gelöschter geht zu ihr zurück."""
+        kommen neben ihre Hauptdatei: mit ihr gelöschte folgen ihr, ein allein gelöschter geht zu ihr zurück.
+        Mitgenommene Verweise kommen an ihren Ort zurück (nach derselben Regel für Ordner und Namen)."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
@@ -1190,13 +1223,24 @@ class SpeicherDienst:
                         ziel = None
                 name = await self._freier_name(repo, besitzer_id, ziel, knoten["name"], knoten["typ"] == "datei")
                 mit = await repo.begleiter_im_papierkorb([knoten_id])
-                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name, ziel, ausser=[b["id"] for b in mit])
+                verweise_mit = await repo.mitgenommene_verweise([knoten_id])
+                await repo.knoten_wiederherstellen(besitzer_id, knoten_id, name, ziel,
+                                                   ausser=[m["id"] for m in [*mit, *verweise_mit]])
                 await repo.journal_anhaengen(besitzer_id, knoten_id, "erstellt")
                 for b in mit:
                     b_name = begleiter.nachgezogen(knoten["name"], name, b["name"]) or b["name"]
                     b_name = await self._freier_name(repo, besitzer_id, ziel, b_name, True)
                     await repo.knoten_wiederherstellen(besitzer_id, b["id"], b_name, ziel)
                     await repo.journal_anhaengen(besitzer_id, b["id"], "erstellt")
+                for v in verweise_mit:
+                    ort = v["parent_id"]
+                    if ort is not None:
+                        eltern = await repo.knoten_holen(ort)
+                        if not eltern or eltern["geloescht"]:
+                            ort = None
+                    v_name = await self._freier_name(repo, besitzer_id, ort, v["name"], True)
+                    await repo.knoten_wiederherstellen(besitzer_id, v["id"], v_name, ort)
+                    await repo.journal_anhaengen(besitzer_id, v["id"], "erstellt")
                 return await repo.knoten_holen(knoten_id)
 
     async def begleiter_anhaengen(self, besitzer_id, haupt_id, knoten_id, rolle: str, zusatz: str,
@@ -1309,3 +1353,81 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 return await PostgresMetadataRepository(conn).journal_aufraeumen(tage)
+
+    # --- Verweise (Regeln in verweise.py) ---------------------------------------------------------------------
+
+    async def verweis_anlegen(self, besitzer_id, parent_id, name, ziel_id) -> dict:
+        """Legt im Ordner einen Verweis auf eine lebende Datei desselben Kontos an; zeigt das Ziel selbst auf etwas,
+        gilt dessen Original. Gibt es unter dem Namen schon einen Verweis auf dasselbe Original, ist er das Ergebnis
+        (ein wiederholter Aufruf legt nichts doppelt an); jeder andere Eintrag unter dem Namen weist ab. Rechte prüft
+        der Aufrufer."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                repo = PostgresMetadataRepository(conn)
+                if not await repo.ordner_lebt(besitzer_id, parent_id):
+                    raise ZielUngueltig("Zielordner nicht gefunden")
+                ziel = await repo.knoten_lesend_sperren(ziel_id)
+                if not ziel or ziel["besitzer_id"] != besitzer_id or ziel["geloescht"]:
+                    raise ZielUngueltig("Ziel nicht gefunden")
+                if ziel["typ"] == verweise.TYP:
+                    ziel = await self._original(repo, ziel)
+                    if ziel is None:
+                        raise VerweisUngueltig("Das Ziel ist ein verwaister Verweis")
+                    ziel = await repo.knoten_lesend_sperren(ziel["id"])
+                if ziel["typ"] != "datei":
+                    raise VerweisUngueltig("Verweise gibt es nur auf Dateien")
+                vorhanden = await repo.knoten_finden(besitzer_id, parent_id, name)
+                if vorhanden:
+                    if vorhanden["typ"] == verweise.TYP and vorhanden["ziel_id"] == ziel["id"]:
+                        return vorhanden
+                    raise NameBelegt(f"{vorhanden['name']} gibt es dort schon")
+                knoten = await repo.verweis_anlegen(besitzer_id, parent_id, name, ziel["id"])
+                await repo.journal_anhaengen(besitzer_id, knoten["id"], "erstellt")
+                return knoten
+
+    async def original(self, besitzer_id, knoten_id) -> dict | None:
+        """Das lebende Original eines eigenen Verweises (oder die Datei selbst) - sonst None."""
+        knoten = await self.knoten_des_nutzers(besitzer_id, knoten_id)
+        if not knoten:
+            return None
+        async with self.pool.connection() as conn:
+            return await self._original(PostgresMetadataRepository(conn), knoten)
+
+    async def verweise_auf(self, besitzer_id, knoten_id) -> list[dict] | None:
+        """Lebende Verweise auf eine eigene Datei, je mit Pfad ihres Ordners - None, wenn es die Datei nicht gibt."""
+        if not await self.knoten_des_nutzers(besitzer_id, knoten_id):
+            return None
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            return [{**v, "ort": "/".join(await repo.pfad_namen(v["parent_id"])) if v["parent_id"] else ""}
+                    for v in await repo.verweise_auf(knoten_id)]
+
+    async def loeschfolgen(self, besitzer_id, ids) -> list[dict]:
+        """Was das Löschen dieser lebenden Knoten mitnähme: Begleiter einer Datei und Verweise von außerhalb auf eine
+        Datei darin, je mit Art (begleiter, verweis), Pfad ihres Ordners und Original. Nur lesend; was selbst schon
+        ausgewählt ist, zählt nicht doppelt."""
+        gewaehlt = {str(i) for i in ids}
+        folgen: dict[str, dict] = {}
+        async with self.pool.connection() as conn:
+            repo = PostgresMetadataRepository(conn)
+            for kid in dict.fromkeys(gewaehlt):
+                knoten = await repo.knoten_holen(kid)
+                if not knoten or knoten["besitzer_id"] != besitzer_id or knoten["geloescht"]:
+                    continue
+                mit = []
+                if knoten["typ"] == "datei":
+                    mit += [{**b, "art": "begleiter", "zu_id": knoten["id"], "zu_name": knoten["name"]}
+                            for b in await repo.begleiter_der_haupt(knoten["id"])]
+                mit += [{**v, "art": "verweis", "zu_id": v["ziel_id"], "zu_name": v["ziel_name"]}
+                        for v in await repo.verweise_in_folge(besitzer_id, knoten["id"])]
+                for m in mit:
+                    if str(m["id"]) not in gewaehlt and str(m["id"]) not in folgen:
+                        m["ort"] = "/".join(await repo.pfad_namen(m["parent_id"])) if m["parent_id"] else ""
+                        folgen[str(m["id"])] = m
+        return list(folgen.values())
+
+    async def dateien_mit_inhalt(self, besitzer_id, sha256: str) -> list[dict]:
+        """Lebende Dateien des Kontos, deren aktuelle Version genau diesen Inhalt hat; Verweise zählen nicht (sie
+        haben keinen eigenen Inhalt). Rechte (welche davon jemand sehen darf) prüft der Aufrufer."""
+        async with self.pool.connection() as conn:
+            return await PostgresMetadataRepository(conn).dateien_mit_inhalt(besitzer_id, sha256)

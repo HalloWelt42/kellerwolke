@@ -2,7 +2,8 @@
   import type { Browser } from "./browser.svelte";
   import * as api from "./api";
   import { symbol, groesseText, datum, typLabel, rolleText } from "./format";
-  import type { AppAktion, Knoten } from "./types";
+  import type { AppAktion, Knoten, VerweisEintrag } from "./types";
+  import { istDateiartig, istVerweis, liestInhalt, ortText } from "./knoten";
   import { aktionAusfuehren } from "./zustand.svelte";
   import BildVorschau from "./medien/BildVorschau.svelte";
   import VideoVorschau from "./medien/VideoVorschau.svelte";
@@ -19,7 +20,8 @@
   let { browser, k, onTeilen, onOeffnen }: Props = $props();
 
   const sym = $derived(symbol(k));
-  const art = $derived(k.typ === "datei" ? (k.medienart ?? null) : null);
+  const art = $derived(liestInhalt(k) ? (k.medienart ?? null) : null);
+  const verweis = $derived(istVerweis(k));
   const vollansicht = $derived(art === "bild" || art === "video");
   const pfadText = $derived(
     browser.bereich === "geteilt"
@@ -52,6 +54,41 @@
     );
   });
 
+  // Verweise (KW-10): beim Verweis Name und Ort des Originals, bei einer Datei die Verweise darauf.
+  let originalOrt = $state<string | null>(null);
+  let verweiseDarauf = $state<VerweisEintrag[]>([]);
+  let verweisLauf = 0;
+  $effect(() => {
+    const id = k.id;
+    const ziel = verweis && !k.verwaist ? (k.ziel_id ?? null) : null;
+    const mitVerweisen = k.typ === "datei" && eigen && !!k.verweis_anzahl;
+    const meiner = ++verweisLauf;
+    originalOrt = null;
+    verweiseDarauf = [];
+    if (ziel) {
+      api.pfadVon(ziel).then(
+        (kette) => {
+          if (meiner === verweisLauf) originalOrt = kette.map((t) => t.name).join("/");
+        },
+        () => {},
+      );
+    }
+    if (mitVerweisen) {
+      api.verweiseAuf(id).then(
+        (liste) => {
+          if (meiner === verweisLauf) verweiseDarauf = liste;
+        },
+        () => {},
+      );
+    }
+  });
+
+  // Die Prüfsumme kurz (Anfang und Ende), die ganze im Tooltip.
+  const pruefsumme = $derived(k.sha256 ?? (browser.detailVersionen.length ? browser.detailVersionen[0].sha256 : null));
+  function kurz(sha: string): string {
+    return `${sha.slice(0, 12)}...${sha.slice(-4)}`;
+  }
+
   function appHinweis(a: AppAktion): string {
     if (!a.erreichbar) return `${a.app} gerade aus`;
     if (a.art === "oeffnen") return "";
@@ -67,8 +104,10 @@
     </button>
   </div>
 
-  <div class="detail-vorschau" class:ordner={k.typ !== "datei"} class:bild={!!art}>
-    {#if art === "audio"}
+  <div class="detail-vorschau" class:ordner={!istDateiartig(k)} class:bild={!!art}>
+    {#if verweis && k.verwaist}
+      <i class="fa-solid fa-link-slash" style="color: var(--warn);"></i>
+    {:else if art === "audio"}
       <AudioVorschau m={k} spielen={() => onOeffnen?.(k)} />
     {:else if vollansicht}
       <button class="vorschau-flaeche" title="Vollansicht" onclick={() => onOeffnen?.(k)}>
@@ -87,17 +126,56 @@
 
   <div class="detail-name">{k.name}</div>
 
+  {#if verweis}
+    <div class="detail-block">
+      <h3>Verweis auf</h3>
+      {#if k.verwaist}
+        <div class="original-karte fehlt">
+          <i class="fa-solid fa-link-slash"></i><span class="o-name">Original fehlt</span>
+          <span class="o-pfad">
+            Das Original wurde endgültig gelöscht oder liegt im Papierkorb. Der Verweis zeigt ins Leere; holt man das Original
+            zurück, ist er wieder heil.
+          </span>
+        </div>
+      {:else}
+        <div class="original-karte">
+          <i class="fa-solid {sym.icon}"></i><span class="o-name">{k.ziel_name ?? "Original"}</span>
+          <span class="o-pfad">{originalOrt === null ? "..." : ortText(originalOrt)}</span>
+        </div>
+        <button class="knopf breit" onclick={() => browser.zumOriginal(k)}>
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> Zum Original
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   <div class="detail-block">
     <h3>Informationen</h3>
-    <div class="infozeile"><span>Typ</span><span>{typLabel(k)}</span></div>
-    {#if k.typ === "datei"}
+    {#if verweis}
+      <div class="infozeile"><span>Art</span><span>{k.verwaist ? "Verweis, verwaist" : "Verweis, liest das Original"}</span></div>
+    {/if}
+    {#if !(verweis && k.verwaist)}
+      <div class="infozeile"><span>Typ</span><span>{typLabel(k)}</span></div>
+    {/if}
+    {#if liestInhalt(k)}
       <div class="infozeile">
-        <span>Größe</span><span>{groesse != null ? groesseText(groesse) : "-"}</span>
+        <span>Größe</span><span>{groesse != null ? groesseText(groesse) : "-"}{verweis ? " (Original)" : ""}</span>
       </div>
     {/if}
-    <div class="infozeile"><span>Geändert</span><span>{datum(k.geaendert_am)}</span></div>
-    <div class="infozeile"><span>Erstellt</span><span>{datum(k.erstellt_am)}</span></div>
+    {#if verweis}
+      <div class="infozeile">
+        <span>Angelegt</span><span>{datum(k.erstellt_am)}{k.verweis_app ? ` von ${k.verweis_app}` : ""}</span>
+      </div>
+    {:else}
+      <div class="infozeile"><span>Geändert</span><span>{datum(k.geaendert_am)}</span></div>
+      <div class="infozeile"><span>Erstellt</span><span>{datum(k.erstellt_am)}</span></div>
+    {/if}
     <div class="infozeile"><span>Pfad</span><span>{pfadText}</span></div>
+    {#if liestInhalt(k) && pruefsumme}
+      <div class="infozeile">
+        <span>Prüfsumme</span><span class="pruefsumme" title="sha256 {pruefsumme}">sha256 {kurz(pruefsumme)}</span>
+      </div>
+    {/if}
     {#if k.rolle}
       <div class="infozeile">
         <span>{rolleText(k.rolle)} zu</span><span>{hauptdatei?.name ?? "einer Datei daneben"}</span>
@@ -120,6 +198,32 @@
                   .filter(Boolean)
                   .join(" · ")}
               </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+
+  {#if verweis && !k.verwaist}
+    <div class="detail-block">
+      <p class="detail-hinweis">
+        Ein Verweis belegt keinen Platz. Löschen nimmt nur den Verweis; das Original bleibt. Ändern lässt sich nur das
+        Original.
+      </p>
+    </div>
+  {/if}
+
+  {#if verweiseDarauf.length}
+    <div class="detail-block">
+      <h3>Verweise darauf</h3>
+      <ul class="begleit-liste">
+        {#each verweiseDarauf as v (v.id)}
+          <li>
+            <button class="begleit-eintrag" onclick={() => browser.zeigeEintrag(v.id)}>
+              <i class="fa-solid fa-share"></i><span class="b-name">{v.name}</span>
+              <span class="verweis-chip">Verweis</span>
+              <span class="b-meta">{[ortText(v.ort), v.app ? `von ${v.app}` : ""].filter(Boolean).join(" · ")}</span>
             </button>
           </li>
         {/each}
@@ -159,7 +263,9 @@
         </ul>
       {/if}
     </div>
+  {/if}
 
+  {#if liestInhalt(k)}
     <div class="detail-block" style="margin-top: auto;">
       <div style="display: flex; gap: var(--a2);">
         <button class="knopf primaer" style="flex: 1;" onclick={() => browser.herunterladen(k)}>
@@ -171,6 +277,12 @@
           </button>
         {/if}
       </div>
+    </div>
+  {:else if verweis && browser.rechte.loeschen}
+    <div class="detail-block" style="margin-top: auto;">
+      <button class="knopf" style="width: 100%; justify-content: center;" onclick={() => browser.loeschen([k.id])}>
+        <i class="fa-solid fa-trash"></i> Verweis in den Papierkorb
+      </button>
     </div>
   {/if}
 </aside>
@@ -190,6 +302,11 @@
     background: transparent;
     cursor: zoom-in;
     display: block;
+  }
+  .detail-hinweis {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-3);
   }
   .detail-vollknopf {
     margin: calc(var(--a4) * -1 + var(--a2)) var(--a4) 0;

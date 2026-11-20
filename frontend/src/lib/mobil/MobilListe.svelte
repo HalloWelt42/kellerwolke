@@ -9,6 +9,7 @@
   import { begleiterText, groesseText } from "../format";
   import { player, aktuelleSpur } from "../player.svelte";
   import Dauer from "../medien/Dauer.svelte";
+  import { istDateiartig, istVerweis, liestInhalt, verweiseText } from "../knoten";
 
   // Ordner und Dateien einer Fläche, wie am Rechner gefiltert und sortiert, am
   // Telefon gruppiert. Antippen öffnet, ⋮ zeigt die Aktionen. Je Art eine eigene Ansicht (KW-5): Bilder im Raster
@@ -33,8 +34,8 @@
   // Externe Quellen gibt es nur am Rechner.
   const liste = $derived(browser.sichtbar.filter((k) => k.typ !== "extern"));
   const kaputt = new SvelteSet<string>(); // Vorschau kam nicht: Symbol zeigen
-  const ordner = $derived(liste.filter((k) => k.typ !== "datei").slice(0, sichtbar));
-  const dateien = $derived(liste.filter((k) => k.typ === "datei").slice(0, Math.max(0, sichtbar - ordner.length)));
+  const ordner = $derived(liste.filter((k) => !istDateiartig(k)).slice(0, sichtbar));
+  const dateien = $derived(liste.filter((k) => istDateiartig(k)).slice(0, Math.max(0, sichtbar - ordner.length)));
   const imPapierkorb = $derived(browser.bereich === "papierkorb");
   // Die Suche bleibt eine Liste mit Ort; sonst zeigt die gewählte Art ihre Ansicht.
   const art = $derived(mitOrt ? "alle" : browser.wirksameArt);
@@ -57,10 +58,16 @@
   {@const anfrage = mitOrt || imPapierkorb ? null : offeneAnfrageZu(k.id)}
   {@const stand = anfrage ? anfrageStand(anfrage) : null}
   <div class="m-zeile-huelle">
-    <button class="m-zeile" class:spielt={spielId === k.id} onclick={() => oeffnen(k)}>
-      {#if nummer}
+    <button class="m-zeile" class:spielt={spielId === k.id} class:verwaist={istVerweis(k) && k.verwaist} onclick={() => oeffnen(k)}>
+      {#if istVerweis(k)}
+        <span class="m-sym-verweis" class:verwaist={k.verwaist}
+          ><i class="fa-solid {s.icon} m-symbol {k.verwaist ? '' : s.klasse}"></i><i
+            class="m-pfeil fa-solid {k.verwaist ? 'fa-link-slash' : 'fa-share'}"
+          ></i></span
+        >
+      {:else if nummer}
         <span class="m-nummer">{#if spielId === k.id}<i class="fa-solid {player.laeuft ? 'fa-volume-high' : 'fa-pause'}"></i>{:else}{nummer}{/if}</span>
-      {:else if k.typ === "datei" && (k.medienart === "bild" || k.medienart === "video") && !kaputt.has(k.id)}
+      {:else if liestInhalt(k) && (k.medienart === "bild" || k.medienart === "video") && !kaputt.has(k.id)}
         <span class="m-vorschaubild"><img src={vorschauUrl(k, "klein")} alt="" loading="lazy" onerror={() => kaputt.add(k.id)} /></span>
       {:else}
         <i class="fa-solid {s.icon} m-symbol {s.klasse}"></i>
@@ -76,6 +83,10 @@
           {:else}
             {#if !mitOrt && !imPapierkorb && (k.medienart === "audio" || k.medienart === "video")}<Dauer m={k} art={k.medienart} leer="" nachsatz=" · " />{/if}{meta(k)}{#if k.begleiter_anzahl && !imPapierkorb && !mitOrt}{" · "}<span class="m-begleit"
                 ><i class="fa-solid fa-paperclip"></i> {begleiterText(k.begleiter_anzahl)}</span
+              >{/if}{#if istVerweis(k) && k.verwaist}<span class="m-verwaist"><i class="fa-solid fa-link-slash"></i> verwaist, Original fehlt</span
+              >{:else if istVerweis(k)}{meta(k) ? " · " : ""}<span class="m-verweis"><i class="fa-solid fa-share"></i> Verweis</span
+              >{:else if k.verweis_anzahl && !mitOrt}{" · "}<span class="m-begleit"
+                ><i class="fa-solid fa-share"></i> {verweiseText(k.verweis_anzahl)}</span
               >{/if}
           {/if}
         </span>

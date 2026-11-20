@@ -6,6 +6,7 @@
   import { mSymbol, zeilenMeta } from "./anzeige";
   import { kannTeilen, teilenOderSichern } from "./teilen";
   import { aktionenOeffnen, blattOeffnen, blattSchliessen, mobil, zeigeReiter } from "./mobil.svelte";
+  import { istVerweis, liestInhalt, mitVerweisen, ortText } from "../knoten";
 
   // Aktionen zu einem Eintrag, nur was der Bereich erlaubt (dieselben Rechte wie am Rechner).
   interface Props {
@@ -23,6 +24,38 @@
   const begleiter = $derived(k.begleiter_anzahl && !imPapierkorb ? haupt.begleiterVon(k.id) : []);
   const hauptdatei = $derived(k.haupt_id ? (haupt.eintraege.find((e) => e.id === k.haupt_id) ?? null) : null);
   const istBegleiter = $derived(!!k.haupt_id && !imPapierkorb);
+  // Verweise (KW-10): ein Verweis führt zum Original (mit dessen Ordner), eine Datei nennt, wie viele mitgehen.
+  const verweis = $derived(istVerweis(k) && !imPapierkorb);
+  let originalOrt = $state<string | null>(null);
+  $effect(() => {
+    const ziel = verweis && !k.verwaist ? (k.ziel_id ?? null) : null;
+    originalOrt = null;
+    if (!ziel) return;
+    api.pfadVon(ziel).then(
+      (kette) => {
+        if (k.ziel_id === ziel) originalOrt = kette.map((t) => t.name).join("/");
+      },
+      () => {},
+    );
+  });
+
+  // Zum Original: in seinen Ordner unter "Dateien", markiert, und sein Blatt zeigen.
+  async function zumOriginal() {
+    const ziel = k.ziel_id;
+    if (!ziel) return;
+    blattSchliessen();
+    mobil.seite = null;
+    mobil.reiter = "dateien";
+    await haupt.zeigeEintrag(ziel);
+    const original = haupt.eintraege.find((e) => e.id === ziel);
+    if (original) aktionenOeffnen(original);
+  }
+
+  function papierkorbHinweis(): string {
+    const teile = [begleiter.length ? mitBegleitern(begleiter.length) : "", k.verweis_anzahl ? mitVerweisen(k.verweis_anzahl) : ""];
+    const mit = teile.filter(Boolean);
+    return ["halten", mit.length === 2 ? `${mit[0]} und ${mit[1].slice("mit ".length)}` : mit[0]].filter(Boolean).join(", ");
+  }
 
   function appHinweis(a: AppAktion): string {
     if (!a.erreichbar) return "App gerade aus";
@@ -62,11 +95,25 @@
 </script>
 
 <div class="m-blatt-kopf">
-  <i class="fa-solid {s.icon} m-symbol {s.klasse}"></i>
+  {#if istVerweis(k)}
+    <span class="m-sym-verweis" class:verwaist={k.verwaist}
+      ><i class="fa-solid {s.icon} m-symbol {k.verwaist ? '' : s.klasse}"></i><i
+        class="m-pfeil fa-solid {k.verwaist ? 'fa-link-slash' : 'fa-share'}"
+      ></i></span
+    >
+  {:else}
+    <i class="fa-solid {s.icon} m-symbol {s.klasse}"></i>
+  {/if}
   <div class="m-text">
     <div class="m-name">{k.name}</div>
     <div class="m-meta">
-      {istBegleiter && k.rolle ? `${rolleText(k.rolle)} zu ${hauptdatei?.name ?? "einer Datei daneben"}` : zeilenMeta(k, imPapierkorb)}
+      {istBegleiter && k.rolle
+        ? `${rolleText(k.rolle)} zu ${hauptdatei?.name ?? "einer Datei daneben"}`
+        : verweis
+          ? k.verwaist
+            ? "Verweis, das Original fehlt"
+            : `Verweis auf ${k.ziel_name ?? "eine Datei"}`
+          : zeilenMeta(k, imPapierkorb)}
     </div>
   </div>
 </div>
@@ -87,6 +134,33 @@
   <button class="m-aktion gefahr" onclick={() => blattOeffnen({ art: "halten", knoten: k, was: "endgueltig" })}>
     <i class="fa-solid fa-trash"></i> Endgültig löschen<span class="m-hinweis">halten</span>
   </button>
+{:else if verweis}
+  {#if k.verwaist}
+    <p class="m-folgen-text">Das Original wurde endgültig gelöscht oder liegt im Papierkorb; der Verweis zeigt ins Leere.</p>
+  {:else}
+    <button class="m-aktion" onclick={und(() => oeffnen(k))}><i class="fa-solid fa-eye"></i> Öffnen</button>
+    <button class="m-aktion" onclick={zumOriginal}>
+      <i class="fa-solid fa-arrow-right-to-bracket"></i>
+      <span class="m-zweizeilig"><span>Zum Original</span><span>{originalOrt === null ? (k.ziel_name ?? "") : ortText(originalOrt)}</span></span>
+    </button>
+    <button class="m-aktion" onclick={und(() => teilenOderSichern(k))}>
+      {#if kannTeilen()}<i class="fa-solid fa-arrow-up-from-bracket"></i> Teilen oder sichern<span class="m-hinweis">Telefon</span>
+      {:else}<i class="fa-solid fa-download"></i> Herunterladen{/if}
+    </button>
+    {#if rechte.umbenennen}
+      <button class="m-aktion" onclick={() => blattOeffnen({ art: "umbenennen", knoten: k })}><i class="fa-solid fa-pen"></i> Umbenennen</button>
+    {/if}
+    {#if rechte.verschieben}
+      <button class="m-aktion" onclick={und(() => haupt.verschiebenBeginnen([k.id]))}>
+        <i class="fa-solid fa-arrow-right-arrow-left"></i> Verschieben
+      </button>
+    {/if}
+  {/if}
+  {#if rechte.loeschen}
+    <button class="m-aktion gefahr" onclick={() => blattOeffnen({ art: "halten", knoten: k, was: "loeschen" })}>
+      <i class="fa-solid fa-trash"></i> In den Papierkorb<span class="m-hinweis">halten, nur der Verweis</span>
+    </button>
+  {/if}
 {:else if istBegleiter}
   {@render mitApps()}
   {#if hauptdatei}
@@ -123,7 +197,7 @@
   {/if}
   {#if apps.length || begleiter.length}<div class="m-gruppe">Datei</div>{/if}
   <button class="m-aktion" onclick={und(() => oeffnen(k))}><i class="fa-solid fa-eye"></i> Öffnen</button>
-  {#if k.typ === "datei"}
+  {#if liestInhalt(k)}
     <button class="m-aktion" onclick={und(() => teilenOderSichern(k))}>
       {#if kannTeilen()}<i class="fa-solid fa-arrow-up-from-bracket"></i> Teilen oder sichern<span class="m-hinweis">Telefon</span>
       {:else}<i class="fa-solid fa-download"></i> Herunterladen{/if}
@@ -149,9 +223,7 @@
   {/if}
   {#if rechte.loeschen}
     <button class="m-aktion gefahr" onclick={() => blattOeffnen({ art: "halten", knoten: k, was: "loeschen" })}>
-      <i class="fa-solid fa-trash"></i> In den Papierkorb<span class="m-hinweis"
-        >{begleiter.length ? `halten, ${mitBegleitern(begleiter.length)}` : "halten"}</span
-      >
+      <i class="fa-solid fa-trash"></i> In den Papierkorb<span class="m-hinweis">{papierkorbHinweis()}</span>
     </button>
   {/if}
 {/if}

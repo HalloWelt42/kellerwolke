@@ -671,6 +671,8 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Wird es eng, kürzen erst die Marken daneben (Begleiter, Verweise), dann der Name; ihr Text steht im Tooltip */
+  flex: 0 0.1 auto;
 }
 .z-meta {
   color: var(--text-2);
@@ -888,6 +890,26 @@ textarea {
   opacity: 1;
 }
 /* Marke mit der Dauer von Ton und Video, unten rechts in der Vorschau */
+/* Verweis in der Kachel (KW-10): derselbe Pfeil wie am Symbol der Liste, oben rechts */
+.kachel .k-verweis {
+  position: absolute;
+  top: var(--a2);
+  right: var(--a2);
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--flaeche);
+  color: var(--akzent-stark);
+  font-size: 0.7rem;
+  box-shadow: 0 0 0 1px var(--rand);
+  pointer-events: none;
+}
+.kachel .k-verweis.verwaist {
+  color: var(--warn);
+}
 .kachel .k-dauer {
   position: absolute;
   right: 6px;
@@ -1165,7 +1187,10 @@ textarea {
   transform: rotate(90deg);
 }
 .begleit-marke {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.76rem;
   color: var(--text-3);
   white-space: nowrap;
@@ -1190,6 +1215,170 @@ textarea {
   background: var(--flaeche-3);
   color: var(--text-2);
   white-space: nowrap;
+}
+/* Verweise (KW-10): das Symbol der Art des Originals mit kleinem Pfeil unten rechts, Kennzeichen "Verweis" bzw.
+   "verwaist"; das Original zählt seine Verweise */
+.sym-verweis {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.sym-verweis .verweis-pfeil {
+  position: absolute;
+  right: -5px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--flaeche);
+  color: var(--akzent-stark);
+  font-size: 0.56rem;
+  box-shadow: 0 0 0 1px var(--rand);
+  pointer-events: none;
+}
+.sym-verweis.verwaist > .sym {
+  color: var(--text-3);
+}
+.sym-verweis.verwaist .verweis-pfeil {
+  color: var(--warn);
+}
+.verweis-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--akzent-weich);
+  color: var(--akzent-stark);
+  white-space: nowrap;
+}
+.verweis-chip.verwaist {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--text);
+}
+.zeile.verwaist .titel {
+  color: var(--text-3);
+}
+.verweis-marke {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.76rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+@container (max-width: 620px) {
+  .verweis-chip .vc-text,
+  .verweis-marke .vm-text {
+    display: none;
+  }
+}
+/* Detail: Original eines Verweises, Prüfsumme */
+.original-karte {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 2px var(--a2);
+  align-items: center;
+  padding: var(--a2) var(--a3);
+  border: 1px solid var(--rand);
+  border-radius: var(--r2);
+  background: var(--flaeche-2);
+}
+.original-karte i {
+  color: var(--text-2);
+  text-align: center;
+}
+.original-karte .o-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.original-karte .o-pfad {
+  grid-column: 2;
+  font-size: 0.8rem;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.original-karte.fehlt {
+  border-style: dashed;
+  background: transparent;
+}
+.original-karte.fehlt i {
+  color: var(--warn);
+}
+.detail-block .knopf.breit {
+  width: 100%;
+  justify-content: center;
+  margin-top: var(--a2);
+}
+.pruefsumme {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+/* Folgenvorschau vor dem Löschen eines Originals */
+.folgen-text {
+  margin: 0 0 var(--a3);
+  color: var(--text-2);
+}
+.folgen-liste {
+  list-style: none;
+  margin: 0 0 var(--a3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--rand);
+  border-radius: var(--r2);
+}
+.folgen-liste li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 0 var(--a2);
+  align-items: center;
+  padding: 7px var(--a3);
+}
+.folgen-liste li + li {
+  border-top: 1px solid var(--rand);
+}
+.folgen-liste li i {
+  color: var(--text-2);
+  text-align: center;
+}
+.folgen-liste .f-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folgen-liste .f-pfad {
+  grid-column: 2 / 4;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.folgen-liste li.f-kopf {
+  display: block;
+  padding: 6px var(--a3) 2px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  background: var(--flaeche-2);
+}
+.folgen-hinweis {
+  margin: 0 0 var(--a4);
+  font-size: 0.85rem;
+  color: var(--text-3);
 }
 /* Laufende Anfrage an der Zeile: feste Breite, damit nichts springt */
 .anfrage-pille {
@@ -1607,6 +1796,13 @@ select.feld {
 }
 
 /* ===== Modal ===== */
+/* Knöpfe am Fuß eines Dialogs (Abbrechen links, die Handlung rechts) */
+.modal-knoepfe {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--a2);
+}
 .modal-hg {
   position: fixed;
   inset: 0;

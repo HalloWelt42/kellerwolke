@@ -4,6 +4,8 @@ Mountet unter /webdav und spricht ausschliesslich den SpeicherDienst an, damit
 ETags und Journal konsistent bleiben. Authentifizierung per HTTP Basic (Name
 oder Kuerzel + Passwort), passend fuer jeden Dateimanager mit WebDAV-Unterstuetzung.
 Bewusst minimal, aber funktional: OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, MOVE.
+Verweise (KW-10) erscheinen als gewöhnliche Dateien mit dem Inhalt ihres Originals, aber nur lesend: PUT, DELETE und
+MOVE auf einen Verweis weist WebDAV ab (403); verwaiste Verweise fehlen in der Liste.
 """
 
 import asyncio
@@ -21,6 +23,7 @@ from app.auslieferung import inhalt_antwort
 from app.config import EINSTELLUNGEN
 from app.ports import DateiZuGross, SpeicherNichtVerfuegbar
 from module.ablage.strom import StromLeser
+from module.speicher import verweise
 from module.speicher.dienst import NameBelegt, ZielUngueltig
 from module.suche.dienst import indizierung_starten
 
@@ -96,7 +99,22 @@ async def _knoten_prop(speicher, knoten, pfad: str) -> str:
         # mit; nur bei Einzel-Knoten ohne diese Spalte eine Abfrage nachziehen.
         vorhanden = knoten.get("groesse") if hasattr(knoten, "get") else None
         groesse = vorhanden if vorhanden is not None else await speicher.groesse(knoten)
-    return _prop(knoten["name"], pfad, ist_ordner, groesse, knoten["geaendert_am"], knoten["etag"])
+    etag = knoten["etag"]
+    if knoten["typ"] == verweise.TYP:                 # Stand des Originals, wie GET ihn liefert
+        etag = knoten.get("ziel_etag")
+        if etag is None:
+            original = await speicher.original(knoten["besitzer_id"], knoten["id"])
+            etag = original["etag"] if original else None
+    return _prop(knoten["name"], pfad, ist_ordner, groesse, knoten["geaendert_am"], etag)
+
+
+def _nur_lesbar(knoten) -> bool:
+    return bool(knoten) and knoten["typ"] == verweise.TYP
+
+
+def _sichtbar(knoten) -> bool:
+    """In der Liste: alles außer verwaisten Verweisen (sie haben keinen Inhalt)."""
+    return not (knoten["typ"] == verweise.TYP and knoten.get("verwaist"))
 
 
 def _eltern_und_name(pfad: str):
@@ -124,7 +142,8 @@ async def _propfind(request, benutzer, pfad) -> Response:
         teile.append(_prop("/", "", True, 0, datetime.now(timezone.utc), None))
         if tiefe != "0":
             for k in await speicher.kinder(benutzer["id"], None):
-                teile.append(await _knoten_prop(speicher, k, k["name"]))
+                if _sichtbar(k):
+                    teile.append(await _knoten_prop(speicher, k, k["name"]))
     else:
         knoten = await speicher.knoten_per_pfad(benutzer["id"], pfad)
         if not knoten or knoten["geloescht"]:
@@ -133,7 +152,8 @@ async def _propfind(request, benutzer, pfad) -> Response:
         teile.append(await _knoten_prop(speicher, knoten, basis))
         if knoten["typ"] in ("ordner", "extern") and tiefe != "0":
             for k in await speicher.kinder(benutzer["id"], knoten["id"]):
-                teile.append(await _knoten_prop(speicher, k, basis + "/" + k["name"]))
+                if _sichtbar(k):
+                    teile.append(await _knoten_prop(speicher, k, basis + "/" + k["name"]))
     koerper = (
         '<?xml version="1.0" encoding="utf-8"?>'
         '<D:multistatus xmlns:D="DAV:">' + "".join(teile) + "</D:multistatus>"
@@ -169,6 +189,8 @@ async def _put(request, benutzer, pfad) -> Response:
     if laenge and laenge.isdigit() and int(laenge) > EINSTELLUNGEN.max_upload:
         return Response(status_code=413)
     vorher = await speicher.knoten_per_pfad(benutzer["id"], pfad)
+    if _nur_lesbar(vorher):
+        return Response(status_code=403)
     existierte = bool(vorher and not vorher["geloescht"] and vorher["typ"] == "datei")
     quelle = StromLeser(request.stream(), asyncio.get_running_loop())
     try:
@@ -188,6 +210,8 @@ async def _delete(request, benutzer, pfad) -> Response:
     knoten = await speicher.knoten_per_pfad(benutzer["id"], pfad)
     if not knoten or knoten["geloescht"]:
         return Response(status_code=404)
+    if _nur_lesbar(knoten):
+        return Response(status_code=403)
     await speicher.loeschen(benutzer["id"], knoten["id"])
     return Response(status_code=204)
 
@@ -220,6 +244,8 @@ async def _move(request, benutzer, pfad) -> Response:
     knoten = await speicher.knoten_per_pfad(benutzer["id"], pfad)
     if not knoten or knoten["geloescht"]:
         return Response(status_code=404)
+    if _nur_lesbar(knoten):
+        return Response(status_code=403)
     ziel_eltern, ziel_name = _eltern_und_name(ziel_pfad)
     neuer_parent = None
     if ziel_eltern:

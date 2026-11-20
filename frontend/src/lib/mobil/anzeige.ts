@@ -1,8 +1,10 @@
 import { groesseText, ordnerInhalt, rollenSymbol, symbolFuerName } from "../format";
 import type { Knoten } from "../types";
 
-// Symbol und Farbe einer Zeile am Telefon.
-export function mSymbol(k: Pick<Knoten, "typ" | "name" | "medienart" | "rolle">): { icon: string; klasse: string } {
+// Symbol und Farbe einer Zeile am Telefon; ein Verweis trägt das Symbol seines Originals (den Pfeil setzt die Zeile).
+export function mSymbol(
+  k: Pick<Knoten, "typ" | "name" | "medienart" | "rolle"> & { ziel_name?: string | null },
+): { icon: string; klasse: string } {
   if (k.typ === "ordner") return { icon: "fa-folder", klasse: "ordner" };
   if (k.typ === "extern") return { icon: "fa-folder-tree", klasse: "ordner" };
   const rolle = rollenSymbol(k.rolle);
@@ -11,7 +13,7 @@ export function mSymbol(k: Pick<Knoten, "typ" | "name" | "medienart" | "rolle">)
   if (art === "bild") return { icon: "fa-file-image", klasse: "bild" };
   if (art === "audio") return { icon: "fa-file-audio", klasse: "ton" };
   if (art === "video") return { icon: "fa-file-video", klasse: "video" };
-  const icon = symbolFuerName(k.name);
+  const icon = symbolFuerName(k.typ === "verweis" ? (k.ziel_name ?? k.name) : k.name);
   return { icon, klasse: icon === "fa-file-pdf" ? "pdf" : "" };
 }
 
@@ -31,6 +33,7 @@ export function kurzDatum(iso: string): string {
 export function zeilenMeta(k: Knoten, imPapierkorb: boolean): string {
   if (k.typ === "ordner") return imPapierkorb ? `gelöscht ${kurzDatum(k.geaendert_am)}` : ordnerInhalt(k.kinder_anzahl, "Ordner");
   if (k.typ === "extern") return "Externe Quelle";
+  if (k.typ === "verweis" && !imPapierkorb) return k.groesse != null ? groesseText(k.groesse).replace(".", ",") : "";
   const teile = [k.groesse != null ? groesseText(k.groesse).replace(".", ",") : "", kurzDatum(k.geaendert_am)].filter(Boolean);
   return (imPapierkorb ? "gelöscht " : "") + teile.join(" · ");
 }
