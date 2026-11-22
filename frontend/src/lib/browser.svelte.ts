@@ -592,16 +592,22 @@ export class Browser {
 
   zumOriginal = (k: Knoten): Promise<void> => (k.ziel_id ? this.zeigeEintrag(k.ziel_id) : Promise.resolve());
 
-  // Eine Aktion je Kennung, eine nach der anderen. Was es nicht (mehr) gibt (404), ist schon erledigt, etwa von einem
-  // Ordner mitgenommen; jeder andere Fehler hält die übrigen nicht auf und steht am Ende in der Fläche (HELF-262).
+  // Eine Aktion je Kennung, eine nach der anderen, für Einträge, die danach nicht mehr in diese Liste gehören. Was es
+  // nicht (mehr) gibt (404), ist schon erledigt, etwa von einem Ordner mitgenommen; jeder andere Fehler hält die übrigen
+  // nicht auf und steht am Ende in der Fläche. Erledigtes verschwindet sofort aus der Liste, nicht erst mit dem
+  // nächsten Laden: sonst bleibt es sichtbar und lädt zu einem zweiten Versuch ein (HELF-262).
   private jeKennung = async (ids: string[], aktion: (id: string) => Promise<unknown>, was: string): Promise<void> => {
     const fehler: string[] = [];
     for (const id of ids) {
       try {
         await aktion(id);
       } catch (f) {
-        if ((f as api.ApiFehler).status !== 404) fehler.push((f as Error).message);
+        if ((f as api.ApiFehler).status !== 404) {
+          fehler.push((f as Error).message);
+          continue;
+        }
       }
+      this.eintraege = this.eintraege.filter((k) => k.id !== id);
     }
     if (fehler.length) this.fehler = `${was}: ${fehler.length} von ${ids.length} nicht möglich (${fehler[0]})`;
     this.auswahl.leeren();
