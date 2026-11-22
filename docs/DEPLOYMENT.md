@@ -52,6 +52,8 @@ Wird über Umgebungsvariablen gesetzt (oder eine `.env` neben `compose.pi.yml`):
 - `KELLERWOLKE_VORSCHAU_PFAD` - Ablage der Vorschau- und Vollbilder (abgeleitet, jederzeit neu erzeugbar, Standard `data/vorschau`)
 - `KELLERWOLKE_VORSCHAU_GLEICHZEITIG` - wie viele Vorschauen gleichzeitig entstehen (Standard 2)
 - `KELLERWOLKE_FFMPEG` - Pfad zu ffmpeg für Standbilder aus Videos; ohne ffmpeg zeigen Videos nur ihr Symbol
+- `KELLERWOLKE_PROTOKOLL` - Stufe der eigenen Meldungen im Dienstprotokoll (DEBUG, INFO, WARNING, ERROR; Standard INFO,
+  meldet etwa jedes endgültige Löschen)
 
 ## Auf einem Server mit großer Platte
 

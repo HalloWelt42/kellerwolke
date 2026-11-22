@@ -25,6 +25,8 @@ _MITGENOMMEN = ("LEFT JOIN knoten rp ON rp.id = r.parent_id "
                 "WHERE r.typ = 'verweis' AND r.geloescht AND r.id <> r.geloescht_wurzel "
                 "AND (r.parent_id IS NULL OR (r.parent_id <> r.geloescht_wurzel "
                 "AND rp.geloescht_wurzel IS DISTINCT FROM r.geloescht_wurzel))")
+# Erste Hälfte des Schlüssels der Papierkorb-Sperre (pg_advisory_xact_lock); die zweite ist das Konto.
+_SPERRE_PAPIERKORB = 4_002_620
 
 
 class PostgresMetadataRepository:
@@ -323,7 +325,8 @@ class PostgresMetadataRepository:
         )
 
     async def papierkorb(self, besitzer_id):
-        """Nur die Wurzeln: was mit einem Ordner gelöscht wurde, steckt in ihm."""
+        """Nur die Wurzeln: was mit einem Ordner gelöscht wurde, steckt in ihm. Auch was vorher einzeln gelöscht wurde
+        und in einem gelöschten Ordner liegt, steckt in ihm (HELF-262): jeder Eintrag steht einmal da."""
         # Eine Gruppe ist eine Zeile: die Hauptdatei zählt die mit ihr gelöschten Begleiter; ein allein gelöschter
         # Begleiter nennt Rolle und Hauptdatei (dorthin kommt er beim Wiederherstellen zurück).
         return await self._alle(
@@ -338,6 +341,7 @@ class PostgresMetadataRepository:
             "LEFT JOIN begleiter bg ON bg.begleiter_id = k.id "
             "LEFT JOIN knoten hk ON hk.id = bg.haupt_id AND NOT hk.geloescht "
             "WHERE k.besitzer_id=%s AND k.geloescht AND k.geloescht_wurzel = k.id "
+            "AND NOT EXISTS (SELECT 1 FROM knoten p WHERE p.id = k.parent_id AND p.geloescht) "
             "ORDER BY k.geaendert_am DESC",
             (besitzer_id,),
         )
@@ -355,38 +359,54 @@ class PostgresMetadataRepository:
             (pfad, marker),
         )
 
-    async def papierkorb_wurzeln(self, besitzer_id):
+    async def papierkorb_sperren(self, besitzer_id):
+        """Reiht Arbeiten am Papierkorb eines Kontos hintereinander (endgültig löschen, leeren, wiederherstellen), bis
+        zum Ende der Transaktion. Wer die Sperre hat, liest danach den festgeschriebenen Stand: kein Zähler wird doppelt
+        gesenkt, und nichts wird entfernt, was gerade zurückgeholt wurde (HELF-262)."""
+        await self.conn.execute(
+            "SELECT pg_advisory_xact_lock(%s, hashtext(%s))", (_SPERRE_PAPIERKORB, str(besitzer_id))
+        )
+
+    async def papierkorb_alle(self, besitzer_id):
+        """Alles, was im Papierkorb des Kontos liegt, sichtbar oder nicht (Inhalt gelöschter Ordner, Begleiter,
+        mitgenommene Verweise). Grundlage fürs Leeren."""
+        zeilen = await self._alle("SELECT id FROM knoten WHERE besitzer_id=%s AND geloescht", (besitzer_id,))
+        return [z["id"] for z in zeilen]
+
+    async def endgueltig_betroffen(self, besitzer_id, wurzeln):
+        """Alles, was mit diesen Papierkorb-Einträgen endgültig geht: der Inhalt darunter und, was mit einem von ihnen
+        in den Papierkorb kam (Begleiter, mitgenommene Verweise), samt deren Inhalt. Jede Kennung einmal."""
+        if not wurzeln:
+            return []
         zeilen = await self._alle(
-            "SELECT id FROM knoten WHERE besitzer_id=%s AND geloescht AND geloescht_wurzel = id", (besitzer_id,)
+            "WITH RECURSIVE menge AS ("
+            "  SELECT id FROM knoten WHERE id = ANY(%s) AND besitzer_id=%s AND geloescht "
+            "  UNION "
+            "  SELECT k.id FROM knoten k JOIN menge m "
+            "    ON k.parent_id = m.id OR (k.geloescht AND k.geloescht_wurzel = m.id)"
+            ") SELECT id FROM menge",
+            (list(wurzeln), besitzer_id),
         )
         return [z["id"] for z in zeilen]
 
-    async def blobrefs_im_teilbaum(self, wurzeln):
-        """Liefert je Blockhash, wie oft er im Teilbaum der Wurzeln referenziert
-        wird (ueber Versionen/Chunks). Grundlage fuer das Senken der Refcounts."""
-        if not wurzeln:
+    async def blobrefs_der_knoten(self, ids):
+        """Liefert je Blockhash, wie oft ihn die Versionen dieser Knoten nutzen. Grundlage fürs Senken der Zähler."""
+        if not ids:
             return []
         return await self._alle(
-            "WITH RECURSIVE baum AS ("
-            "  SELECT id FROM knoten WHERE id = ANY(%s) "
-            "  UNION ALL "
-            "  SELECT k.id FROM knoten k JOIN baum b ON k.parent_id = b.id"
-            ") "
             "SELECT c.blob_hash AS hash, count(*) AS n "
             "FROM chunk c JOIN version v ON v.id = c.version_id "
-            "WHERE v.knoten_id IN (SELECT id FROM baum) "
-            "GROUP BY c.blob_hash",
-            (wurzeln,),
+            "WHERE v.knoten_id = ANY(%s) GROUP BY c.blob_hash",
+            (list(ids),),
         )
 
     async def blob_refcount_senken(self, besitzer_id, blob_hash, n):
-        """Senkt den Refcount und liefert den neuen Wert (oder None, wenn weg)."""
-        zeile = await self._eine(
+        """Senkt den Zähler; liefert neuen Zähler und Größe des Blocks (oder None, wenn es ihn nicht gibt)."""
+        return await self._eine(
             "UPDATE blob SET refcount = refcount - %s "
-            "WHERE besitzer_id=%s AND hash=%s RETURNING refcount",
+            "WHERE besitzer_id=%s AND hash=%s RETURNING refcount, groesse",
             (n, besitzer_id, blob_hash),
         )
-        return zeile["refcount"] if zeile else None
 
     async def blob_zeile_loeschen(self, besitzer_id, blob_hash):
         await self.conn.execute(
@@ -394,11 +414,11 @@ class PostgresMetadataRepository:
             (besitzer_id, blob_hash),
         )
 
-    async def knoten_hart_loeschen(self, wurzeln):
-        if not wurzeln:
+    async def knoten_hart_loeschen(self, ids):
+        if not ids:
             return
-        # ON DELETE CASCADE raeumt Kinder, Versionen und Chunks mit ab.
-        await self.conn.execute("DELETE FROM knoten WHERE id = ANY(%s)", (wurzeln,))
+        # ON DELETE CASCADE raeumt Versionen, Chunks und Zuordnungen mit ab.
+        await self.conn.execute("DELETE FROM knoten WHERE id = ANY(%s)", (list(ids),))
 
     async def fremde_sperre(self, knoten_id, zugang_id) -> dict | None:
         """Gültige Bearbeitungssperre einer anderen App auf dem Knoten, sonst None."""
@@ -537,6 +557,18 @@ class PostgresMetadataRepository:
         )
         await self.conn.execute("SELECT pg_notify('kellerwolke_journal', %s)", (str(besitzer_id),))
         return row["seq"]
+
+    async def journal_entfernt(self, besitzer_id, ids):
+        """Ein Eintrag "entfernt" je endgültig gelöschtem Knoten, in der Reihenfolge der Kennungen, mit einer
+        Benachrichtigung für alle."""
+        if not ids:
+            return
+        await self.conn.execute(
+            "INSERT INTO aenderung (besitzer_id, knoten_id, typ) "
+            "SELECT %s, k, 'entfernt' FROM unnest(%s::uuid[]) WITH ORDINALITY AS t(k, n) ORDER BY n",
+            (besitzer_id, list(ids)),
+        )
+        await self.conn.execute("SELECT pg_notify('kellerwolke_journal', %s)", (str(besitzer_id),))
 
     async def journal_seit(self, besitzer_id, seit_seq, anzahl: int = 1000):
         return await self._alle(

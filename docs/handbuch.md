@@ -161,6 +161,10 @@ Sicherung des Pi (siehe [[Grundlage Pi]]).
   Originals nimmt seine Verweise mit; vorher zeigt die Oberfläche, welche.
 - Das Backend ist abgestürzt: systemd startet es neu (`sudo systemctl status kellerwolke-backend`,
   `journalctl -u kellerwolke-backend`).
+- Endgültig löschen oder Papierkorb leeren scheint nicht zu wirken: jedes endgültige Löschen steht mit Anzahl der
+  Einträge, freien Bytes und Dauer im Protokoll (`journalctl -u kellerwolke-backend | grep kellerwolke.papierkorb`),
+  ebenso ein Eintrag, der schon weg war. Großes Leeren dauert; ein Ordner nimmt auch mit, was vorher einzeln
+  gelöscht in ihm lag. Wie viel gemeldet wird, steuert `KELLERWOLKE_PROTOKOLL` (Standard INFO).
 - Das iPhone meldet ein ungültiges Zertifikat: es vertraut der Hausstelle nicht, oder das Zertifikat ist abgelaufen
   (`tools/zertifikat.sh --pruefen`, dann `tools/zertifikat.sh` und `sudo systemctl restart kellerwolke-web`).
 - Ein Code zum Koppeln "gilt nicht": er stammt aus einer anderen Kellerwolke (etwa der Entwicklung am Mac); die Apps

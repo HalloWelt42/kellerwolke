@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from . import db
 from . import io_pool
+from . import protokoll
 from .adapters.filesystem_blobstore import FilesystemBlobStore
 from .config import EINSTELLUNGEN, version
 from .melder import JournalMelder
@@ -117,6 +118,7 @@ async def lebenszyklus(app: FastAPI):
 
 
 def app_bauen() -> FastAPI:
+    protokoll.einrichten()
     app = FastAPI(title="Kellerwolke", version=version(), lifespan=lebenszyklus)
 
     # Token im Header (kein Cookie) -> keine Credentials noetig.

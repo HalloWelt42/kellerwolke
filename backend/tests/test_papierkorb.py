@@ -1,6 +1,10 @@
 """Papierkorb mit ganzen Teilbäumen: Löschen markiert alles darunter, Wiederherstellen holt genau diesen Teilbaum
 zurück, gelöschte Ordner nehmen nichts mehr an, Dateinamen kollidieren nicht still mit Ordnern."""
 
+import asyncio
+import logging
+import uuid
+
 import pytest
 
 from app.adapters.postgres_metadata import PostgresMetadataRepository
@@ -51,7 +55,8 @@ async def test_vorher_einzeln_geloeschtes_bleibt_im_papierkorb(dienst, benutzer_
     p, s, a, b = await _baum(dienst, benutzer_id)
     await dienst.loeschen(benutzer_id, b["id"])
     await dienst.loeschen(benutzer_id, p["id"])
-    assert {k["id"] for k in await dienst.papierkorb(benutzer_id)} == {p["id"], b["id"]}
+    # Jeder Eintrag einmal: b steckt im gelöschten Ordner P (HELF-262).
+    assert [k["id"] for k in await dienst.papierkorb(benutzer_id)] == [p["id"]]
     await dienst.wiederherstellen(benutzer_id, p["id"])
     assert (await dienst.knoten_des_nutzers(benutzer_id, b["id"]))["geloescht"]
     assert [k["id"] for k in await dienst.papierkorb(benutzer_id)] == [b["id"]]
@@ -148,3 +153,102 @@ async def test_migration_markiert_bestand(pool, dienst, benutzer_id):
     for k in (s, a, b):
         assert (await dienst.knoten_des_nutzers(benutzer_id, k["id"]))["geloescht_wurzel"] == p["id"]
     assert [k["id"] for k in await dienst.papierkorb(benutzer_id)] == [p["id"]]
+
+
+# --- HELF-262: endgültig löschen, wenn ein Ordner Einzelnes schon mitgenommen hat, und gleichzeitige Arbeiten -----
+
+
+async def _journal(pool, typ):
+    async with pool.connection() as conn:
+        cur = await conn.execute("SELECT knoten_id FROM aenderung WHERE typ=%s ORDER BY seq", (typ,))
+        return [z[0] for z in await cur.fetchall()]
+
+
+async def _zaehler(pool, benutzer_id):
+    async with pool.connection() as conn:
+        cur = await conn.execute("SELECT hash, refcount FROM blob WHERE besitzer_id=%s", (benutzer_id,))
+        return dict(await cur.fetchall())
+
+
+async def test_endgueltig_ordner_nimmt_einzeln_geloeschtes_mit_und_meldet_alles_als_entfernt(dienst, benutzer_id, pool):
+    p, s, a, b = await _baum(dienst, benutzer_id)
+    await dienst.loeschen(benutzer_id, b["id"])
+    await dienst.loeschen(benutzer_id, p["id"])
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, p["id"]) is True
+    for k in (p, s, a, b):
+        assert await dienst.knoten_des_nutzers(benutzer_id, k["id"]) is None
+    # Jeder entfernte Knoten steht im Journal, auch was nur im Ordner steckte.
+    assert set(await _journal(pool, "entfernt")) == {p["id"], s["id"], a["id"], b["id"]}
+    # Schon mitgenommen: kein zweites Entfernen, kein Fehler im Zählerstand.
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, b["id"]) is False
+    assert await _zaehler(pool, benutzer_id) == {}
+
+
+async def test_mitgenommener_verweis_eines_einzeln_geloeschten_geht_mit_dem_ordner(dienst, benutzer_id, pool):
+    p, s, a, b = await _baum(dienst, benutzer_id)
+    q = await dienst.ordner_anlegen(benutzer_id, None, "Q")
+    v = await dienst.verweis_anlegen(benutzer_id, q["id"], "b-verweis.txt", b["id"])
+    await dienst.loeschen(benutzer_id, b["id"])  # nimmt den Verweis in Q mit
+    await dienst.loeschen(benutzer_id, p["id"])
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, p["id"]) is True
+    # Vorher blieb der Verweis unsichtbar im Papierkorb liegen; jetzt geht er mit.
+    assert await dienst.knoten_des_nutzers(benutzer_id, v["id"]) is None
+    assert v["id"] in await _journal(pool, "entfernt")
+    assert await dienst.papierkorb(benutzer_id) == []
+
+
+async def test_leeren_meldet_wirklich_frei_werdenden_platz(dienst, benutzer_id, pool):
+    p, s, a, b = await _baum(dienst, benutzer_id)
+    await dienst.datei_hochladen(benutzer_id, None, "bleibt.txt", b"a")  # gleicher Inhalt wie a: bleibt belegt
+    await dienst.datei_hochladen(benutzer_id, s["id"], "doppelt.txt", b"bb")
+    await dienst.datei_hochladen(benutzer_id, p["id"], "doppelt2.txt", b"bb")  # gleicher Inhalt, liegt einmal da
+    await dienst.loeschen(benutzer_id, p["id"])
+    weg = await dienst.papierkorb_leeren(benutzer_id)
+    assert (weg.eintraege, weg.bloecke, weg.bytes) == (6, 2, len(b"b") + len(b"bb"))
+    assert list((await _zaehler(pool, benutzer_id)).values()) == [1]
+
+
+async def test_leeren_ohne_inhalt(dienst, benutzer_id):
+    weg = await dienst.papierkorb_leeren(benutzer_id)
+    assert (weg.eintraege, weg.bloecke, weg.bytes) == (0, 0, 0)
+
+
+async def _haelt_sperre(pool, benutzer_id, arbeit):
+    """Hält die Papierkorb-Sperre des Kontos in einer zweiten Verbindung; die Arbeit muss warten, bis sie frei ist."""
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await PostgresMetadataRepository(conn).papierkorb_sperren(benutzer_id)
+            aufgabe = asyncio.create_task(arbeit)
+            await asyncio.sleep(0.3)
+            assert not aufgabe.done()
+    return await asyncio.wait_for(aufgabe, 5)
+
+
+async def test_endgueltig_loeschen_wartet_auf_die_sperre(dienst, benutzer_id, pool):
+    p, s, a, b = await _baum(dienst, benutzer_id)
+    await dienst.loeschen(benutzer_id, p["id"])
+    assert await _haelt_sperre(pool, benutzer_id, dienst.knoten_endgueltig_loeschen(benutzer_id, p["id"])) is True
+
+
+async def test_wiederherstellen_wartet_auf_die_sperre(dienst, benutzer_id, pool):
+    p, s, a, b = await _baum(dienst, benutzer_id)
+    await dienst.loeschen(benutzer_id, p["id"])
+    zurueck = await _haelt_sperre(pool, benutzer_id, dienst.wiederherstellen(benutzer_id, p["id"]))
+    assert not zurueck["geloescht"]
+
+
+async def test_gleichzeitig_leeren_und_einzeln_loeschen_senkt_zaehler_nur_einmal(dienst, benutzer_id, pool):
+    """Der Fall der Nacht zum 22.11.: Leeren und einzelnes Löschen überschneiden sich. Ein Block, den auch eine lebende
+    Datei nutzt, muss bleiben."""
+    p, s, a, b = await _baum(dienst, benutzer_id)
+    draussen = await dienst.datei_hochladen(benutzer_id, None, "kopie.txt", b"a")
+    await dienst.loeschen(benutzer_id, p["id"])
+    await asyncio.gather(dienst.papierkorb_leeren(benutzer_id), dienst.knoten_endgueltig_loeschen(benutzer_id, p["id"]))
+    assert await dienst.datei_lesen(benutzer_id, draussen["id"]) == b"a"
+    assert list((await _zaehler(pool, benutzer_id)).values()) == [1]
+
+
+async def test_nicht_im_papierkorb_wird_protokolliert(dienst, benutzer_id, caplog):
+    caplog.set_level(logging.INFO, logger="kellerwolke")
+    assert await dienst.knoten_endgueltig_loeschen(benutzer_id, uuid.uuid4()) is False
+    assert "liegt nicht (mehr) im Papierkorb" in caplog.text

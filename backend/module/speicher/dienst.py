@@ -8,8 +8,10 @@ Dienst, damit ETags und Journal immer konsistent bleiben.
 import asyncio
 import hashlib
 import io
+import logging
 import os
 import shutil
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -25,6 +27,18 @@ from app.ports import AufraeumenVerweigert, SpeicherNichtVerfuegbar
 from module.speicher import begleiter, verweise
 from module.speicher.begleiter import GruppeKonflikt
 from module.speicher.verweise import VerweisUngueltig
+
+log = logging.getLogger("kellerwolke.papierkorb")
+
+
+@dataclass(frozen=True)
+class Entfernt:
+    """Was ein endgültiges Löschen entfernt hat: Knoten, Blöcke ohne weitere Verwendung und deren Bytes (der Platz,
+    der wirklich frei wird; gleicher Inhalt liegt nur einmal da)."""
+
+    eintraege: int
+    bloecke: int
+    bytes: int
 
 
 class _ZipStrom:
@@ -571,66 +585,56 @@ class SpeicherDienst:
             self.verschiebung["status"] = "fehler"
             self.verschiebung["fehler"] = str(f)
 
-    async def papierkorb_leeren(self, besitzer_id):
-        """Loescht alle Knoten im Papierkorb endgueltig: Refcounts senken,
-        Knoten samt Teilbaum (CASCADE) entfernen, verwaiste Bloecke physisch
-        loeschen. Liefert die Zahl entfernter Wurzeln."""
-        # Vorab pruefen: ist der Pool nicht erreichbar, gar nicht erst die
-        # DB-Zeilen loeschen (sonst blieben verwaiste Bloecke auf der Platte).
-        if not await self.speicher_erreichbar():
-            raise SpeicherNichtVerfuegbar("Papierkorb kann nicht geleert werden")
-        verwaiste = []
-        async with self.pool.connection() as conn:
-            async with conn.transaction():
-                repo = PostgresMetadataRepository(conn)
-                wurzeln = await repo.papierkorb_wurzeln(besitzer_id)
-                if not wurzeln:
-                    return 0
-                anzahl = len(wurzeln)
-                wurzeln += [b["id"] for b in await repo.begleiter_im_papierkorb(wurzeln)]
-                wurzeln += [v["id"] for v in await repo.mitgenommene_verweise(wurzeln[:anzahl])]
-                for ref in await repo.blobrefs_im_teilbaum(wurzeln):
-                    neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
-                    if neu is not None and neu <= 0:
-                        verwaiste.append(ref["hash"])
-                await repo.knoten_hart_loeschen(wurzeln)
-                for h in verwaiste:
-                    await repo.blob_zeile_loeschen(besitzer_id, h)
-                for w in wurzeln:
-                    await repo.journal_anhaengen(besitzer_id, w, "entfernt")
-        # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
-        for h in verwaiste:
-            await self.blob_delete(str(besitzer_id), h)
-        return anzahl
+    async def papierkorb_leeren(self, besitzer_id) -> "Entfernt":
+        """Löscht alles im Papierkorb endgültig, auch was nicht als eigene Zeile zu sehen ist (Inhalt gelöschter
+        Ordner, Begleiter, mitgenommene Verweise)."""
+        return await self._endgueltig(besitzer_id, None, "Papierkorb leeren")
 
-    async def knoten_endgueltig_loeschen(self, besitzer_id, knoten_id):
-        """Entfernt einen einzelnen Papierkorb-Knoten samt Teilbaum endgueltig.
-        Nur erlaubt fuer eigene, bereits geloeschte Knoten. Gleiche GC-Logik wie
-        beim Leeren, aber nur fuer diese eine Wurzel. Liefert True bei Erfolg."""
+    async def knoten_endgueltig_loeschen(self, besitzer_id, knoten_id) -> bool:
+        """Entfernt einen eigenen Papierkorb-Eintrag samt allem, was mit ihm geht. False, wenn er nicht (mehr) im
+        Papierkorb liegt, etwa weil ein Ordner ihn schon mitgenommen hat."""
+        return (await self._endgueltig(besitzer_id, knoten_id, "endgültig löschen")).eintraege > 0
+
+    async def _endgueltig(self, besitzer_id, knoten_id, anlass: str) -> "Entfernt":
+        """Gemeinsamer Weg beider Arten des endgültigen Löschens (HELF-262). Unter der Papierkorb-Sperre des Kontos:
+        betroffene Knoten bestimmen, Zähler der Blöcke senken, Knoten entfernen, je Knoten "entfernt" ins Journal.
+        Erst nach dem Festschreiben gehen Blöcke ohne Verwendung von der Platte. knoten_id None heißt: alles."""
+        # Ist der Pool nicht erreichbar, gar nicht erst Zeilen löschen (sonst blieben verwaiste Blöcke liegen).
         if not await self.speicher_erreichbar():
-            raise SpeicherNichtVerfuegbar("Knoten kann nicht endgültig gelöscht werden")
-        verwaiste = []
+            raise SpeicherNichtVerfuegbar(f"{anlass}: Speicher nicht erreichbar")
+        beginn = time.monotonic()
+        verwaiste: list[str] = []
+        frei = 0
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
-                knoten = await repo.knoten_holen(knoten_id)
-                if not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]:
-                    return False
-                wurzeln = [knoten_id, *[b["id"] for b in await repo.begleiter_im_papierkorb([knoten_id])],
-                           *[v["id"] for v in await repo.mitgenommene_verweise([knoten_id])]]
-                for ref in await repo.blobrefs_im_teilbaum(wurzeln):
-                    neu = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
-                    if neu is not None and neu <= 0:
+                await repo.papierkorb_sperren(besitzer_id)
+                if knoten_id is None:
+                    wurzeln = await repo.papierkorb_alle(besitzer_id)
+                else:
+                    knoten = await repo.knoten_holen(knoten_id)
+                    ok = knoten and knoten["besitzer_id"] == besitzer_id and knoten["geloescht"]
+                    wurzeln = [knoten_id] if ok else []
+                ids = await repo.endgueltig_betroffen(besitzer_id, wurzeln)
+                for ref in await repo.blobrefs_der_knoten(ids):
+                    block = await repo.blob_refcount_senken(besitzer_id, ref["hash"], ref["n"])
+                    if block is not None and block["refcount"] <= 0:
                         verwaiste.append(ref["hash"])
-                await repo.knoten_hart_loeschen(wurzeln)
+                        frei += block["groesse"]
+                await repo.knoten_hart_loeschen(ids)
                 for h in verwaiste:
                     await repo.blob_zeile_loeschen(besitzer_id, h)
-                for w in wurzeln:
-                    await repo.journal_anhaengen(besitzer_id, w, "entfernt")
-        # Erst nach erfolgreichem Commit die Dateien von der Platte nehmen.
+                await repo.journal_entfernt(besitzer_id, ids)
         for h in verwaiste:
             await self.blob_delete(str(besitzer_id), h)
-        return True
+        ergebnis = Entfernt(eintraege=len(ids), bloecke=len(verwaiste), bytes=frei)
+        if ids:
+            log.info("%s: Konto %s, %s, %d Einträge, %d Blöcke, %d Bytes frei, %.1f s", anlass, besitzer_id,
+                     knoten_id or "alles", ergebnis.eintraege, ergebnis.bloecke, ergebnis.bytes,
+                     time.monotonic() - beginn)
+        else:
+            log.info("%s: Konto %s, %s liegt nicht (mehr) im Papierkorb", anlass, besitzer_id, knoten_id or "alles")
+        return ergebnis
 
     async def ordner_anlegen(self, besitzer_id, parent_id, name):
         async with self.pool.connection() as conn:
@@ -1205,6 +1209,8 @@ class SpeicherDienst:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 repo = PostgresMetadataRepository(conn)
+                # Nicht zugleich mit endgültigem Löschen: sonst ginge Zurückgeholtes doch noch weg (HELF-262).
+                await repo.papierkorb_sperren(besitzer_id)
                 knoten = await repo.knoten_holen(knoten_id)
                 if (not knoten or knoten["besitzer_id"] != besitzer_id or not knoten["geloescht"]
                         or knoten["geloescht_wurzel"] != knoten["id"]):

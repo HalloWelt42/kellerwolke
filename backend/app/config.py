@@ -78,6 +78,8 @@ class Einstellungen:
     pool_muss_extern: bool = _bool("KELLERWOLKE_POOL_MUSS_EXTERN", False)
     # So lange bleiben Einträge im Änderungs-Journal; wer länger nicht gefragt hat, bekommt "luecke" und liest neu.
     journal_tage: int = _zahl("KELLERWOLKE_JOURNAL_TAGE", 90)
+    # Stufe der eigenen Meldungen (DEBUG, INFO, WARNING, ERROR); INFO protokolliert etwa jedes endgültige Löschen.
+    protokoll_stufe: str = _text("KELLERWOLKE_PROTOKOLL", "INFO")
     # Abgelegte Vorschau- und Vollbilder (abgeleitet, jederzeit neu erzeugbar) und wie viele gleichzeitig entstehen.
     vorschau_pfad: str = _text("KELLERWOLKE_VORSCHAU_PFAD", str(WURZEL / "data" / "vorschau"))
     vorschau_gleichzeitig: int = _zahl("KELLERWOLKE_VORSCHAU_GLEICHZEITIG", 2)

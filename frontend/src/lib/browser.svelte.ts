@@ -592,25 +592,26 @@ export class Browser {
 
   zumOriginal = (k: Knoten): Promise<void> => (k.ziel_id ? this.zeigeEintrag(k.ziel_id) : Promise.resolve());
 
-  wiederherstellen = async (ids: string[]): Promise<void> => {
-    try {
-      for (const id of ids) await api.wiederherstellen(id);
-    } catch (f) {
-      this.fehler = (f as Error).message;
+  // Eine Aktion je Kennung, eine nach der anderen. Was es nicht (mehr) gibt (404), ist schon erledigt, etwa von einem
+  // Ordner mitgenommen; jeder andere Fehler hält die übrigen nicht auf und steht am Ende in der Fläche (HELF-262).
+  private jeKennung = async (ids: string[], aktion: (id: string) => Promise<unknown>, was: string): Promise<void> => {
+    const fehler: string[] = [];
+    for (const id of ids) {
+      try {
+        await aktion(id);
+      } catch (f) {
+        if ((f as api.ApiFehler).status !== 404) fehler.push((f as Error).message);
+      }
     }
+    if (fehler.length) this.fehler = `${was}: ${fehler.length} von ${ids.length} nicht möglich (${fehler[0]})`;
     this.auswahl.leeren();
     await this.aktualisiere();
   };
 
-  endgueltigLoeschen = async (ids: string[]): Promise<void> => {
-    try {
-      for (const id of ids) await api.endgueltigLoeschen(id);
-    } catch (f) {
-      this.fehler = (f as Error).message;
-    }
-    this.auswahl.leeren();
-    await this.aktualisiere();
-  };
+  wiederherstellen = (ids: string[]): Promise<void> => this.jeKennung(ids, api.wiederherstellen, "Wiederherstellen");
+
+  endgueltigLoeschen = (ids: string[]): Promise<void> =>
+    this.jeKennung(ids, api.endgueltigLoeschen, "Endgültig löschen");
 
   herunterladen = (k: Knoten): void => {
     api.herunterladen(k);
