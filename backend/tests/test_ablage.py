@@ -87,6 +87,16 @@ async def test_apps_des_kontos_mit_dem_schluessel(umgebung):
     assert (await client.get("/api/v1/ablage/apps", headers=sitzung)).status_code == 401      # nur mit App-Schlüssel
 
 
+async def test_speicher_des_bestands_mit_dem_schluessel(umgebung):
+    client, sitzung = umgebung
+    _, kopf = await zugang(client, sitzung, "RadioHub")
+    s = (await client.get("/api/v1/ablage/speicher", headers=kopf)).json()
+    assert s["verfuegbar"] and s["gesamt"] >= s["frei"] > 0 and s["benutzt"] == 0 and "ort" not in s
+    assert (await client.put("/api/v1/ablage/datei", params={"pfad": "Apps/RadioHub/a.txt"}, content=b"12345", headers=kopf)).status_code in (200, 201)
+    assert (await client.get("/api/v1/ablage/speicher", headers=kopf)).json()["benutzt"] == 5
+    assert (await client.get("/api/v1/ablage/speicher", headers=sitzung)).status_code == 401
+
+
 async def test_ohne_gueltigen_schluessel_nichts(umgebung):
     client, sitzung = umgebung
     assert (await client.get("/api/v1/ablage/ich")).status_code == 401

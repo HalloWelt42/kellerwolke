@@ -164,6 +164,17 @@ class IchAus(BaseModel):
     rechte: list[RechtAus]
 
 
+class SpeicherAus(BaseModel):
+    """Der Platz, auf den alles zählt, was eine App ablegt: der Datenträger des Bestands und das Konto. Ist der Datenträger weg,
+    gibt es keine Zahlen (nie die einer anderen Platte); der Ort selbst geht Apps nichts an."""
+
+    verfuegbar: bool
+    gesamt: int | None = None
+    frei: int | None = None
+    benutzt: int
+    quota: int | None = None
+
+
 class AppAus(BaseModel):
     """Ein App-Zugang desselben Kontos, nur Name und ob er aktiv ist (keine Kennung, keine Rechte, kein Schlüssel)."""
 
@@ -228,6 +239,12 @@ async def _schreiben(request: Request, pfad: str, akteur, ablage, suche, vorgaen
 @router.get("/ich", response_model=IchAus)
 async def ich(akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
     return await ablage.ich(akteur)
+
+
+@router.get("/speicher", response_model=SpeicherAus)
+async def speicher(akteur=Depends(aktuelle_app), ablage=Depends(hole_ablage)):
+    """Freier und belegter Platz des Bestands und das Kontingent des Kontos, damit Apps ihn zeigen können."""
+    return await ablage.speicher.speicher_status(akteur.benutzer_id)
 
 
 @router.get("/apps", response_model=list[AppAus])
